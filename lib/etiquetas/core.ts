@@ -353,3 +353,35 @@ export function lineasFpDePrenda(
   }
   return formasDePagoDePrenda(item.precio, { pctEfectivo: e.pctEfectivo, cuotas: e.cuotas })
 }
+
+/** Un producto de una línea ya cortada, como lo manda `?etiquetas=1&minorista=1` (`minoristaDelErp`). */
+export type MinoristaErp = { pid: string; local: number | null; online: number | null }
+
+/**
+ * 🔑 **En las líneas cortadas (BDI, Stunned) la etiqueta dice lo que cobra la Caja**: la lista Minorista de Areben Gestión
+ * (Bruno, 18-nov), ⛔ el precio de Tienda Nube. El Minorista SIGUE a la oferta, así que la oferta ya viene adentro; si el
+ * de lista (`online`) es mayor, va tachado como «antes».
+ * 🔴 **Un producto de esas líneas SIN Minorista sale sin precio, ⛔ cae al de Tienda Nube**: la Caja tampoco lo puede cobrar,
+ * y una etiqueta con el número de la tienda puede decir otro del que se cobra.
+ * Los productos que ⛔ vienen acá (Zattia antes de su corte) quedan como los dejó `construirPrecios`.
+ */
+export function conPreciosDelErp(
+  base: { precios: MapaPrecios; promos: MapaPromo; fueraDeTn: Set<string> },
+  erp: MinoristaErp[] | null,
+): { precios: MapaPrecios; promos: MapaPromo; fueraDeTn: Set<string>; delErp: Set<string> } {
+  const delErp = new Set<string>()
+  if (!erp || !erp.length) return { ...base, delErp }
+  const precios: MapaPrecios = { ...base.precios }
+  const promos: MapaPromo = { ...base.promos }
+  const fueraDeTn = new Set(base.fueraDeTn)
+  for (const f of erp) {
+    const pid = String(f.pid)
+    const local = f.local != null && f.local > 0 ? f.local : 0
+    precios[pid] = local
+    delete promos[pid]
+    fueraDeTn.delete(pid)
+    delErp.add(pid)
+    if (local > 0 && f.online != null && f.online > local) promos[pid] = { normal: f.online, promo: local }
+  }
+  return { precios, promos, fueraDeTn, delErp }
+}

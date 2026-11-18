@@ -9,6 +9,7 @@
 import { configPg } from '../lib/pg.core.js';
 import { cargaDeCampania, motivoDeCampania, TRABAJO_PRECIO } from '../lib/liquidacion/erp.core.js';
 import { baseDeLinea } from '../lib/lineas.core.js';
+import { cortesDeFilas, lineasEnErp, SQL_CORTES } from '../lib/erp/corte.core.js';
 
 const PG_DE_MARCA = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' };
 const SIN_MOTOR = 'La campaña va por Areben Gestión y falta la conexión del motor en Vercel: no se tocó nada.';
@@ -124,4 +125,25 @@ export async function lineasDe(store, pids, lineaDelProducto, deps = { conMotor 
   const skus = new Map();
   for (const f of filas) skus.set(String(f.product_id), [...(skus.get(String(f.product_id)) || []), f.sku]);
   return new Map(pids.map((p) => [p, lineaDelProducto(store, skus.get(String(p)) || [])]));
+}
+
+/**
+ * El precio MINORISTA de Areben Gestión para Etiquetas (Bruno 18-nov): en las líneas ya cortadas (BDI, Stunned) la etiqueta
+ * dice lo que cobra la Caja, que es la lista `local` del ERP (sigue a la oferta), ⛔ el de Tienda Nube. Desde el corte el
+ * producto nuevo nace en el ERP y ⛔ pasa por GN ni, a veces, por TN: buscarlo en la tienda lo dejaba sin precio.
+ * 🔑 Lista blanca: `pid`, `local`, `online` (el «antes» para tachar). ⛔ costo ni mayorista: lo pide el local.
+ * Van TODOS los productos de esas líneas, con o sin precio: el que ⛔ tiene sale «sin precio» y ⛔ cae al de TN.
+ * @returns {Promise<{ lineas: string[], precios: Array<{ pid: string, local: number|null, online: number|null }> }>}
+ */
+export async function minoristaDelErp(store, deps = { conMotor }) {
+  return deps.conMotor(store, async (db) => {
+    const lineas = lineasEnErp(cortesDeFilas((await db.query(SQL_CORTES)).rows), store);
+    if (!lineas.length) return { lineas, precios: [] };
+    const r = await db.query(`select p.id::text as pid,
+        max(pl.precio) filter (where pl.lista = 'local')::float8 as local,
+        max(pl.precio) filter (where pl.lista = 'online')::float8 as online
+      from producto p left join precio_lista pl on pl.product_id = p.id and pl.marca = p.marca
+      where p.marca = any($1) group by p.id`, [lineas]);
+    return { lineas, precios: r.rows };
+  });
 }

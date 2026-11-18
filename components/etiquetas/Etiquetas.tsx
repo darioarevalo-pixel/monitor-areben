@@ -6,6 +6,7 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { BotonActualizarInventario } from '@/components/productos/BotonActualizarInventario'
 import { BotonRecargar } from '@/components/productos/BotonRecargar'
 import { useEtiquetasTn } from './useEtiquetasTn'
+import { useMinoristaErp } from './useMinoristaErp'
 import { pidsDe, useColaReetiquetado, type EstadoCola, type PrecioImpreso } from './useColaReetiquetado'
 import { dibujoDeCampania, pdfPorPrenda, useEtiquetasCampania, type PrecioCampania } from './useEtiquetasCampania'
 import { etiquetasDesactualizadas, preciosDesalineados, type PrecioDesalineado } from '@/lib/etiquetas/cola'
@@ -13,6 +14,7 @@ import { lineasFpDeCaja, pctDeEtiqueta } from '@/lib/etiquetas/fpCaja'
 import {
   agruparCantidades,
   conStock,
+  conPreciosDelErp,
   construirPrecios,
   filtrarVariantes,
   hermanasDe,
@@ -98,6 +100,7 @@ export function Etiquetas() {
   const { marca } = useSesion()
   const { datos } = useDatosMonitor()
   const tn = useEtiquetasTn(marca)
+  const erp = useMinoristaErp(marca)
 
   // Las huérfanas (stock en `inventario`, producto todavía no en `productos`) vienen aparte del
   // ETL a propósito y hay que sumarlas acá: si no, un producto recién cargado en GN no se puede
@@ -111,7 +114,6 @@ export function Etiquetas() {
     ].filter((v) => marca !== 'zattia' || lineaDelProducto('zattia', [v.sku]) === linea),
     [datos, marca, linea],
   )
-  const nuevosSinCatalogo = useMemo(() => new Set((datos?.allVariantesHuerfanas ?? []).map((v) => v.pid)).size, [datos])
   const vars = useMemo(() => variantesEtiquetables(allVariantes), [allVariantes])
   /**
    * De dónde salen las hermanas de la pestaña de SKU.
@@ -123,7 +125,16 @@ export function Etiquetas() {
   const varsSku = useMemo(() => allVariantes.filter((v) => (v.sku || '').trim()), [allVariantes])
   const varsById = useMemo(() => Object.fromEntries(vars.map((v) => [v.id, v])) as Record<string, VarianteEti>, [vars])
   const sinCodigo = useMemo(() => variantesSinCodigo(allVariantes), [allVariantes])
-  const { precios, promos, fueraDeTn } = useMemo(() => construirPrecios(datos?.allProductos ?? [], tn.tnIdx), [datos, tn.tnIdx])
+  // 🔑 Las líneas ya cortadas (BDI, Stunned) llevan el Minorista de Areben Gestión, lo que cobra la Caja (Bruno, 18-nov).
+  const { precios, promos, fueraDeTn, delErp } = useMemo(
+    () => conPreciosDelErp(construirPrecios(datos?.allProductos ?? [], tn.tnIdx), erp.filas),
+    [datos, tn.tnIdx, erp.filas],
+  )
+  // Los productos nuevos que todavía ⛔ tienen precio: desde el corte nacen en Areben Gestión, ⛔ en el catálogo sincronizado.
+  const nuevosSinCatalogo = useMemo(
+    () => new Set((datos?.allVariantesHuerfanas ?? []).map((v) => v.pid).filter((pid) => !(precios[pid] > 0))).size,
+    [datos, precios],
+  )
   const precioDe = useCallback((v: VarianteEti) => precios[v.pid] || 0, [precios])
   const promoDe = useCallback((v: VarianteEti) => promos[v.pid] || null, [promos])
   const sinPrecioDeTn = useCallback((v: VarianteEti) => fueraDeTn.has(v.pid), [fueraDeTn])
@@ -172,13 +183,15 @@ export function Etiquetas() {
     const m: Record<string, { gn: number | null; tienda: number | null }> = {}
     for (const p of (datos?.allProductos ?? []) as { id: string; retailer_price?: number }[]) {
       const pid = String(p.id)
+      // Lo de una línea cortada sale de Areben Gestión: compararlo contra el GN de antes del corte sólo da falsas alarmas.
+      if (delErp.has(pid)) continue
       const pr = promos[pid]
       const tienda = pr ? pr.normal : precios[pid] || 0
       const gn = Number(p.retailer_price || 0)
       m[pid] = { gn: gn > 0 ? gn : null, tienda: tienda > 0 ? tienda : null }
     }
     return m
-  }, [datos, precios, promos])
+  }, [datos, precios, promos, delErp])
   const desalineados = useMemo(() => preciosDesalineados(listaPorPid, cola.stock), [listaPorPid, cola.stock])
   const nombrePorPid = useMemo(() => {
     const m: Record<string, string> = {}
@@ -412,13 +425,19 @@ export function Etiquetas() {
 
       {/* Antes estas variantes no se listaban en ningún lado: el producto nuevo simplemente no
           existía para Etiquetas. Ahora se etiquetan igual y el cartel explica qué les falta. */}
+      {erp.error && (
+        <Notice tone="danger">
+          <b>No se pudo leer el precio de Areben Gestión.</b> En BDI y Stunned los precios que ves pueden no ser los que cobra la Caja: no imprimas hasta
+          recargar. ({erp.error})
+        </Notice>
+      )}
       {nuevosSinCatalogo > 0 && (
         <Notice tone="warning" icon="✨">
           <b>
-            {nuevosSinCatalogo} {nuevosSinCatalogo === 1 ? 'producto nuevo todavía no está' : 'productos nuevos todavía no están'} en el catálogo sincronizado.
+              {nuevosSinCatalogo} {nuevosSinCatalogo === 1 ? 'producto nuevo todavía no tiene' : 'productos nuevos todavía no tienen'} precio.
           </b>{' '}
-          {nuevosSinCatalogo === 1 ? 'Se puede etiquetar' : 'Se pueden etiquetar'} igual (el código de barras y el stock ya están); lo que falta es el precio,
-          así que en Local y Promo {nuevosSinCatalogo === 1 ? 'sale' : 'salen'} en $0 hasta que sincronice.
+          {nuevosSinCatalogo === 1 ? 'Se puede etiquetar' : 'Se pueden etiquetar'} igual (el código de barras y el stock ya están), pero en Local y Promo{' '}
+          {nuevosSinCatalogo === 1 ? 'sale' : 'salen'} en $0: falta cargarles el precio Minorista en Areben Gestión › Precios.
         </Notice>
       )}
 
@@ -919,8 +938,8 @@ function ModoPanel({
                     <tr key={v.id} style={{ borderTop: `1px solid ${color.line}` }}>
                       <td style={tdC}>
                         {v.name || '—'}
-                        {v.sinProducto && (
-                          <span title="Tiene stock y código de barras, pero su producto todavía no está en el catálogo sincronizado: el precio aparece después de la próxima sincronización.">
+                        {v.sinProducto && !(precioDe(v) > 0) && (
+                          <span title="Tiene stock y código de barras, pero todavía no tiene precio Minorista: se carga en Areben Gestión › Precios.">
                             {' '}
                             <Badge tone="warning">✨ recién cargado</Badge>
                           </span>
