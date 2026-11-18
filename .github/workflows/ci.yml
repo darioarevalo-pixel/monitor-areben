@@ -29,53 +29,139 @@ on:
   pull_request:
   workflow_dispatch:
 
+# ⚡ 18-nov: las cuatro revisiones (typecheck, lint, tests, build) iban EN FILA en un solo job: ~7 min de espera
+# por cada publicación. Ahora corren EN PARALELO (tests partido en dos), y «Verificar» es sólo el cierre que junta
+# los resultados: tarda lo que la más larga (~3 min). Revisan exactamente lo mismo que antes.
+# ⛔ El nombre «Verificar (typecheck, lint, tests sin red, build)» NO se cambia: es el check que exige la traba de
+# main (ruleset 26761098). ⛔ Y el cierre corre con `always()` y exige success de CADA una: si quedara «skipped» por
+# una falla de arriba, GitHub cuenta skipped como aprobado y main dejaría pasar un commit roto.
+
+permissions:
+  contents: read
+  checks: read
+
 jobs:
-  verificar:
-    name: Verificar (typecheck, lint, tests sin red, build)
+  # 🔁 La receta de publicar es: push a la rama → CI verde → push del MISMO commit a main. Ese segundo push volvía a
+  # correr todo sobre un commit que ya estaba verde (la mitad de los minutos de Actions, a la basura). Si el commit
+  # ya tiene «Verificar» en verde, en main no se repite. Un merge de PR crea un commit NUEVO: ése sí se revisa.
+  ya-verificado:
+    name: ¿Este commit ya pasó?
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 3
+    outputs:
+      saltar: ${{ steps.mirar.outputs.saltar }}
+    steps:
+      - id: mirar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          saltar=false
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            n=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs?check_name=Verificar%20(typecheck,%20lint,%20tests%20sin%20red,%20build)&per_page=100" \
+                  --jq '[.check_runs[] | select(.conclusion=="success")] | length' || echo 0)
+            [ "${n:-0}" -gt 0 ] && saltar=true
+          fi
+          echo "saltar=$saltar" >> "$GITHUB_OUTPUT"
+          echo "Ya verificado antes: $saltar"
+
+  typecheck:
+    name: Typecheck
+    needs: ya-verificado
+    if: needs.ya-verificado.outputs.saltar != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-
-      - name: Instalar dependencias
-        run: npm ci
-
+      - run: npm ci
+      # El proyecto entero ya está al borde del tope de memoria por defecto de Node: medido 15-nov, main se queda sin memoria
+      # con 1,6 GB y el CI cayó dos veces seguidas por eso («heap out of memory», exit 134) sin ningún error de tipos.
       - name: Typecheck
-        # El proyecto entero ya está al borde del tope de memoria por defecto de Node: medido 15-nov, main se queda sin memoria
-        # con 1,6 GB y el CI cayó dos veces seguidas por eso («heap out of memory», exit 134) sin ningún error de tipos.
         env:
           NODE_OPTIONS: --max-old-space-size=4096
         run: npm run typecheck
 
+  lint:
+    name: Lint
+    needs: ya-verificado
+    if: needs.ya-verificado.outputs.saltar != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
       - name: Lint
         run: npm run lint
 
-      # ⚠️ NO incluyen la paridad del ETL: sin el fixture, etl-paridad.test.ts hace
-      # it.skip (tests/etl-paridad.test.ts:41). O sea que el verde de ESTE job no
-      # dice nada sobre si el ETL portado calcula igual que el legacy. Eso lo dice
-      # el job `paridad`. Es una división deliberada, no un olvido: acá no se puede
-      # afirmar más de lo que se probó.
-      #
-      # 📌 Acá decía "estos son 42 tests". Son 139 archivos y ~2.870 casos
-      # (`npx vitest list | wc -l`). El número quedó viejo el día que se escribió y
-      # nadie lo volvió a mirar, que es lo que pasa con los números sueltos en un
-      # comentario: por eso ahora está el comando en vez del número.
+  # ⚠️ NO incluyen la paridad del ETL: sin el fixture, etl-paridad.test.ts hace it.skip (tests/etl-paridad.test.ts:41).
+  # O sea que el verde de ESTE job no dice nada sobre si el ETL portado calcula igual que el legacy. Eso lo dice el
+  # job `paridad`. Es una división deliberada, no un olvido.
+  # Partido en dos mitades (`--shard`) que corren a la vez: entre las dos corren TODOS los archivos, cada uno una vez.
+  tests:
+    name: Tests sin red (${{ matrix.parte }}/2)
+    needs: ya-verificado
+    if: needs.ya-verificado.outputs.saltar != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        parte: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
       - name: Tests que no necesitan datos reales
-        run: npm test
+        run: npx vitest run --shard=${{ matrix.parte }}/2
 
-      # Va último porque es el más lento.
-      # `next build` vuelve a chequear los tipos de TODO el proyecto, en su propio proceso: el mismo tope que el Typecheck.
-      # Sin esto se caía DESPUÉS de «Compiled successfully» con «heap out of memory» (16-nov: main 03:18 y 03:29, PR #63),
-      # a veces sí y a veces no con el mismo commit ⇒ Verificar rojo ⇒ Publicar frenado por «Repository rule violations».
+  # `next build` vuelve a chequear los tipos de TODO el proyecto, en su propio proceso: el mismo tope que el Typecheck.
+  # Sin esto se caía DESPUÉS de «Compiled successfully» con «heap out of memory» (16-nov: main 03:18 y 03:29, PR #63),
+  # a veces sí y a veces no con el mismo commit ⇒ Verificar rojo ⇒ Publicar frenado por «Repository rule violations».
+  build:
+    name: Build
+    needs: ya-verificado
+    if: needs.ya-verificado.outputs.saltar != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
       - name: Build
         env:
           NODE_OPTIONS: --max-old-space-size=4096
         run: npm run build
+
+  verificar:
+    name: Verificar (typecheck, lint, tests sin red, build)
+    needs: [ya-verificado, typecheck, lint, tests, build]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Juntar los resultados
+        run: |
+          if [ "${{ needs.ya-verificado.result }}" = "success" ] && [ "${{ needs.ya-verificado.outputs.saltar }}" = "true" ]; then
+            echo "Este mismo commit ya pasó Verificar en su rama: no se repite."
+            exit 0
+          fi
+          echo "typecheck=${{ needs.typecheck.result }} lint=${{ needs.lint.result }} tests=${{ needs.tests.result }} build=${{ needs.build.result }}"
+          for r in "${{ needs.ya-verificado.result }}" "${{ needs.typecheck.result }}" "${{ needs.lint.result }}" "${{ needs.tests.result }}" "${{ needs.build.result }}"; do
+            [ "$r" = "success" ] || { echo "::error::Una revisión no pasó ($r)."; exit 1; }
+          done
 
   # La copia del motor (`motor/`) tiene que ser de `main` de areben-motor (auditoría 20-oct). Job aparte: pide red y un
   # token (MOTOR_LECTURA), y `verificar` es sin red a propósito. ⛔ hace npm ci: el script es Node pelado.
@@ -94,6 +180,8 @@ jobs:
 
   paridad:
     name: Paridad del ETL contra el legacy (datos reales)
+    needs: ya-verificado
+    if: needs.ya-verificado.outputs.saltar != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
