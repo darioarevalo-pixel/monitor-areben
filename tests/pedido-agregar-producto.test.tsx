@@ -84,7 +84,7 @@ afterEach(() => { act(() => root.unmount()); caja.remove() })
 
 describe('«Agregar producto» en la hoja del pedido', () => {
   it('buscar, elegir y guardar: viajan los renglones de antes y el agregado', async () => {
-    await act(async () => { boton('Agregar producto').click() })
+    await act(async () => { boton('+ Agregar').click() })
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Buscar el producto"]')!
     await escribir(input, 'f')
     await esperar(350)
@@ -92,40 +92,39 @@ describe('«Agregar producto» en la hoja del pedido', () => {
     await escribir(input, 'funda')
     await esperar(350)
     expect(cliente.buscarProductosPedido).toHaveBeenCalledWith(P, 'funda')
-    expect(document.body.textContent).toContain('sin precio mayorista: no se puede agregar')
+    expect(document.body.textContent).toContain('sin precio mayorista')
     expect(fila(/stock 9/).querySelector<HTMLButtonElement>('button[aria-label^="Uno más de"]')!.disabled).toBe(true)
     await sumar(/stock 4/)
     await confirmarAgregar()
     expect(document.body.textContent).toContain('Funda Cargo')
-    expect(document.body.textContent).toContain('agregado')
+    expect(document.body.textContent).toContain('nuevo')
     await act(async () => { boton('Guardar').click() })
     await esperar()
     expect(cliente.cambiarPedidoPanel).toHaveBeenCalledWith(P, [
       { productId: 1, sizeId: 10, cantidad: 2 },
       { productId: 3, sizeId: 30, cantidad: 1 },
-    ])
+    ], [])
   })
 
   it('elegir una variante que ya está en el pedido suma uno (⛔ un renglón repetido)', async () => {
-    await act(async () => { boton('Agregar producto').click() })
+    await act(async () => { boton('+ Agregar').click() })
     await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el producto"]')!, 'mom')
     await esperar(350)
     await sumar(/ya está/)
     await confirmarAgregar()
     await act(async () => { boton('Guardar').click() })
     await esperar()
-    expect(cliente.cambiarPedidoPanel).toHaveBeenCalledWith(P, [{ productId: 1, sizeId: 10, cantidad: 3 }])
+    expect(cliente.cambiarPedidoPanel).toHaveBeenCalledWith(P, [{ productId: 1, sizeId: 10, cantidad: 3 }], [])
   })
 
   it('un agregado que vuelve a 0 ⛔ viaja, y sin otro cambio ⛔ hay «Guardar»', async () => {
-    await act(async () => { boton('Agregar producto').click() })
+    await act(async () => { boton('+ Agregar').click() })
     await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el producto"]')!, 'cargo')
     await esperar(350)
     await sumar(/stock 4/)
     await confirmarAgregar()
-    const menos = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="Uno menos"]')]
-    await act(async () => { menos[1].click() })
-    expect(document.body.textContent).not.toContain('agregado')
+    await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label^="Uno menos de Funda Cargo"]')!.click() })
+    expect(document.body.textContent).not.toContain('nuevo')
     expect(botones().some((b) => b.textContent?.trim() === 'Guardar')).toBe(false)
   })
 
@@ -135,9 +134,9 @@ describe('«Agregar producto» en la hoja del pedido', () => {
     root = createRoot(caja)
     await act(async () => { root.render(<HojaPedido pedidoId={P} onCerrar={() => {}} onHecho={() => {}} />) })
     await esperar()
-    await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="Uno más"]')!.click() })
+    await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label^="Uno más de Funda Mom"]')!.click() })
     expect(document.body.textContent).toMatch(/Total \(sin guardar\).*1\.500/)
-    await act(async () => { boton('Agregar producto').click() })
+    await act(async () => { boton('+ Agregar').click() })
     await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el producto"]')!, 'funda')
     await esperar(350)
     await sumar(/stock 4/)
@@ -146,7 +145,7 @@ describe('«Agregar producto» en la hoja del pedido', () => {
   })
 
   it('filas con cantidad (Darío 18-nov): varios talles y varias unidades de una, escribiendo o con +', async () => {
-    await act(async () => { boton('Agregar producto').click() })
+    await act(async () => { boton('+ Agregar').click() })
     await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el producto"]')!, 'funda')
     await esperar(350)
     await escribir(fila(/stock 4/).querySelector<HTMLInputElement>('input')!, '12')
@@ -154,6 +153,42 @@ describe('«Agregar producto» en la hoja del pedido', () => {
     await confirmarAgregar()
     await act(async () => { boton('Guardar').click() })
     await esperar()
-    expect(cliente.cambiarPedidoPanel).toHaveBeenCalledWith(P, [{ productId: 1, sizeId: 10, cantidad: 5 }, { productId: 3, sizeId: 30, cantidad: 12 }])
+    expect(cliente.cambiarPedidoPanel).toHaveBeenCalledWith(P, [{ productId: 1, sizeId: 10, cantidad: 5 }, { productId: 3, sizeId: 30, cantidad: 12 }], [])
+  })
+  it('packs, ofertas y el descuento por monto como en la tienda; precio a mano sólo para Darío (Darío 18-nov)', async () => {
+    act(() => root.unmount())
+    const pack = { precio: 3990, fundas: 5, modelos: [{ size_id: 51, talle: 'iPhone 15', cantidad: 2, stock: 20 }, { size_id: 52, talle: 'iPhone 16', cantidad: 3, stock: 30 }], quedan: 4, alcanza: 6, soloPack: false, sinSueltas: false }
+    cliente.leerPedidoPanel.mockResolvedValue({
+      ...ficha, precioManual: true, pedido: { ...ficha.pedido, total: 990000 },
+      lineas: [{ product_id: 1, size_id: 10, cantidad: 200, precio: 4950, base: 4950, tipo: 'lista', stock: 300, nombre: 'Funda Mom', talle: 'iPhone 13' }],
+      tienda: { escala: [{ desde: 1000000, pct: 5 }, { desde: 2000000, pct: 10 }], packs: {} },
+    })
+    cliente.buscarProductosPedido.mockResolvedValue({ prendido: true, tienda: true, productos: [
+      { product_id: 5, nombre: 'Twinkle Case', precio: 4990, pack, soloPack: false, variantes: [{ size_id: 51, talle: 'iPhone 15', sku: null, stock: 20, en_pedido: false, precio: 4990, tipo: 'lista' }, { size_id: 52, talle: 'iPhone 16', sku: null, stock: 30, en_pedido: false, precio: 4990, tipo: 'lista' }] },
+      { product_id: 6, nombre: 'Gum Case', precio: 3330, pack: null, soloPack: false, variantes: [{ size_id: 61, talle: 'iPhone 15', sku: null, stock: 7, en_pedido: false, precio: 2490, tipo: 'oferta' }] },
+    ] })
+    root = createRoot(caja)
+    await act(async () => { root.render(<HojaPedido pedidoId={P} onCerrar={() => {}} onHecho={() => {}} />) })
+    await esperar()
+    expect(document.body.textContent).toContain('para el 5%')
+    await act(async () => { boton('+ Agregar').click() })
+    await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el producto"]')!, 'case')
+    await esperar(350)
+    expect(document.body.textContent).toContain('quedan 4')
+    // Twinkle arranca en Pack: dos packs
+    await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="Un pack más"]')!.click() })
+    await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="Un pack más"]')!.click() })
+    // Gum (oferta) suelta, a mano
+    await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Precio a mano de Gum Case"]')!, '2000')
+    await sumar(/Gum|2\.000 · stock 7/)
+    await confirmarAgregar()
+    expect(document.body.textContent).toContain('Pack')
+    expect(document.body.textContent).toMatch(/Descuento 5%/) // 990.000 + 39.900 + 2.000 pasa el millón
+    await act(async () => { boton('Guardar').click() })
+    await esperar()
+    expect(cliente.cambiarPedidoPanel).toHaveBeenCalledWith(P, [
+      { productId: 1, sizeId: 10, cantidad: 200 },
+      { productId: 6, sizeId: 61, cantidad: 1, precio: 2000 },
+    ], [{ productId: 5, packs: 2 }])
   })
 })

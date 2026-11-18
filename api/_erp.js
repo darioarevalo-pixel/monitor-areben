@@ -148,7 +148,7 @@ import { listaDeProductos } from './_erp-productos.js'
 import { anotarWhatsappPanel, bcraDelPanel, clienteNuevoPanel, clientesDelPanel, cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, libroDePruebaDelPanel, sacarWhatsappPanel, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
 import { conFacturacion, enviarFacturaPanel, facturaLibrePanel, facturarPedidoPanel, facturasDeClientePanel, padronDelPanel, partePedidoPanel } from './_erp-factura-mayorista.js'
 import { esAprobador } from '../lib/reposicion/armado.core.js'
-import { ACCIONES_PEDIDO, accionDePedido, estadoDePedidosDelPanel, pedidoDelPanel, pedidosDelPanel, pedidosSinClienteDelPanel, preparadosSinPagarDelPanel, productosParaElPanel } from './_erp-pedido.js'
+import { ACCIONES_PEDIDO, accionDePedido, esDario, estadoDePedidosDelPanel, pedidoDelPanel, pedidosDelPanel, pedidosSinClienteDelPanel, preparadosSinPagarDelPanel, productosParaElPanel } from './_erp-pedido.js'
 import { resultadoDelMes } from './_erp-inicio.js'
 import { ventasPorProducto } from './_erp-por-producto.js'
 import { cobrosDelPeriodo, reintentarEntregasErp } from './_erp-cobros.js'
@@ -2108,7 +2108,7 @@ export default async function handler(req, res) {
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'GET' && req.query.vista === 'pedido-panel') {
-      const r = await pedidoDelPanel({ pedidoId: String(req.query.id || ''), usuario: [perfil.user, perfil.email] }, { conMotor })
+      const r = await pedidoDelPanel({ pedidoId: String(req.query.id || ''), usuario: [perfil.user, perfil.email] }, { conMotor, precioManual: esDario(perfil) })
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(await conFacturacion(r))
     }
     if (req.method === 'GET' && req.query.vista === 'pedido-productos') {
@@ -2128,7 +2128,7 @@ export default async function handler(req, res) {
       return r.status ? res.status(r.status).json({ error: r.error }) : res.status(200).json(r)
     }
     if (req.method === 'POST' && ACCIONES_PEDIDO.includes(body.accion)) {
-      const r = await accionDePedido({ accion: body.accion, body, usuario: perfil.user || perfil.email || perfil.name || null, quien: [perfil.user, perfil.email] }, { conMotor, puedeAnular: esAprobador(perfil) })
+      const r = await accionDePedido({ accion: body.accion, body, usuario: perfil.user || perfil.email || perfil.name || null, quien: [perfil.user, perfil.email] }, { conMotor, puedeAnular: esAprobador(perfil), precioManual: esDario(perfil) })
       if (!r.status && r.ficha) r.ficha = await conFacturacion(r.ficha)
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }

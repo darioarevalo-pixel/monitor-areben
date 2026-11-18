@@ -92,6 +92,15 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
     revés: un número que ya está en «Quién compra» y el CRM no conoce muestra «Compra por X» con el buscador ya cargado (engancha
     sólo el toque de Darío). Desde la ficha de un LEAD, «Compra por un cliente que ya tengo» hace el mismo enganche (el
     panel mira `crm:tel` antes que los leads ⇒ el chat abre la ficha del cliente; el lead queda como estaba). Ojo: la cuenta se busca por `gn_client_id`; un cliente nacido en el ERP (id ≥ 704.001) ⛔ la encuentra.
+  - **Precios de la tienda en la hoja del pedido** (Darío 18-nov): al agregar o cambiar, el precio lo pone la PUERTA
+    (`preciosDelCambio` en `api/_erp-pedido.js`) con las reglas de bdi-catalogo (`api/_tienda-precios.js` lee `/api/config`,
+    `cyber.json`, `lotes.json`; la cuenta pura en `lib/erp/precio-tienda.core.js`, COPIA de `index.html` del catálogo): pack
+    (se cambia por packs enteros; ⛔ pack y suelta del mismo diseño), oferta (Cyber o margen < `ofertaMargen`), precio por
+    modelo, y descuento por monto sobre TODO el pedido (sólo a lo regular; aparece o se va). Lo que ya estaba conserva su
+    precio salvo lo regular, que recalcula el %. Precio a mano: sólo Darío (`esDario`), sólo en lo nuevo. El motor respeta
+    el `precio` que le llega (areben-motor 804c692). Packs vendidos ⇒ `lotes:vendidos` del catálogo por
+    `POST /api/config?accion=packs-panel` con `PANEL_LLAVE_CATALOGO` (en los DOS proyectos de Vercel); sin llave guarda y
+    avisa. ⛔ Promos por cantidad (categorías de TN) no se aplican en el panel. Si la tienda ⛔ contesta, guardar da 503.
   - **Pagos del pedido** (Darío §4): «$ Cargar pago» en la hoja del pedido abre la MISMA hoja de la cuenta, con lo que falta y
     `imputar` a ese pedido; lo que sobra va a lo más viejo y recién sin deuda queda a favor (regla del 18-oct). **N° de
     operación** opcional: si otro pago vivo ya lo usa, el motor contesta OPERACION_REPETIDA, la hoja dice cuál y «Cargar

@@ -879,13 +879,20 @@ export type PedidoDeGn = { id: string; numero: number; recibido_en: string; tota
 export type PedidosPanel =
   | { prendido: false }
   | { prendido: true; escribir: boolean; pedidos: PedidoDelCliente[]; sinEntrar: PedidoSinEntrar[]; deGn?: PedidoDeGn[]; falta064?: boolean }
-export type RenglonPedido = { product_id: number; size_id: number | null; cantidad: number; precio: number; stock: number | null; nombre: string | null; talle: string | null }
+/** Qué es el precio de un renglón para la tienda (Darío 18-nov): lista y modelo llevan el descuento por monto; oferta, pack y fijo, no. */
+export type TipoPrecio = 'lista' | 'modelo' | 'oferta' | 'pack' | 'fijo'
+export type RenglonPedido = { product_id: number; size_id: number | null; cantidad: number; precio: number; stock: number | null; nombre: string | null; talle: string | null; tipo?: TipoPrecio; /** El precio sin el descuento por monto. */ base?: number }
+/** El pack de un diseño (Marketing › Lotes): precio por funda, qué lleva de cada modelo y cuántos quedan a la venta (null = sin tope). */
+export type PackTienda = { precio: number; fundas: number; modelos: Array<{ size_id: number; talle: string; cantidad: number; stock: number | null }>; quedan: number | null; alcanza: number | null; soloPack: boolean; sinSueltas: boolean }
+export type TiendaDeLaHoja = { escala: Array<{ desde: number; pct: number }>; packs: Record<string, PackTienda & { enPedido: number }> }
 export type CambioPedido = { motivo: string; antes: unknown; despues: unknown; usuario: string | null; cuando: string }
 export type FichaPedido = {
   prendido: true; escribir: boolean
   /** El redondeo del total mayorista (el mismo del motor al guardar), para mostrar el total en el momento. */ redondeo?: { paso: number; modo: string } | null
   pedido: PedidoDelCliente & { editable: boolean; cliente_id: string | null; /** El envío que paga el cliente en origen (sql/084): va dentro de `total`. */ envio?: number | null; transporte?: string | null; /** En la ficha general «Pedido mayorista»: ⛔ va a preparar. */ falta_cliente?: boolean; contacto?: { nombre?: string | null; telefono?: string | null } | null; persona: { id: string; nombre: string | null; whatsapp: string; activo: boolean } | null; a_preparar_por: string | null }
   lineas: RenglonPedido[]; cambios: CambioPedido[]
+  /** Las reglas de la tienda para el total en el momento (null = la tienda ⛔ contestó). */ tienda?: TiendaDeLaHoja | null
+  /** Darío: puede poner precio a mano en lo que agrega. */ precioManual?: boolean
   /** En qué quedó la facturación de su venta (sin venta, `undefined`; si la base de facturas ⛔ contestó, `null`). */
   facturacion?: FacturacionPedido | null
 }
@@ -901,10 +908,11 @@ export const leerPedidoPanel = (id: string) =>
 /** «Agregar producto» en la hoja: cada producto con el precio mayorista (null = sin cargar ⇒ ⛔ se agrega) y sus variantes. */
 export type ProductoParaPedido = {
   product_id: number; nombre: string; precio: number | null
-  variantes: Array<{ size_id: number; talle: string | null; sku: string | null; stock: number; en_pedido: boolean }>
+  variantes: Array<{ size_id: number; talle: string | null; sku: string | null; stock: number; en_pedido: boolean; /** El de la tienda (Darío 18-nov). */ precio?: number | null; tipo?: TipoPrecio }>
+  pack?: PackTienda | null; soloPack?: boolean
 }
 export const buscarProductosPedido = (pedidoId: string, q: string) =>
-  pedir<{ prendido: false } | { prendido: true; productos: ProductoParaPedido[] }>(null, `&vista=pedido-productos&marca=bdi&id=${encodeURIComponent(pedidoId)}&q=${encodeURIComponent(q.slice(0, 80))}&nc=${Date.now()}`, 'No se pudo buscar el producto.')
+  pedir<{ prendido: false } | { prendido: true; productos: ProductoParaPedido[]; tienda?: boolean }>(null, `&vista=pedido-productos&marca=bdi&id=${encodeURIComponent(pedidoId)}&q=${encodeURIComponent(q.slice(0, 80))}&nc=${Date.now()}`, 'No se pudo buscar el producto.')
 export type PreparadoSinPagar = { id: string; numero: number; cliente_id: string; cliente: string; preparado_en: string; total: number; debe: number }
 export type PedidoSinCliente = { id: string; numero: number; recibido_en: string; total: number; unidades: number; nombre: string | null; telefono: string | null }
 export const leerPedidosSinCliente = () =>
@@ -915,11 +923,11 @@ export const leerEstadoPedidos = (numeros: number[]) =>
   pedir<{ prendido: false } | { prendido: true; estados: Record<string, EstadoPedidoPanel>; falta064?: boolean }>(null, `&vista=estado-pedidos-panel&marca=bdi&numeros=${numeros.slice(0, 200).join(',')}&nc=${Date.now()}`, 'No se pudo leer el estado de los pedidos.')
 export const leerPreparadosSinPagar = () =>
   pedir<{ prendido: false } | { prendido: true; pedidos: PreparadoSinPagar[]; falta064?: boolean }>(null, `&vista=preparados-sin-pagar&marca=bdi&nc=${Date.now()}`, 'No se pudo leer «Preparados sin pagar».')
-type RespuestaPedido = { ok: true; ya: boolean; sinCambios: boolean; avisarDeposito: boolean; ventaId: string | null; /** Cambio y envío: la hoja ya actualizada (⛔ volver a pedirla). */ ficha?: FichaPedido }
+type RespuestaPedido = { ok: true; ya: boolean; sinCambios: boolean; avisarDeposito: boolean; ventaId: string | null; avisos?: string[]; /** Cambio y envío: la hoja ya actualizada (⛔ volver a pedirla). */ ficha?: FichaPedido }
 export const entrarPedidoPanel = (p: { pedidoId: string; clienteId: string; personaId?: string | null }) =>
   pedir<RespuestaPedido>(post({ accion: 'pedido-entrar', marca: 'bdi', ...p }), '', 'No se pudo entrar el pedido.')
-export const cambiarPedidoPanel = (pedidoId: string, lineas: Array<{ productId: number; sizeId: number; cantidad: number }>) =>
-  pedir<RespuestaPedido>(post({ accion: 'pedido-cambiar', marca: 'bdi', pedidoId, lineas }), '', 'No se pudo guardar el cambio.')
+export const cambiarPedidoPanel = (pedidoId: string, lineas: Array<{ productId: number; sizeId: number; cantidad: number; /** A mano (sólo Darío, sólo lo nuevo). */ precio?: number }>, packs: Array<{ productId: number; packs: number }> = []) =>
+  pedir<RespuestaPedido>(post({ accion: 'pedido-cambiar', marca: 'bdi', pedidoId, lineas, packs }), '', 'No se pudo guardar el cambio.')
 export const mandarAPrepararPanel = (pedidoId: string) =>
   pedir<RespuestaPedido>(post({ accion: 'pedido-a-preparar', marca: 'bdi', pedidoId }), '', 'No se pudo mandar a preparar.')
 /** El envío del pedido (Darío 15-nov): lo que paga el cliente en origen (EM) se suma al total. `envio` null o 0 lo saca. */

@@ -14,6 +14,12 @@ const pv = {
   productosParaPedido: vi.fn(), ponerEnvioPedido: vi.fn(),
 }
 vi.mock('../motor/pedido/venta.mjs', () => pv)
+// Las reglas de la tienda (Darío 18-nov) sin red: sin packs ni ofertas, la escala de siempre.
+const tienda = vi.hoisted(() => ({ anotar: vi.fn(async () => true) }))
+vi.mock('../api/_tienda-precios.js', async () => {
+  const { reglasDeTienda } = await import('../lib/erp/precio-tienda.core.js')
+  return { reglasVigentes: async () => reglasDeTienda({ config: { updatedAt: 'x' } }), anotarPacksEnTienda: tienda.anotar }
+})
 
 import { accionDePedido, escribirPrendido, pedidoDelPanel, pedidosDelPanel, productosParaElPanel } from '../api/_erp-pedido.js'
 
@@ -119,7 +125,11 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
     expect(abrir).not.toHaveBeenCalled()
     const productos = [{ product_id: 7, nombre: 'Funda X', precio: 900, variantes: [{ size_id: 70, talle: 'iPhone 15', sku: null, stock: 3, en_pedido: false }] }]
     pv.productosParaPedido.mockResolvedValue({ ok: true, deposito: 'deposito_minorista', productos })
-    expect(await productosParaElPanel({ pedidoId: P, q: '  funda '.padEnd(200, 'x') }, { conMotor: conMotor(base({})), prendido: true })).toEqual({ prendido: true, productos })
+    // con el precio de la tienda en cada talle (sin regla especial: el de lista) y sin pack
+    expect(await productosParaElPanel({ pedidoId: P, q: '  funda '.padEnd(200, 'x') }, { conMotor: conMotor(base({})), prendido: true })).toEqual({
+      prendido: true, tienda: true,
+      productos: [{ ...productos[0], pack: null, soloPack: false, variantes: [{ ...productos[0].variantes[0], precio: 900, tipo: 'lista' }] }],
+    })
     expect(pv.productosParaPedido.mock.calls[0][1].q).toHaveLength(80)
     pv.productosParaPedido.mockResolvedValue({ ok: false, error: { codigo: 'NO_ENCONTRADO', mensaje: 'No está ese pedido' } })
     expect(await productosParaElPanel({ pedidoId: P, q: 'funda' }, { conMotor: conMotor(base({})), prendido: true })).toEqual({ status: 404, error: 'No está ese pedido' })
@@ -142,8 +152,10 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
     expect(pv.entrarPedidoMayorista.mock.calls[0][1]).toEqual({ pedido_id: P, cliente_id: C, persona_id: null, usuario: 'darío' })
     expect(await accionDePedido({ accion: 'pedido-entrar', body: { pedidoId: P }, usuario: 'darío' }, dep)).toMatchObject({ status: 400 })
     pv.cambiarPedidoMayorista.mockResolvedValue({ ok: false, error: { codigo: 'EN_PREPARACION', mensaje: 'El depósito ya empezó' } })
+    pv.fichaDePedidoMayorista.mockResolvedValueOnce({ ok: true, pedido: { id: P, marca: 'bdi' }, lineas: [{ product_id: 1, size_id: 10, cantidad: 1, precio: 500 }], cambios: [] })
     expect(await accionDePedido({ accion: 'pedido-cambiar', body: { pedidoId: P, lineas: [{ productId: 1, sizeId: 10, cantidad: 2 }] }, usuario: 'darío' }, dep)).toEqual({ status: 409, error: 'El depósito ya empezó' })
-    expect(pv.cambiarPedidoMayorista.mock.calls[0][1]).toEqual({ pedido_id: P, lineas: [{ product_id: 1, size_id: 10, cantidad: 2 }], usuario: 'darío' })
+    // el precio lo pone la puerta: el que ya tenía (sin lista en la base, se respeta tal cual)
+    expect(pv.cambiarPedidoMayorista.mock.calls[0][1]).toEqual({ pedido_id: P, lineas: [{ product_id: 1, size_id: 10, cantidad: 2, precio: 500 }], usuario: 'darío' })
     pv.anularPedidoDelErp.mockResolvedValue({ ok: true })
     await accionDePedido({ accion: 'pedido-anular', body: { pedidoId: P, motivo: 'no lo quiere' }, usuario: 'darío' }, dep)
     expect(pv.anularPedidoDelErp.mock.calls[0][1]).toEqual({ pedido_id: P, motivo: 'no lo quiere', usuario: 'darío' })
@@ -171,7 +183,7 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
   })
 
   it('el envío y el cambio devuelven la hoja nueva en la misma respuesta (Darío 18-nov: ~5 s al guardar el envío)', async () => {
-    pv.fichaDePedidoMayorista.mockReset().mockResolvedValue({ ok: true, pedido: { id: P, venta_id: 'v2', total: 93000, cliente_id: C }, lineas: [], cambios: [] })
+    pv.fichaDePedidoMayorista.mockReset().mockResolvedValue({ ok: true, pedido: { id: P, venta_id: 'v2', total: 93000, cliente_id: C }, lineas: [{ product_id: 1, size_id: 10, cantidad: 1, precio: 500 }], cambios: [] })
     pv.ponerEnvioPedido.mockReset().mockResolvedValue({ ok: true, sin_cambios: false, venta_id: 'v2' })
     pv.cambiarPedidoMayorista.mockReset().mockResolvedValue({ ok: true, sin_cambios: false, venta_id: 'v2' })
     const dep = { conMotor: conMotor(base(CON064)), prendido: true, escribir: true, facturacion: async () => ({ entera: null, partes: 0 }) }

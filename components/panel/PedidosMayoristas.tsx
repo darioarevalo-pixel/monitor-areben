@@ -10,14 +10,14 @@
  * (el día del corte de BDI): hasta entonces el pedido se maneja en Gestión Nube y el servidor contesta 409.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { adelantarPedidoPanel, tomarPedidoPanel } from '@/lib/erp/pedido-adelantado'
 import { enviarMedicion, marca } from '@/lib/medir'
-import { Button, CopyButton, Field, Input, Modal, Notice } from '@/components/ui'
+import { Badge, Button, CopyButton, Field, Input, Modal, Notice } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import {
   anotarWhatsappPanel, anularPedidoPanel, ponerEnvioPedidoPanel, buscarClientesPanel, buscarProductosPedido, cambiarPedidoPanel, clienteNuevoPanel, entrarPedidoPanel, leerPedidoPanel, leerPedidosPanel, leerPedidosSinCliente, leerPreparadosSinPagar, mandarAPrepararPanel,
-  type ClienteDelPanel, type EtapaPedido, type PedidoDelCliente, type PedidoSinCliente, type PreparadoSinPagar, type ProductoParaPedido, type FichaPedido, type PagoPedido, type PedidosPanel,
+  type ClienteDelPanel, type EtapaPedido, type PedidoDelCliente, type PedidoSinCliente, type PreparadoSinPagar, type ProductoParaPedido, type FichaPedido, type PagoPedido, type PedidosPanel, type PackTienda, type TipoPrecio,
 } from '@/lib/erp/cliente'
 import { HojaCargarPago, mensajeDeLaCuenta, useCuentaPrendida, type CuentaConCliente } from './CuentaCorriente'
 import { mensajeTotal } from './CalculadoraEnvio'
@@ -25,6 +25,7 @@ import { escribirMonto, parsearMonto } from '@/lib/compromisos/core'
 import { FacturarParte, FacturarPedido, LETRA, descargarFactura, numeroComprobante } from './FacturasCliente'
 import { codigoPedido } from '@/lib/erp/codigos.core.js'
 import { redondear as redondearTotal } from '@/motor/venta/redondeo.mjs'
+import { cuentaDelPedido } from '@/lib/erp/precio-tienda.core.js'
 import { esAprobador } from '@/lib/reposicion/armado.core.js'
 import { usePerfilOpcional } from '@/components/SesionProvider'
 import { copiarAlPortapapeles } from '@/lib/portapapeles'
@@ -304,6 +305,9 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
   const [cantidades, setCantidades] = useState<Record<string, number>>({})
   /** Los renglones AGREGADOS sin guardar (su cantidad vive en `cantidades`, como la de los demás). */
   const [agregados, setAgregados] = useState<Agregado[]>([])
+  /** Packs por diseño (Darío 18-nov): cuántos lleva cada uno (los del pedido y los agregados) y su armado. */
+  const [packs, setPacks] = useState<Record<string, number>>({})
+  const [packInfo, setPackInfo] = useState<Record<string, InfoPack>>({})
   const [buscando, setBuscando] = useState(false)
   const [motivo, setMotivo] = useState('')
   const [anulando, setAnulando] = useState(false)
@@ -313,6 +317,9 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
     setFicha(r)
     setCantidades(Object.fromEntries(r.lineas.map((l) => [`${l.product_id}:${l.size_id}`, l.cantidad])))
     setAgregados([])
+    const enPack = Object.entries(r.tienda?.packs ?? {}).filter(([, x]) => x.enPedido > 0)
+    setPacks(Object.fromEntries(enPack.map(([id, x]) => [id, x.enPedido])))
+    setPackInfo(Object.fromEntries(enPack.map(([id, x]) => [id, { pack: x, inicial: x.enPedido, nombre: r.lineas.find((l) => String(l.product_id) === id)?.nombre ?? `Producto ${id}` }])))
   }
   useEffect(() => {
     let vivo = true
@@ -329,25 +336,41 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
     return () => { vivo = false }
   }, [pedidoId, vuelta])
 
-  const cambiado = useMemo(() => !!ficha && (ficha.lineas.some((l) => cantidades[`${l.product_id}:${l.size_id}`] !== l.cantidad)
-    || agregados.some((a) => (cantidades[a.k] ?? 0) > 0)), [ficha, cantidades, agregados])
-  /** El total mientras se cambia (Darío 18-nov): renglones × precio, el redondeo mayorista y el envío, como al guardar. */
-  const totalAhora = (() => {
-    if (!ficha) return 0
-    if (!cambiado) return ficha.pedido.total
-    const productos = ficha.lineas.reduce((s, l) => s + l.precio * (cantidades[`${l.product_id}:${l.size_id}`] ?? l.cantidad), 0)
-      + agregados.reduce((s, a) => s + a.precio * (cantidades[a.k] ?? 0), 0)
-    const envio = ficha.pedido.envio != null && ficha.pedido.envio > 0 ? ficha.pedido.envio : 0
-    return redondearTotal(productos, ficha.redondeo ?? null) + envio
+  /** Los diseños que van en pack en el pedido: sus renglones ⛔ se tocan uno por uno, se cambian por packs. */
+  const enPackOriginal = new Set(Object.entries(ficha?.tienda?.packs ?? {}).filter(([, x]) => x.enPedido > 0).map(([id]) => id))
+  const packsCambiados = Object.keys({ ...packs, ...Object.fromEntries([...enPackOriginal].map((id) => [id, 0])) })
+    .some((id) => (packs[id] ?? 0) !== (ficha?.tienda?.packs?.[id]?.enPedido ?? 0))
+  const cambiado = (!!ficha && (ficha.lineas.some((l) => !enPackOriginal.has(String(l.product_id)) && cantidades[`${l.product_id}:${l.size_id}`] !== l.cantidad)
+    || agregados.some((a) => (cantidades[a.k] ?? 0) > 0))) || packsCambiados
+  /**
+   * La cuenta en el momento, como en la tienda (Darío 18-nov): subtotal, el descuento por monto que aparece o se va, el
+   * redondeo mayorista y el envío. Sin las reglas de la tienda, renglones × precio como antes.
+   */
+  const cuentaTienda = (() => {
+    if (!ficha) return null
+    const sueltos = [
+      ...ficha.lineas.filter((l) => !enPackOriginal.has(String(l.product_id)))
+        .map((l) => ({ base: l.base ?? l.precio, tipo: l.tipo ?? 'fijo', cantidad: cantidades[`${l.product_id}:${l.size_id}`] ?? l.cantidad })),
+      ...agregados.map((a) => ({ base: a.precio, tipo: a.tipo, cantidad: cantidades[a.k] ?? 0 })),
+      ...Object.entries(packs).map(([id, n]) => ({ base: packInfo[id]?.pack.precio ?? 0, tipo: 'pack', cantidad: n * (packInfo[id]?.pack.fundas ?? 0) })),
+    ].filter((r) => r.cantidad > 0)
+    if (!ficha.tienda) {
+      const sub = sueltos.reduce((a, r) => a + r.base * r.cantidad, 0)
+      return { subtotal: sub, total: sub, descuento: 0, pct: 0, proximo: null as null | { pct: number; falta: number } }
+    }
+    return cuentaDelPedido({ escala: ficha.tienda.escala }, sueltos)
   })()
-  /** Elegir una variante del buscador: si ya está en el pedido (o recién agregada), una más; si no, un renglón nuevo con 1. */
-  /** Lo elegido en el buscador, de una (Darío 18-nov: filas con cantidad): si ya está en el pedido suma; si no, renglón nuevo. */
-  const agregar = (elegidos: Elegido[]) => {
+  const envioDelPedido = ficha?.pedido.envio != null && ficha.pedido.envio > 0 ? ficha.pedido.envio : 0
+  const totalAhora = !ficha || !cuentaTienda ? 0 : !cambiado ? ficha.pedido.total : redondearTotal(cuentaTienda.total, ficha.redondeo ?? null) + envioDelPedido
+  /** Lo elegido en el buscador, de una (Darío 18-nov: filas con cantidad): si ya está en el pedido suma; si no, renglón nuevo. Los packs, por diseño. */
+  const agregar = ({ sueltas: elegidos, packs: nuevosPacks }: { sueltas: Elegido[]; packs: Array<{ prod: ProductoParaPedido; n: number }> }) => {
     const nuevos: Agregado[] = []
-    for (const { prod, v } of elegidos) {
+    for (const { prod, v, precio } of elegidos) {
       const k = `${prod.product_id}:${v.size_id}`
       const ya = ficha?.lineas.some((l) => `${l.product_id}:${l.size_id}` === k) || agregados.some((a) => a.k === k) || nuevos.some((a) => a.k === k)
-      if (!ya && prod.precio != null) nuevos.push({ k, product_id: prod.product_id, size_id: v.size_id, nombre: prod.nombre, talle: v.talle, precio: prod.precio, stock: v.stock })
+      const deTienda = v.precio ?? prod.precio
+      const final = precio ?? deTienda
+      if (!ya && final != null) nuevos.push({ k, product_id: prod.product_id, size_id: v.size_id, nombre: prod.nombre, talle: v.talle, precio: final, tipo: precio != null ? 'fijo' : (v.tipo ?? 'lista'), aMano: precio != null, stock: v.stock })
     }
     setAgregados((as) => [...as, ...nuevos])
     setCantidades((c) => {
@@ -358,9 +381,13 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
       }
       return out
     })
+    if (nuevosPacks.length) {
+      setPacks((m) => { const o = { ...m }; for (const { prod, n } of nuevosPacks) o[String(prod.product_id)] = (o[String(prod.product_id)] ?? 0) + n; return o })
+      setPackInfo((m) => { const o = { ...m }; for (const { prod } of nuevosPacks) if (prod.pack) o[String(prod.product_id)] = { pack: prod.pack, nombre: prod.nombre, inicial: o[String(prod.product_id)]?.inicial ?? 0 }; return o })
+    }
     setBuscando(false)
   }
-  const hacer = async (fn: () => Promise<{ avisarDeposito?: boolean; sinCambios?: boolean; ficha?: FichaPedido }>, ok: string, que = 'guardar') => {
+  const hacer = async (fn: () => Promise<{ avisarDeposito?: boolean; sinCambios?: boolean; ficha?: FichaPedido; avisos?: string[] }>, ok: string, que = 'guardar') => {
     setOcupado(true)
     setError(null)
     const t0 = marca()
@@ -370,7 +397,8 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
       if (r.ficha?.prendido) mostrar(r.ficha)
       else setVuelta((v) => v + 1)
       enviarMedicion(`hoja-${que}`, t0, { conHoja: !!r.ficha }, `hoja-${que}-${t0}`)
-      onHecho(r.avisarDeposito ? `${ok} Al depósito le aparece el aviso de que el pedido cambió.` : ok)
+      const extra = [r.avisarDeposito ? 'Al depósito le aparece el aviso de que el pedido cambió.' : '', ...((r as { avisos?: string[] }).avisos ?? [])].filter(Boolean).join(' ')
+      onHecho(extra ? `${ok} ${extra}` : ok)
       setAnulando(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo.')
@@ -391,9 +419,9 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
         {cambiado
           ? <Button variant="solid" tone="brand" disabled={!puede || ocupado}
               onClick={() => void hacer(() => cambiarPedidoPanel(pedidoId, [
-                ...ficha.lineas.filter((l) => l.size_id != null).map((l) => ({ productId: l.product_id, sizeId: l.size_id as number, cantidad: cantidades[`${l.product_id}:${l.size_id}`] ?? l.cantidad })),
-                ...agregados.map((a) => ({ productId: a.product_id, sizeId: a.size_id, cantidad: cantidades[a.k] ?? 0 })).filter((a) => a.cantidad > 0),
-              ]), 'Cambio guardado.')}>Guardar</Button>
+                ...ficha.lineas.filter((l) => l.size_id != null && !enPackOriginal.has(String(l.product_id))).map((l) => ({ productId: l.product_id, sizeId: l.size_id as number, cantidad: cantidades[`${l.product_id}:${l.size_id}`] ?? l.cantidad })),
+                ...agregados.map((a) => ({ productId: a.product_id, sizeId: a.size_id, cantidad: cantidades[a.k] ?? 0, ...(a.aMano ? { precio: a.precio } : {}) })).filter((a) => a.cantidad > 0),
+              ], Object.entries({ ...Object.fromEntries([...enPackOriginal].map((id) => [id, 0])), ...packs }).map(([id, n]) => ({ productId: Number(id), packs: n }))), 'Cambio guardado.')}>Guardar</Button>
           : p?.etapa === 'pedido' && <Button variant="solid" tone="brand" disabled={!ficha.escribir || ocupado || !!p.falta_cliente} title={p.falta_cliente ? 'Sin cliente' : undefined} onClick={() => void hacer(() => mandarAPrepararPanel(pedidoId), 'Enviado a preparación.')}>Enviar a preparación</Button>}
       </>)}>
       {error && <Notice tone="danger">{error}</Notice>}
@@ -412,36 +440,29 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
           {p.falta_cliente && p.etapa !== 'anulado' && <Notice tone="danger"><b>Sin cliente.</b> Elegí el cliente en Hoy › «Sin cliente» o desde el chat de su número{p.contacto?.telefono ? ` (${p.contacto.telefono})` : ''}.</Notice>}
           {!ficha.escribir && <Notice tone="info">{APAGADO}</Notice>}
           {ficha.escribir && !p.editable && p.etapa !== 'anulado' && <Notice tone="info">El depósito ya empezó a prepararlo: no se cambia.</Notice>}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {[...ficha.lineas.map((l) => ({ ...l, nuevo: false })), ...agregados.map((a) => ({ ...a, cantidad: 0, nuevo: true }))].map((l) => {
-              const k = `${l.product_id}:${l.size_id}`
-              const n = cantidades[k] ?? l.cantidad
-              if (l.nuevo && n <= 0) return null
-              return (
-                <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: font.sm }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <b>{l.nombre ?? `Producto ${l.product_id}`}</b>{l.talle ? ` · ${l.talle}` : ''}{l.nuevo && <span style={{ fontSize: font.xs, color: color.mut2 }}> · agregado</span>}
-                    <div style={{ fontSize: font.xs, color: l.stock != null && l.stock < 0 ? color.dangerInk : color.mut2 }}>{plata(l.precio)} c/u · stock {l.stock ?? '—'}</div>
-                  </div>
-                  {puede && l.size_id != null ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Button size="sm" variant="outline" aria-label="Uno menos" disabled={n <= 0} onClick={() => setCantidades((c) => ({ ...c, [k]: Math.max(0, n - 1) }))}>−</Button>
-                      <b style={{ minWidth: 24, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{n}</b>
-                      <Button size="sm" variant="outline" aria-label="Uno más" onClick={() => setCantidades((c) => ({ ...c, [k]: n + 1 }))}>+</Button>
-                    </div>
-                  ) : <b style={{ fontVariantNumeric: 'tabular-nums' }}>{n}</b>}
-                </div>
-              )
-            })}
-          </div>
+          <RenglonesPorDiseno
+            renglones={[...ficha.lineas.filter((l) => !enPackOriginal.has(String(l.product_id))).map((l) => ({ ...l, nuevo: false })),
+              ...agregados.map((a) => ({ ...a, cantidad: 0, nuevo: true }))]}
+            cantidades={cantidades} puede={puede}
+            poner={(k, n) => setCantidades((c) => ({ ...c, [k]: Math.max(0, n) }))}
+            packs={packs} packInfo={packInfo}
+            ponerPacks={(id, n) => setPacks((m) => ({ ...m, [id]: Math.max(0, n) }))} />
           {puede && (buscando
-            ? <BuscarProducto pedidoId={pedidoId} onElegir={agregar} onCerrar={() => setBuscando(false)} />
-            : <div><Button size="sm" variant="outline" onClick={() => setBuscando(true)}>Agregar producto</Button></div>)}
+            ? <BuscarProducto pedidoId={pedidoId} onElegir={agregar} onCerrar={() => setBuscando(false)} precioManual={!!ficha.precioManual}
+                sueltos={new Set([...ficha.lineas.filter((l) => !enPackOriginal.has(String(l.product_id))).map((l) => String(l.product_id)), ...agregados.map((a) => String(a.product_id))])}
+                enPack={new Set(Object.entries(packs).filter(([, n]) => n > 0).map(([id]) => id))} />
+            : <div><Button size="sm" variant="outline" onClick={() => setBuscando(true)}>+ Agregar</Button></div>)}
           {p.etapa !== 'anulado' && (
             <EnvioDelPedido envio={p.envio ?? null} transporte={p.transporte ?? null}
               sinFactura={!!ficha.facturacion?.entera && ficha.facturacion.entera.total < p.total}
               cambiar={ficha.escribir && !cambiado && !ocupado && !(ficha.facturacion?.entera || (ficha.facturacion?.partes ?? 0) > 0)}
               guardar={(envio, transporte) => hacer(() => ponerEnvioPedidoPanel(pedidoId, envio, transporte), envio ? 'Envío guardado.' : 'Envío sacado.', 'envio')} />
+          )}
+          {cuentaTienda && cuentaTienda.descuento > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: font.sm, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Productos</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{plata(cuentaTienda.subtotal)}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: color.successInk, fontWeight: 600 }}><span>Descuento {cuentaTienda.pct}%</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>−{plata(cuentaTienda.descuento)}</span></div>
+            </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: font.sm, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
             <span>Total{cambiado ? ' (sin guardar)' : ''}</span>
@@ -450,6 +471,9 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
               <b>{plata(totalAhora)}</b>
             </span>
           </div>
+          {cuentaTienda?.proximo && p.etapa !== 'anulado' && (
+            <div style={{ fontSize: font.xs, color: color.mut2 }}>Faltan <b style={{ color: color.ink2 }}>{plata(cuentaTienda.proximo.falta)}</b> para el {cuentaTienda.proximo.pct}%</div>
+          )}
           {p.venta_id && ficha.facturacion && (ficha.facturacion.entera ? (
             <div style={{ fontSize: font.sm, color: color.successInk }}>
               Facturado ✓ · {LETRA[ficha.facturacion.entera.tipo] ?? ''} {numeroComprobante(ficha.facturacion.entera)}
@@ -582,27 +606,132 @@ export function ElegirCliente({ tel, persona, escribir, decir, onCambio, onElegi
   )
 }
 
-type Agregado = { k: string; product_id: number; size_id: number; nombre: string; talle: string | null; precio: number; stock: number }
+type Agregado = { k: string; product_id: number; size_id: number; nombre: string; talle: string | null; precio: number; tipo: TipoPrecio; /** Precio a mano (Darío). */ aMano: boolean; stock: number }
+
+/** La marca del precio (Darío 18-nov): una palabra. Lo de lista ⛔ lleva. */
+function MarcaPrecio({ tipo }: { tipo?: TipoPrecio }) {
+  if (tipo === 'pack') return <Badge tone="brand">Pack</Badge>
+  if (tipo === 'oferta') return <Badge tone="danger">Oferta</Badge>
+  if (tipo === 'fijo') return <Badge tone="neutral">Especial</Badge>
+  return null
+}
+
+const sinIphone = (t: string | null) => (t ?? 'Única').replace(/^iPhone\s+/i, '')
+
+/** Un pack del pedido: su armado y cuántos tenía al abrir la hoja (ya descontados de la tienda). */
+type InfoPack = { pack: PackTienda; nombre: string; inicial: number }
+
+type RenglonHoja = { product_id: number; size_id: number | null; nombre: string | null; talle: string | null; precio: number; tipo?: TipoPrecio; stock: number | null; cantidad: number; nuevo: boolean }
 
 /**
- * El buscador de «Agregar producto»: el catálogo de la marca del pedido por nombre, SKU o código, cada variante con su stock
- * y el precio mayorista. Un producto SIN precio mayorista se ve pero ⛔ se agrega (el motor contestaría «sin precio»).
+ * Los productos de la hoja AGRUPADOS por diseño (Darío 18-nov): un bloque por diseño con sus modelos de a dos por fila, cada
+ * uno con − cantidad +; el diseño en pack, con «− packs +» y lo que lleva de cada modelo.
  */
-type Elegido = { prod: ProductoParaPedido; v: ProductoParaPedido['variantes'][number]; cantidad: number }
+function RenglonesPorDiseno({ renglones, cantidades, puede, poner, packs, packInfo, ponerPacks }: {
+  renglones: RenglonHoja[]; cantidades: Record<string, number>; puede: boolean; poner: (k: string, n: number) => void
+  packs: Record<string, number>; packInfo: Record<string, InfoPack>; ponerPacks: (id: string, n: number) => void
+}) {
+  const grupos = new Map<number, RenglonHoja[]>()
+  for (const r of renglones) {
+    const n = cantidades[`${r.product_id}:${r.size_id}`] ?? r.cantidad
+    if (r.nuevo && n <= 0) continue
+    grupos.set(r.product_id, [...(grupos.get(r.product_id) ?? []), r])
+  }
+  const caja = { border: `1px solid ${color.line}`, borderRadius: radius.md, overflow: 'hidden' } as const
+  const cabeza = { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: color.bg, fontSize: font.sm } as const
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {[...grupos.entries()].map(([pid, rs]) => {
+        const u = rs.reduce((a, r) => a + (cantidades[`${r.product_id}:${r.size_id}`] ?? r.cantidad), 0)
+        const precios = [...new Set(rs.map((r) => r.precio))]
+        const tipos = [...new Set(rs.map((r) => r.tipo))]
+        return (
+          <div key={pid} style={caja}>
+            <div style={cabeza}>
+              <b style={{ flex: 1, minWidth: 0 }}>{rs[0].nombre ?? `Producto ${pid}`}</b>
+              {tipos.length === 1 && <MarcaPrecio tipo={tipos[0]} />}
+              <span style={{ fontSize: font.xs, color: color.mut2, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{u} u · {precios.length === 1 ? `${plata(precios[0])} c/u` : `desde ${plata(Math.min(...precios))}`}</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+              {rs.map((r) => {
+                const k = `${r.product_id}:${r.size_id}`
+                const n = cantidades[k] ?? r.cantidad
+                const nombre = `${r.nombre ?? ''} ${r.talle ?? ''}`.trim()
+                return (
+                  <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderTop: `1px solid ${color.line}`, fontSize: font.sm }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {sinIphone(r.talle)}{tipos.length > 1 && <> <MarcaPrecio tipo={r.tipo} /></>}{r.nuevo && <span style={{ fontSize: font.xs, color: color.brand }}> · nuevo</span>}
+                      <div style={{ fontSize: font.xs, color: r.stock != null && r.stock < 0 ? color.dangerInk : color.mut2 }}>stock {r.stock ?? '—'}{precios.length > 1 ? ` · ${plata(r.precio)}` : ''}</div>
+                    </div>
+                    {puede && r.size_id != null ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <Button size="sm" variant="outline" aria-label={`Uno menos de ${nombre}`} disabled={n <= 0} onClick={() => poner(k, n - 1)}>−</Button>
+                        <b style={{ minWidth: 22, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{n}</b>
+                        <Button size="sm" variant="outline" aria-label={`Uno más de ${nombre}`} onClick={() => poner(k, n + 1)}>+</Button>
+                      </div>
+                    ) : <b style={{ fontVariantNumeric: 'tabular-nums' }}>{n}</b>}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+      {Object.entries(packs).filter(([id]) => packInfo[id]).map(([id, n]) => {
+        const { pack, nombre, inicial } = packInfo[id]
+        // Los que ya tenía el pedido ya se descontaron de la tienda: el tope es esos + los que quedan.
+        const tope = pack.quedan == null ? Infinity : inicial + pack.quedan
+        return (
+          <div key={`pack-${id}`} style={caja}>
+            <div style={cabeza}>
+              <b style={{ flex: 1, minWidth: 0 }}>{nombre}</b>
+              <MarcaPrecio tipo="pack" />
+              <span style={{ fontSize: font.xs, color: color.mut2, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{n * pack.fundas} u · {plata(pack.precio)} c/u</span>
+              {puede ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                  <Button size="sm" variant="outline" aria-label={`Un pack menos de ${nombre}`} disabled={n <= 0} onClick={() => ponerPacks(id, n - 1)}>−</Button>
+                  <b style={{ minWidth: 22, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{n}</b>
+                  <Button size="sm" variant="outline" aria-label={`Un pack más de ${nombre}`} disabled={n >= tope} onClick={() => ponerPacks(id, n + 1)}>+</Button>
+                </div>
+              ) : <b>{n}</b>}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', padding: '5px 10px', borderTop: `1px solid ${color.line}`, fontSize: font.xs, color: color.mut }}>
+              {pack.modelos.map((m) => <span key={m.size_id}>{sinIphone(m.talle)} <b style={{ color: color.ink2 }}>×{m.cantidad * n}</b></span>)}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
-function BuscarProducto({ pedidoId, onElegir, onCerrar }: { pedidoId: string; onElegir: (elegidos: Elegido[]) => void; onCerrar: () => void }) {
+/**
+ * El buscador de «Agregar»: el catálogo de la marca del pedido por nombre, SKU o código, cada talle con su stock y el PRECIO
+ * DE LA TIENDA (Darío 18-nov: pack, oferta, precio por modelo). El diseño con pack elige Pack o Suelta. Darío puede poner
+ * precio a mano. Un producto SIN precio mayorista se ve pero ⛔ se agrega (el motor contestaría «sin precio»).
+ */
+type Elegido = { prod: ProductoParaPedido; v: ProductoParaPedido['variantes'][number]; cantidad: number; /** A mano (Darío). */ precio?: number }
+
+function BuscarProducto({ pedidoId, onElegir, onCerrar, precioManual, sueltos, enPack }: {
+  pedidoId: string; onElegir: (e: { sueltas: Elegido[]; packs: Array<{ prod: ProductoParaPedido; n: number }> }) => void; onCerrar: () => void
+  precioManual: boolean; /** Diseños que ya van sueltos en el pedido (⛔ pack) y en pack (⛔ suelta). */ sueltos: Set<string>; enPack: Set<string>
+}) {
   const [q, setQ] = useState('')
   const [lista, setLista] = useState<ProductoParaPedido[] | null>(null)
+  const [sinTienda, setSinTienda] = useState(false)
   const [error, setError] = useState<string | null>(null)
   /** Cuántas de cada talle (Darío 18-nov: filas, para cargar varios de una). Sobrevive a otra búsqueda. */
   const [pedir, setPedir] = useState<Record<string, Elegido>>({})
+  const [packsPedidos, setPacksPedidos] = useState<Record<string, { prod: ProductoParaPedido; n: number }>>({})
+  const [modo, setModo] = useState<Record<string, 'pack' | 'suelta'>>({})
+  const [aMano, setAMano] = useState<Record<string, string>>({})
   useEffect(() => {
     const t = q.trim()
     if (t.length < 2) return
     let vivo = true
     const espera = setTimeout(() => {
       buscarProductosPedido(pedidoId, t)
-        .then((r) => { if (vivo) { setLista(r.prendido ? r.productos : []); setError(null) } })
+        .then((r) => { if (vivo) { setLista(r.prendido ? r.productos : []); setSinTienda(r.prendido && r.productos.length > 0 && r.tienda === false); setError(null) } })
         .catch((e) => { if (vivo) setError(e instanceof Error ? e.message : 'No se pudo buscar.') })
     }, 300)
     return () => { vivo = false; clearTimeout(espera) }
@@ -611,42 +740,97 @@ function BuscarProducto({ pedidoId, onElegir, onCerrar }: { pedidoId: string; on
   const vista = q.trim().length < 2 ? null : lista
   const poner = (prod: ProductoParaPedido, v: ProductoParaPedido['variantes'][number], n: number) =>
     setPedir((m) => ({ ...m, [`${prod.product_id}:${v.size_id}`]: { prod, v, cantidad: Math.max(0, Math.min(9999, Math.floor(n) || 0)) } }))
-  const elegidos = Object.values(pedir).filter((e) => e.cantidad > 0)
-  const unidades = elegidos.reduce((a, e) => a + e.cantidad, 0)
+  const precioDe = (pid: number) => { const n = parsearMonto(aMano[pid] ?? ''); return n != null && n > 0 ? n : undefined }
+  /** Pack o suelta: lo que se puede, y si se pueden las dos, lo elegido (arranca en Pack). */
+  const modoDe = (p: ProductoParaPedido): 'pack' | 'suelta' => {
+    const puedePack = !!p.pack && !sueltos.has(String(p.product_id))
+    const puedeSuelta = !p.soloPack && !enPack.has(String(p.product_id))
+    return !puedePack ? 'suelta' : !puedeSuelta ? 'pack' : (modo[p.product_id] ?? 'pack')
+  }
+  const elegidos = Object.values(pedir).filter((e) => e.cantidad > 0 && modoDe(e.prod) === 'suelta')
+    .map((e) => ({ ...e, precio: precioManual ? precioDe(e.prod.product_id) : undefined }))
+  const packsElegidos = Object.values(packsPedidos).filter((x) => x.n > 0 && modoDe(x.prod) === 'pack')
+  const unidades = elegidos.reduce((a, e) => a + e.cantidad, 0) + packsElegidos.reduce((a, x) => a + x.n * (x.prod.pack?.fundas ?? 0), 0)
+  const seg = (activo: boolean) => ({ fontSize: font.xs, fontWeight: 600, padding: '2px 10px', height: 'auto', border: 0, cursor: 'pointer', background: activo ? color.brandSolid : color.surface, color: activo ? '#fff' : color.mut } as const)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, border: `1px solid ${color.line}`, borderRadius: radius.md, padding: space[2] }}>
       <div style={{ display: 'flex', gap: 6 }}>
-        <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre, SKU o código" aria-label="Buscar el producto" style={{ flex: 1 }} />
+        <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Diseño, modelo, SKU o código" aria-label="Buscar el producto" style={{ flex: 1 }} />
         <Button size="sm" variant="ghost" onClick={onCerrar}>Cancelar</Button>
       </div>
       {error && <Notice tone="danger">{error}</Notice>}
+      {sinTienda && <Notice tone="warning">No pude leer los precios de la tienda: probá en un minuto.</Notice>}
       {vista && !vista.length && !error && <div style={{ fontSize: font.xs, color: color.mut2 }}>No hay productos con «{q.trim()}».</div>}
-      {vista?.map((p) => (
-        <div key={p.product_id} style={{ fontSize: font.sm }}>
-          <b>{p.nombre}</b> <span style={{ fontSize: font.xs, color: p.precio == null ? color.dangerInk : color.mut2 }}>{p.precio == null ? '· sin precio mayorista: no se puede agregar' : `· ${plata(p.precio)} c/u`}</span>
-          <div style={{ display: 'flex', flexDirection: 'column', marginTop: 3 }}>
-            {p.variantes.map((v) => {
-              const n = pedir[`${p.product_id}:${v.size_id}`]?.cantidad ?? 0
-              const nombre = v.talle ?? 'Única'
-              return (
-                <div key={v.size_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', borderTop: `1px solid ${color.line2}` }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {nombre} <span style={{ fontSize: font.xs, color: v.stock <= 0 ? color.dangerInk : color.mut2 }}>· stock {v.stock}{v.en_pedido ? ' · ya está' : ''}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Button size="sm" variant="outline" aria-label={`Uno menos de ${nombre}`} disabled={p.precio == null || n <= 0} onClick={() => poner(p, v, n - 1)}>−</Button>
-                    <Input value={n ? String(n) : ''} inputMode="numeric" placeholder="0" aria-label={`Cantidad de ${nombre}`} disabled={p.precio == null}
-                      onChange={(e) => poner(p, v, Number(e.target.value.replace(/\D/g, '')))} onFocus={(e) => e.target.select()}
-                      style={{ width: 48, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }} />
-                    <Button size="sm" variant="outline" aria-label={`Uno más de ${nombre}`} disabled={p.precio == null} onClick={() => poner(p, v, n + 1)}>+</Button>
-                  </div>
+      {vista?.map((p) => {
+        const id = String(p.product_id)
+        const pack = p.pack ?? null
+        const puedePack = !!pack && !sueltos.has(id)
+        const puedeSuelta = !p.soloPack && !enPack.has(id)
+        const m = modoDe(p)
+        const sinPrecio = p.precio == null && !p.variantes.some((v) => v.precio != null)
+        const tope = pack ? Math.min(pack.quedan ?? Infinity, pack.alcanza ?? Infinity) : 0
+        const nPacks = packsPedidos[id]?.n ?? 0
+        const tipos = [...new Set(p.variantes.map((v) => v.tipo))]
+        return (
+          <div key={p.product_id} style={{ fontSize: font.sm, border: `1px solid ${color.line}`, borderRadius: radius.md, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 9px', flexWrap: 'wrap' }}>
+              <b style={{ flex: 1, minWidth: 0 }}>{p.nombre}</b>
+              {m === 'suelta' && tipos.length === 1 && <MarcaPrecio tipo={tipos[0]} />}
+              {pack && (puedePack && puedeSuelta) && (
+                <span role="group" aria-label="Cómo se vende" style={{ display: 'inline-flex', border: `1px solid ${color.line2}`, borderRadius: 7, overflow: 'hidden' }}>
+                  <button type="button" aria-pressed={m === 'pack'} style={seg(m === 'pack')} onClick={() => setModo((x) => ({ ...x, [p.product_id]: 'pack' }))}>Pack</button>
+                  <button type="button" aria-pressed={m === 'suelta'} style={seg(m === 'suelta')} onClick={() => setModo((x) => ({ ...x, [p.product_id]: 'suelta' }))}>Suelta</button>
+                </span>
+              )}
+              {pack && !puedePack && <span style={{ fontSize: font.xs, color: color.mut2 }}>ya va suelta</span>}
+              {sinPrecio && <span style={{ fontSize: font.xs, color: color.dangerInk }}>sin precio mayorista</span>}
+            </div>
+            {m === 'pack' && pack ? (<>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', padding: '5px 9px', borderTop: `1px solid ${color.line}`, fontSize: font.xs, color: color.mut }}>
+                {pack.modelos.map((x) => <span key={x.size_id}>{sinIphone(x.talle)} <b style={{ color: color.ink2 }}>×{x.cantidad}</b></span>)}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 9px', borderTop: `1px solid ${color.line}`, fontSize: font.xs, color: color.mut }}>
+                <span style={{ flex: 1, fontVariantNumeric: 'tabular-nums' }}>{pack.fundas} fundas · {plata(pack.precio)} c/u{pack.quedan != null ? ` · quedan ${pack.quedan}` : ''}</span>
+                <Button size="sm" variant="outline" aria-label="Un pack menos" disabled={nPacks <= 0} onClick={() => setPacksPedidos((x) => ({ ...x, [id]: { prod: p, n: nPacks - 1 } }))}>−</Button>
+                <b style={{ minWidth: 22, textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: color.ink }}>{nPacks}</b>
+                <Button size="sm" variant="outline" aria-label="Un pack más" disabled={nPacks >= tope} onClick={() => setPacksPedidos((x) => ({ ...x, [id]: { prod: p, n: nPacks + 1 } }))}>+</Button>
+              </div>
+            </>) : (<>
+              {precioManual && !sinPrecio && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderTop: `1px solid ${color.line}`, fontSize: font.xs, color: color.mut }}>
+                  <span style={{ flex: 1 }}>Precio a mano</span>
+                  <Input value={aMano[p.product_id] ?? ''} inputMode="decimal" placeholder={plata(p.variantes.find((v) => v.precio != null)?.precio ?? p.precio ?? 0)} aria-label={`Precio a mano de ${p.nombre}`}
+                    onChange={(e) => setAMano((x) => ({ ...x, [p.product_id]: e.target.value }))} style={{ width: 96, textAlign: 'right' }} />
                 </div>
-              )
-            })}
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))' }}>
+                {p.variantes.map((v) => {
+                  const n = pedir[`${p.product_id}:${v.size_id}`]?.cantidad ?? 0
+                  const nombre = v.talle ?? 'Única'
+                  const precio = precioDe(p.product_id) ?? v.precio ?? p.precio
+                  const no = precio == null || !puedeSuelta
+                  return (
+                    <div key={v.size_id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderTop: `1px solid ${color.line}` }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {sinIphone(v.talle)}{tipos.length > 1 && <> <MarcaPrecio tipo={v.tipo} /></>}
+                        <div style={{ fontSize: font.xs, color: v.stock <= 0 ? color.dangerInk : color.mut2, fontVariantNumeric: 'tabular-nums' }}>{precio != null ? plata(precio) : '—'} · stock {v.stock}{v.en_pedido ? ' · ya está' : ''}</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <Button size="sm" variant="outline" aria-label={`Uno menos de ${nombre}`} disabled={no || n <= 0} onClick={() => poner(p, v, n - 1)}>−</Button>
+                        <Input value={n ? String(n) : ''} inputMode="numeric" placeholder="0" aria-label={`Cantidad de ${nombre}`} disabled={no}
+                          onChange={(e) => poner(p, v, Number(e.target.value.replace(/\D/g, '')))} onFocus={(e) => e.target.select()}
+                          style={{ width: 42, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }} />
+                        <Button size="sm" variant="outline" aria-label={`Uno más de ${nombre}`} disabled={no} onClick={() => poner(p, v, n + 1)}>+</Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>)}
           </div>
-        </div>
-      ))}
-      {unidades > 0 && <div><Button size="sm" variant="solid" tone="brand" onClick={() => onElegir(elegidos)}>Agregar {unidades} u.</Button></div>}
+        )
+      })}
+      {unidades > 0 && <div><Button size="sm" variant="solid" tone="brand" onClick={() => onElegir({ sueltas: elegidos, packs: packsElegidos })}>Agregar {unidades} u.</Button></div>}
     </div>
   )
 }

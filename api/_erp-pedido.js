@@ -13,6 +13,7 @@
  */
 import { panelAbierto } from './_erp-clientes.js'
 import { cortesDeCaja } from './_caja-corte.js'
+import { cuentaDelPedido, packDe, packsEnRenglones, precioDeTienda, renglonGuardado, soloPack } from '../lib/erp/precio-tienda.core.js'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 /** Los pedidos SIN ENTRAR que se buscan por el teléfono del chat: los de los últimos días (el catálogo manda el teléfono escrito a mano). */
@@ -113,10 +114,69 @@ export async function pedidoDelPanel({ pedidoId = '', usuario = null }, deps) {
   if (!(deps.prendido ?? await panelAbierto(usuario))) return { prendido: false }
   if (!UUID.test(String(pedidoId))) return { status: 400, error: 'Falta el pedido' }
   const escribir = deps.escribir ?? (await escribirPrendido())
+  // Las reglas de la tienda se piden ANTES de la base, en paralelo (1 min en memoria).
+  const reglas = leerReglas(deps)
   return deps.conMotor('bdi', 'El pedido', async (pg) => {
     if (!(await hay064(pg))) return { status: 409, error: 'Falta la migración del pedido en la base (sql/064).' }
-    return fichaConConexion(pg, String(pedidoId), escribir)
+    return fichaConConexion(pg, String(pedidoId), escribir, { reglas: await reglas, precioManual: !!deps.precioManual })
   })
+}
+
+/** Las reglas de la tienda, o null si ⛔ contestó (la hoja se ve igual; guardar un cambio avisa). */
+async function leerReglas(deps, fresco = false) {
+  try {
+    if (deps.reglas) return await deps.reglas(fresco)
+    const { reglasVigentes } = await import('./_tienda-precios.js')
+    return await reglasVigentes({ fresco })
+  } catch (e) {
+    console.warn('[erp-pedido] las reglas de la tienda:', e?.message)
+    return null
+  }
+}
+
+/**
+ * Lo que la cuenta de la tienda necesita de cada producto (Areben Gestión): precio de la lista mayorista, costo vigente
+ * (para la oferta por margen) y sus talles.
+ * @param {import('pg').ClientBase} pg @param {string} marca @param {number[]} ids
+ * @returns {Promise<Map<string, { lista: number|null, costo: number|null, variantes: Array<{ size_id: number, talle: string|null }> }>>}
+ */
+export async function datosDeProductos(pg, marca, ids) {
+  const unicos = [...new Set(ids.map(Number).filter((x) => x > 0))]
+  const m = new Map()
+  if (!unicos.length) return m
+  const [pre, cos, tal] = await Promise.all([
+    pg.query(`select product_id::text, precio from precio_lista where marca = $1 and lista = 'mayorista' and product_id = any($2::bigint[]) and precio is not null`, [marca, unicos]).then((r) => r.rows),
+    pg.query(`select product_id::text, costo from costo_vigente where marca = $1 and product_id = any($2::bigint[])`, [marca, unicos]).then((r) => r.rows).catch(() => []),
+    pg.query(`select product_id::text, size_id, talle from variante where product_id = any($1::bigint[]) and activa`, [unicos]).then((r) => r.rows),
+  ])
+  for (const id of unicos) m.set(String(id), { lista: null, costo: null, variantes: [] })
+  for (const r of pre) m.get(r.product_id).lista = Number(r.precio)
+  for (const r of cos) if (m.has(r.product_id)) m.get(r.product_id).costo = Number(r.costo)
+  for (const r of tal) m.get(r.product_id)?.variantes.push({ size_id: Number(r.size_id), talle: r.talle })
+  return m
+}
+
+/**
+ * Los renglones de la hoja con qué es cada uno para la tienda (`tipo`, `base` sin el descuento por monto) y los packs del
+ * pedido (cuántos lleva y el armado), para el total en el momento. Sin reglas ⇒ `tienda: null`.
+ */
+async function tiendaDeLaFicha(pg, marca, lineas, reglas) {
+  if (!reglas) return { lineas, tienda: null }
+  const datos = await datosDeProductos(pg, marca, lineas.map((l) => l.product_id))
+  const conTipo = lineas.map((l) => {
+    const d = datos.get(String(l.product_id))
+    const g = renglonGuardado(reglas, { product_id: l.product_id, size_id: l.size_id, lista: d?.lista ?? null, costo: d?.costo ?? null }, l.precio)
+    return { ...l, tipo: g.tipo, base: g.base }
+  })
+  const packs = {}
+  for (const [id, d] of datos) {
+    const pack = packDe(reglas, id, d.variantes)
+    if (!pack) continue
+    const enPack = conTipo.filter((l) => String(l.product_id) === id && l.tipo === 'pack')
+    const en = enPack.length ? packsEnRenglones(pack, enPack) : 0
+    if (en != null) packs[id] = { ...pack, enPedido: en }
+  }
+  return { lineas: conTipo, tienda: { escala: reglas.escala, packs } }
 }
 
 /**
@@ -124,7 +184,7 @@ export async function pedidoDelPanel({ pedidoId = '', usuario = null }, deps) {
  * guardar el envío tardaba ~5 s porque, al terminar, la hoja volvía a pedirse con otra conexión).
  * @param {import('pg').ClientBase} pg @param {string} pedidoId @param {boolean} escribir
  */
-async function fichaConConexion(pg, pedidoId, escribir) {
+async function fichaConConexion(pg, pedidoId, escribir, { reglas = null, precioManual = false } = {}) {
   {
     const { fichaDePedidoMayorista } = await import('../motor/pedido/venta.mjs')
     const r = await fichaDePedidoMayorista(pg, { pedido_id: pedidoId })
@@ -134,9 +194,11 @@ async function fichaConConexion(pg, pedidoId, escribir) {
     // Para el total en el momento (Darío 18-nov): el mismo redondeo que aplica el cambio al guardar.
     const { redondeoDe } = await import('../motor/venta/redondeo-db.mjs')
     const redondeo = await redondeoDe(pg, { marca: r.pedido.marca ?? 'bdi', canal: 'mayorista' }).catch(() => null)
+    const conNombre = r.lineas.map((l) => ({ ...l, nombre: n.producto.get(String(l.product_id)) ?? null, talle: l.size_id == null ? null : n.talle.get(`${l.product_id}:${l.size_id}`) ?? null }))
+    const t = await tiendaDeLaFicha(pg, r.pedido.marca ?? 'bdi', conNombre, reglas).catch((e) => { console.warn('[erp-pedido] tienda de la hoja:', e?.message); return { lineas: conNombre, tienda: null } })
     return {
-      prendido: true, escribir, redondeo: redondeo ? { paso: Number(redondeo.paso), modo: redondeo.modo } : null, pedido: { ...r.pedido, falta_cliente: esFichaSinCliente(r.pedido.cliente_id) }, cambios: r.cambios,
-      lineas: r.lineas.map((l) => ({ ...l, nombre: n.producto.get(String(l.product_id)) ?? null, talle: l.size_id == null ? null : n.talle.get(`${l.product_id}:${l.size_id}`) ?? null })),
+      prendido: true, escribir, precioManual, redondeo: redondeo ? { paso: Number(redondeo.paso), modo: redondeo.modo } : null, pedido: { ...r.pedido, falta_cliente: esFichaSinCliente(r.pedido.cliente_id) }, cambios: r.cambios,
+      lineas: t.lineas, tienda: t.tienda,
     }
   }
 }
@@ -221,17 +283,35 @@ export async function productosParaElPanel({ pedidoId = '', q = '', usuario = nu
   if (!UUID.test(String(pedidoId))) return { status: 400, error: 'Falta el pedido' }
   const texto = String(q || '').trim().slice(0, 80)
   if (texto.length < 2) return { prendido: true, productos: [] }
+  const reglas = leerReglas(deps)
   return deps.conMotor('bdi', 'Buscar el producto', async (pg) => {
     const { productosParaPedido } = await import('../motor/pedido/venta.mjs')
     const r = await productosParaPedido(pg, { pedido_id: String(pedidoId), q: texto })
     if (!r.ok) return { status: r.error?.codigo === 'NO_ENCONTRADO' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo buscar.' }
-    return { prendido: true, productos: r.productos }
+    const R = await reglas
+    if (!R || !r.productos.length) return { prendido: true, productos: r.productos, tienda: !!R }
+    // Con los precios de la tienda (Darío 18-nov): cada talle con su precio y qué es; el pack, si tiene.
+    const datos = await datosDeProductos(pg, 'bdi', r.productos.map((p) => p.product_id))
+    return {
+      prendido: true, tienda: true,
+      productos: r.productos.map((p) => {
+        const d = datos.get(String(p.product_id))
+        const variantes = p.variantes.map((v) => ({ ...v, ...precioDeTienda(R, { product_id: p.product_id, size_id: v.size_id, lista: p.precio, costo: d?.costo ?? null }) }))
+        return { ...p, variantes, pack: packDe(R, p.product_id, p.variantes), soloPack: soloPack(R, p.product_id) }
+      }),
+    }
   })
 }
 
 /** El código del motor ⇒ el status de la puerta. */
 const statusDe = (codigo) => (codigo === 'NO_ENCONTRADO' ? 404
   : ['ANULADO', 'VENDIDO_EN_GN', 'EN_PREPARACION', 'SIN_ENTRAR', 'FALTA_CLIENTE', 'TIENE_PAGOS', 'SIN_PRECIO', 'SIN_TALLE', 'SIN_RENGLONES', 'CAMBIO_DE_LLAVE', 'SIN_CUENTA_CORRIENTE', 'CONFLICTO_IDEMPOTENCIA'].includes(codigo) ? 409 : 400)
+
+/** Darío (admin): el único que pone precio a mano en el pedido (18-nov: «solo yo, soy el único que usa el CRM»). */
+export function esDario(perfil) {
+  const n = String(perfil?.name || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim()
+  return !!perfil?.admin && n === 'DARIO AREVALO'
+}
 
 export const ACCIONES_PEDIDO = ['pedido-entrar', 'pedido-cambiar', 'pedido-a-preparar', 'pedido-anular', 'pedido-envio']
 
@@ -241,7 +321,9 @@ export const ACCIONES_PEDIDO = ['pedido-entrar', 'pedido-cambiar', 'pedido-a-pre
  * total; `envio` vacío o 0 lo saca. 🔴 Con el pedido FACTURADO (entera o alguna parte) ⛔: cambiaría el total de una venta ya
  * facturada. Eso lo ve esta puerta (las facturas viven en `facturas`, ⛔ en el motor).
  * @param {{ accion: string, body: any, usuario: string|null, quien?: any }} p
- * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, puedeAnular?: boolean, facturacion?: (ventaId: string, total: number) => Promise<{ entera: any, partes: number }|null> }} deps
+ * `pedido-cambiar` (Darío 18-nov): `{ lineas: [{ productId, sizeId, cantidad, precio? }], packs?: [{ productId, packs }] }` — el
+ * precio de cada renglón lo pone `preciosDelCambio` con las reglas de la tienda; `precio` sólo en uno NUEVO y sólo Darío.
+ * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, puedeAnular?: boolean, precioManual?: boolean, reglas?: (fresco: boolean) => Promise<any>, anotarPacks?: (id: string, delta: number) => Promise<boolean>, facturacion?: (ventaId: string, total: number) => Promise<{ entera: any, partes: number }|null> }} deps
  */
 export async function accionDePedido({ accion, body, usuario, quien = usuario }, deps) {
   if (!ACCIONES_PEDIDO.includes(accion)) return { status: 400, error: 'Acción desconocida' }
@@ -258,12 +340,27 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
     const pv = await import('../motor/pedido/venta.mjs')
     const pedido_id = String(body.pedidoId)
     let r
+    const avisos = []
     if (accion === 'pedido-entrar') {
       if (!UUID.test(String(body.clienteId || ''))) return { status: 400, error: 'Falta el cliente' }
       r = await pv.entrarPedidoMayorista(pg, { pedido_id, cliente_id: String(body.clienteId), persona_id: UUID.test(String(body.personaId || '')) ? String(body.personaId) : null, usuario })
     } else if (accion === 'pedido-cambiar') {
       if (!Array.isArray(body.lineas)) return { status: 400, error: 'Faltan los renglones' }
-      r = await pv.cambiarPedidoMayorista(pg, { pedido_id, lineas: body.lineas.map((l) => ({ product_id: Number(l?.productId), size_id: Number(l?.sizeId), cantidad: Number(l?.cantidad) })), usuario })
+      // Los precios los decide ESTA puerta con las reglas de la tienda, recién leídas (Darío 18-nov): ⛔ el navegador.
+      const R = await leerReglas(deps, true)
+      if (!R) return { status: 503, error: 'No pude leer los precios de la tienda. Probá de nuevo en un minuto.' }
+      const actual = await pv.fichaDePedidoMayorista(pg, { pedido_id })
+      if (!actual.ok) return { status: statusDe(actual.error?.codigo), error: actual.error?.mensaje ?? 'No se pudo leer el pedido.' }
+      const ids = [...actual.lineas, ...body.lineas.map((l) => ({ product_id: l?.productId })), ...(Array.isArray(body.packs) ? body.packs.map((x) => ({ product_id: x?.productId })) : [])]
+        .map((l) => Number(l.product_id)).filter((x) => Number.isSafeInteger(x) && x > 0)
+      const datos = await datosDeProductos(pg, actual.pedido.marca ?? 'bdi', ids)
+      const c = preciosDelCambio({ actuales: actual.lineas, lineas: body.lineas, packs: body.packs, reglas: R, datos, precioManual: !!deps.precioManual })
+      if (c.status) return c
+      r = await pv.cambiarPedidoMayorista(pg, { pedido_id, lineas: c.pedidas, usuario })
+      if (r.ok && !r.sin_cambios) {
+        const anotar = deps.anotarPacks || (async (id, d) => (await import('./_tienda-precios.js')).anotarPacksEnTienda(id, d))
+        for (const [id, d] of c.deltaPacks) if (!(await anotar(id, d))) avisos.push('El pack no se pudo descontar de la tienda: corregilo en Marketing › Lotes.')
+      }
     } else if (accion === 'pedido-envio') {
       const crudo = body.envio == null || String(body.envio).trim() === '' ? null : Number(body.envio)
       if (crudo != null && (!Number.isFinite(crudo) || crudo < 0)) return { status: 400, error: 'El envío es un monto en pesos' }
@@ -291,14 +388,86 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
     let ficha
     if (accion === 'pedido-cambiar' || accion === 'pedido-envio') {
       try {
-        const f = await fichaConConexion(pg, pedido_id, true)
+        const f = await fichaConConexion(pg, pedido_id, true, { reglas: await leerReglas(deps), precioManual: !!deps.precioManual })
         if (!f.status) ficha = f
       } catch (e) {
         console.warn('[erp-pedido] la hoja después del cambio:', e?.message)
       }
     }
-    return { ok: true, ya: !!r.ya, sinCambios: !!r.sin_cambios, avisarDeposito: !!r.avisar_deposito, ventaId: r.venta_id ?? null, ...(ficha ? { ficha } : {}) }
+    return { ok: true, ya: !!r.ya, sinCambios: !!r.sin_cambios, avisarDeposito: !!r.avisar_deposito, ventaId: r.venta_id ?? null, ...(avisos.length ? { avisos } : {}), ...(ficha ? { ficha } : {}) }
   })
+}
+
+/**
+ * Los PRECIOS de un cambio del pedido, como en la tienda (Darío 18-nov). Puro (la puerta le pasa reglas y datos).
+ *   - Lo que ya estaba: su precio guardado (`renglonGuardado`); si es regular, se recalcula el descuento por monto.
+ *   - Lo nuevo: el precio de la tienda; con `precio`, el precio a mano (sólo Darío, sólo en lo nuevo).
+ *   - `packs`: [{ productId, packs }] = cuántos packs en total de ese diseño; se arman con su cantidad por modelo.
+ *   - El descuento por monto, sobre TODO el pedido (lo regular), aparece o se va según el subtotal.
+ * @param {{ actuales: Array<{ product_id: number|string, size_id: number|string|null, cantidad: number, precio: number }>, lineas: any[], packs?: Array<{ productId: number|string, packs: number }>, reglas: any, datos: Map<string, any>, precioManual?: boolean }} p
+ * @returns {{ status: number, error: string } | { pedidas: Array<{ product_id: number, size_id: number, cantidad: number, precio: number }>, deltaPacks: Array<[string, number]>, cuenta: any }}
+ */
+export function preciosDelCambio({ actuales, lineas, packs = [], reglas: R, datos, precioManual = false }) {
+  const k = (pid, sid) => `${Number(pid)}:${Number(sid)}`
+  const info = (pid) => datos.get(String(pid)) ?? { lista: null, costo: null, variantes: [] }
+  const guardados = new Map(actuales.map((l) => {
+    const d = info(l.product_id)
+    return [k(l.product_id, l.size_id), { ...renglonGuardado(R, { product_id: l.product_id, size_id: l.size_id, lista: d.lista, costo: d.costo }, l.precio), product_id: Number(l.product_id), cantidad: Number(l.cantidad) }]
+  }))
+  const packsAntes = new Map()
+  const renglones = []
+  const deltaPacks = []
+  const conPack = new Set()
+  for (const x of Array.isArray(packs) ? packs : []) {
+    const pid = String(Number(x?.productId))
+    const n = Number(x?.packs)
+    if (!Number.isInteger(n) || n < 0) return { status: 400, error: 'La cantidad de packs es un número entero' }
+    const pack = packDe(R, pid, info(pid).variantes)
+    if (!pack) return { status: 409, error: 'Ese producto no se vende en pack.' }
+    const delDiseno = actuales.filter((l) => String(l.product_id) === pid)
+    const enPack = delDiseno.filter((l) => guardados.get(k(l.product_id, l.size_id)).tipo === 'pack')
+    if (delDiseno.length > enPack.length && n > 0) return { status: 409, error: 'Ese diseño ya está suelto en el pedido.' }
+    const antes = enPack.length ? packsEnRenglones(pack, enPack) ?? 0 : 0
+    if (pack.quedan != null && n - antes > pack.quedan) return { status: 409, error: pack.quedan ? `Quedan ${pack.quedan} packs.` : 'No quedan packs.' }
+    packsAntes.set(pid, antes)
+    conPack.add(pid)
+    for (const m of pack.modelos) if (n > 0) renglones.push({ product_id: Number(pid), size_id: m.size_id, cantidad: m.cantidad * n, base: pack.precio, tipo: 'pack' })
+    if (n !== antes && pack.quedan != null) deltaPacks.push([pid, n - antes])
+  }
+  const vistas = new Set(renglones.map((r) => k(r.product_id, r.size_id)))
+  for (const l of lineas) {
+    const pid = Number(l?.productId), sid = Number(l?.sizeId), cantidad = Number(l?.cantidad)
+    if (!Number.isSafeInteger(pid) || pid <= 0 || !Number.isSafeInteger(sid) || sid <= 0) return { status: 400, error: 'Un renglón sin producto o sin talle' }
+    if (!Number.isInteger(cantidad) || cantidad < 0) return { status: 400, error: 'La cantidad es un número entero' }
+    if (conPack.has(String(pid))) return { status: 409, error: 'Ese diseño va en pack: se cambia por packs.' }
+    const clave = k(pid, sid)
+    if (vistas.has(clave)) return { status: 400, error: 'Un talle aparece dos veces' }
+    vistas.add(clave)
+    if (cantidad === 0) continue
+    const g = guardados.get(clave)
+    const aMano = l?.precio == null || l.precio === '' ? null : Number(l.precio)
+    if (g) {
+      if (aMano != null) return { status: 400, error: 'El precio a mano va sólo en lo que se agrega.' }
+      renglones.push({ product_id: pid, size_id: sid, cantidad, base: g.base, tipo: g.tipo })
+      continue
+    }
+    if (aMano != null) {
+      if (!precioManual) return { status: 403, error: 'El precio a mano es sólo de Darío.' }
+      if (!(Number.isFinite(aMano) && aMano > 0)) return { status: 400, error: 'El precio es un monto mayor a 0' }
+      renglones.push({ product_id: pid, size_id: sid, cantidad, base: aMano, tipo: 'fijo' })
+      continue
+    }
+    const enPackYa = actuales.some((a) => Number(a.product_id) === pid && guardados.get(k(a.product_id, a.size_id)).tipo === 'pack')
+    if (enPackYa && packDe(R, pid, info(pid).variantes)) return { status: 409, error: 'Ese diseño va en pack en el pedido.' }
+    const d = info(pid)
+    const t = precioDeTienda(R, { product_id: pid, size_id: sid, lista: d.lista, costo: d.costo })
+    if (t.precio == null) return { status: 409, error: `El producto ${pid} no tiene precio mayorista cargado` }
+    if (t.tipo === 'pack' && packDe(R, pid, d.variantes)) return { status: 409, error: 'Ese diseño se vende sólo en pack.' }
+    renglones.push({ product_id: pid, size_id: sid, cantidad, base: t.precio, tipo: t.tipo })
+  }
+  if (!renglones.length) return { status: 409, error: 'El pedido quedaría vacío: para eso se anula' }
+  const cuenta = cuentaDelPedido(R, renglones)
+  return { pedidas: cuenta.lineas.map((r) => ({ product_id: r.product_id, size_id: r.size_id, cantidad: r.cantidad, precio: r.precio })), deltaPacks, cuenta }
 }
 
 /**
