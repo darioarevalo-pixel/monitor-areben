@@ -148,11 +148,41 @@ export async function pedidosDelCliente(clienteId: number | null, tel: string | 
 /** 4 Despachado y 5 Cancelado: ya no hay nada que hacer con el pedido, aunque a Logística le falte algún dato. */
 export const ESTADOS_CERRADOS = [4, 5]
 
-export async function pendientesLogistica(): Promise<Resultado<{ count: number; by_step: Record<string, number>; orders: PendienteLogistica[] }>> {
-  const r = await pedir<{ count?: number; by_step?: Record<string, number>; orders?: PendienteLogistica[] }>({ action: 'pendientes' })
-  if (r.t !== 'ok') return r
-  const orders = (r.datos.orders || []).filter((o) => !ESTADOS_CERRADOS.includes(o.status?.code))
-  return { t: 'ok', datos: { count: orders.length, by_step: r.datos.by_step || {}, orders } }
+type Pendientes = Resultado<{ count: number; by_step: Record<string, number>; orders: PendienteLogistica[] }>
+
+/** Siempre al servidor: Pedidos (al abrir, cada 2 minutos y con «↻ Actualizar»). Lo que vuelve bien queda para `pendientesRecientes`. */
+export function pendientesLogistica(): Promise<Pendientes> {
+  const p = (async (): Promise<Pendientes> => {
+    const r = await pedir<{ count?: number; by_step?: Record<string, number>; orders?: PendienteLogistica[] }>({ action: 'pendientes' })
+    if (r.t !== 'ok') return r
+    const orders = (r.datos.orders || []).filter((o) => !ESTADOS_CERRADOS.includes(o.status?.code))
+    return { t: 'ok', datos: { count: orders.length, by_step: r.datos.by_step || {}, orders } }
+  })()
+  const yo = { p, t: Date.now() }
+  ultimosPendientes = yo
+  p.then((r) => {
+    if (r.t !== 'ok' && ultimosPendientes === yo) ultimosPendientes = null
+  })
+  return p
+}
+
+/** ⚡ Cuánto vale una lista de pendientes para la ficha (Darío 18-nov: Logística en la ficha tardaba ~7 s). */
+const PENDIENTES_VIGENTES_MS = 60_000
+let ultimosPendientes: { p: Promise<Pendientes>; t: number } | null = null
+
+/**
+ * La lista de pendientes para LEER (la ficha busca ahí por código y la sugerencia de entrega): la que ya está en camino o
+ * llegó hace menos de un minuto —la de Pedidos o la precarga del panel—; si no, una nueva. Lo que se escribe desde la
+ * ficha vuelve en el pedido y pisa lo que se ve, así que un minuto de atraso acá no muestra nada viejo.
+ */
+export function pendientesRecientes(ahora = Date.now()): Promise<Pendientes> {
+  if (ultimosPendientes && ahora - ultimosPendientes.t < PENDIENTES_VIGENTES_MS) return ultimosPendientes.p
+  return pendientesLogistica()
+}
+
+/** Sólo para los tests. */
+export function _olvidarPendientes() {
+  ultimosPendientes = null
 }
 
 let catalogosCache: Promise<Resultado<Catalogos>> | null = null

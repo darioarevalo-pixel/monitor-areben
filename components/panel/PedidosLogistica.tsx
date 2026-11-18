@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import {
   cambiosDeEnvio,
@@ -19,7 +19,7 @@ import {
   type CampoEnvio,
   type Envio,
   pedidosDelCliente,
-  pendientesLogistica,
+  pendientesRecientes,
   LISTO,
   TRANSPORTE,
   type Catalogos,
@@ -55,29 +55,55 @@ export function PedidosLogistica({ clienteId, tel, despacho, onLeidos, codigos =
   // Lo que llegó va con a quién era: al cambiar de chat no se ve un instante el pedido del anterior.
   const clave = `${clienteId ?? ''}|${tel ?? ''}`
   const [montada] = useState(marca)
-  const [llegado, setLlegado] = useState<{ clave: string; r: Resultado<PedidoLogistica[]> } | null>(null)
+  const [porCliente, setPorCliente] = useState<{ clave: string; r: Resultado<PedidoLogistica[]>; ms: number } | null>(null)
   useEffect(() => {
     let vivo = true
     if (!clienteId && !tel) return
     const deEsta = `${clienteId ?? ''}|${tel ?? ''}`
     const t0 = marca()
-    pedidosDelCliente(clienteId, tel).then(async (r) => {
-      if (!vivo) return
-      const buscados = codigos ? codigos.split(',') : []
-      if (r.t === 'ok' && !r.datos.length && buscados.length) {
-        const x = await pendientesLogistica()
-        if (!vivo) return
-        if (x.t === 'ok') r = { t: 'ok', datos: x.datos.orders.filter((o) => buscados.includes(String(o.gn_number ?? '').trim())) }
-      }
-      setLlegado({ clave: deEsta, r })
-      if (r.t === 'ok') onLeidos?.(r.datos)
-      // ⏱️ Darío 18-nov: ~7 s adentro de WhatsApp. Desde que se montó la ficha y desde que salió esta búsqueda.
-      enviarMedicion('ficha-logistica', montada, { buscando: Math.round(marca() - t0), codigos: buscados.length, hay: r.t === 'ok' ? r.datos.length : r.t }, `ficha-${deEsta}-${codigos}`)
+    pedidosDelCliente(clienteId, tel).then((r) => {
+      if (vivo) setPorCliente({ clave: deEsta, r, ms: Math.round(marca() - t0) })
     })
     return () => {
       vivo = false
     }
-  }, [clienteId, tel, onLeidos, codigos, montada])
+  }, [clienteId, tel])
+
+  /**
+   * ⚡ Por código, EN PARALELO y no después (Darío 18-nov: ~7 s). Antes se esperaba a que la búsqueda por cliente volviera
+   * vacía, y recién ahí se bajaba la lista entera de pendientes; y cuando llegaban los códigos del ERP se repetía todo.
+   * La lista es la misma que ya bajó Pedidos: `pendientesRecientes` la reusa si tiene menos de un minuto.
+   */
+  const [porCodigo, setPorCodigo] = useState<{ codigos: string; orders: PendienteLogistica[] } | null>(null)
+  useEffect(() => {
+    if (!codigos) return
+    let vivo = true
+    pendientesRecientes().then((x) => {
+      if (vivo && x.t === 'ok') setPorCodigo({ codigos, orders: x.datos.orders })
+    })
+    return () => {
+      vivo = false
+    }
+  }, [codigos])
+
+  const llegado = useMemo((): { clave: string; r: Resultado<PedidoLogistica[]> } | null => {
+    if (!porCliente) return null
+    const r = porCliente.r
+    if (r.t !== 'ok' || r.datos.length || !codigos) return porCliente
+    if (porCodigo?.codigos !== codigos) return porCliente
+    const buscados = codigos.split(',')
+    return { clave: porCliente.clave, r: { t: 'ok', datos: porCodigo.orders.filter((o) => buscados.includes(String(o.gn_number ?? '').trim())) } }
+  }, [porCliente, porCodigo, codigos])
+
+  useEffect(() => {
+    if (!llegado || llegado.clave !== clave) return
+    if (llegado.r.t === 'ok') onLeidos?.(llegado.r.datos)
+    // ⏱️ Desde que se montó la ficha (y lo que tardó la búsqueda por cliente).
+    enviarMedicion('ficha-logistica', montada, { buscando: porCliente?.ms ?? null, codigos: codigos ? codigos.split(',').length : 0, hay: llegado.r.t === 'ok' ? llegado.r.datos.length : llegado.r.t }, `ficha-${llegado.clave}-${codigos}`)
+  }, [llegado, clave, onLeidos, montada, codigos, porCliente])
+
+  // Lo despachado o recién guardado en esta ficha pisa lo que llegó.
+  const [cambios, setCambios] = useState<{ clave: string; quitados: number[]; nuevos: PedidoLogistica[] }>({ clave: '', quitados: [], nuevos: [] })
 
   // Lo que usó la vez anterior sale sólo de la lista de pendientes: se pide si algún pedido no tiene
   // forma de entrega, para dejar marcada esa opción.
@@ -86,7 +112,7 @@ export function PedidosLogistica({ clienteId, tel, despacho, onLeidos, codigos =
   useEffect(() => {
     if (!faltaElegir) return
     let vivo = true
-    pendientesLogistica().then((x) => {
+    pendientesRecientes().then((x) => {
       if (vivo && x.t === 'ok') setSugerencias(new Map(x.datos.orders.map((o) => [o.id, o.suggestion])))
     })
     return () => {
@@ -96,12 +122,16 @@ export function PedidosLogistica({ clienteId, tel, despacho, onLeidos, codigos =
 
   /** Un pedido que volvió de Logística (guardado, o cómo quedó si cambió en el medio) reemplaza al viejo. */
   const reemplazar = (nuevo: PedidoLogistica) =>
-    setLlegado((l) => (l && l.r.t === 'ok' ? { ...l, r: { t: 'ok', datos: l.r.datos.map((p) => (p.id === nuevo.id ? nuevo : p)) } } : l))
+    setCambios((c) => ({ clave, quitados: c.clave === clave ? c.quitados : [], nuevos: [...(c.clave === clave ? c.nuevos.filter((p) => p.id !== nuevo.id) : []), nuevo] }))
   /** Despachado: sale de la lista al instante, sin cartel. */
   const quitar = (id: number) =>
-    setLlegado((l) => (l && l.r.t === 'ok' ? { ...l, r: { t: 'ok', datos: l.r.datos.filter((p) => p.id !== id) } } : l))
+    setCambios((c) => ({ clave, quitados: [...(c.clave === clave ? c.quitados : []), id], nuevos: c.clave === clave ? c.nuevos : [] }))
 
-  const r = llegado?.clave === clave ? llegado.r : null
+  const r0 = llegado?.clave === clave ? llegado.r : null
+  const r: Resultado<PedidoLogistica[]> | null =
+    r0 && r0.t === 'ok' && cambios.clave === clave
+      ? { t: 'ok', datos: r0.datos.filter((p) => !cambios.quitados.includes(p.id)).map((p) => cambios.nuevos.find((n) => n.id === p.id) ?? p) }
+      : r0
   if (!r || r.t === 'sin-permiso') return null
   if (r.t === 'error')
     return (
