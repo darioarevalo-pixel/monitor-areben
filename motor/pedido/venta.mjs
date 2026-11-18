@@ -79,7 +79,10 @@ const claveVar = (l) => `${Number(l.product_id)}:${Number(l.size_id)}`
  * Los renglones CAMBIADOS (Darío §2: cambiar cantidades, sacar y agregar). Puro.
  * El precio: el que ya tenía ese renglón en el pedido (lo que se le prometió); el AGREGADO, el de la lista `mayorista`
  * vigente (`precios`: Map product_id → precio). Cantidad 0 = se saca. Sin renglones ⇒ ⛔ (eso es anular).
- * @param {Array<{product_id, size_id, cantidad, precio}>} actuales  @param {Array<{product_id, size_id, cantidad}>} pedidas
+ * 🔑 `precio` en el renglón pedido (Darío 18-nov) MANDA, en uno nuevo o en uno que ya estaba: el precio de la tienda
+ * (pack, oferta, descuento por monto que aparece o se va) o el precio a mano. Lo decide la PUERTA (el monitor, del lado del
+ * servidor), ⛔ el navegador: este motor no conoce las reglas de la tienda ni quién puede poner precio a mano.
+ * @param {Array<{product_id, size_id, cantidad, precio}>} actuales  @param {Array<{product_id, size_id, cantidad, precio?}>} pedidas
  * @param {Map<number, number>} precios
  */
 export function lineasCambiadas(actuales, pedidas, precios) {
@@ -95,7 +98,9 @@ export function lineasCambiadas(actuales, pedidas, precios) {
     if (vistas.has(k)) return falla('ENTRADA_INVALIDA', 'Un talle aparece dos veces', `lineas[${i}]`)
     vistas.add(k)
     if (cantidad === 0) continue
-    const precio = previo.get(k) ?? (precios.has(product_id) ? pesos(precios.get(product_id)) : null)
+    const dado = l?.precio == null || l.precio === '' ? null : Number(l.precio)
+    if (dado != null && !(Number.isFinite(dado) && dado > 0)) return falla('ENTRADA_INVALIDA', 'El precio es un monto mayor a 0', `lineas[${i}].precio`)
+    const precio = dado != null ? pesos(dado) : previo.get(k) ?? (precios.has(product_id) ? pesos(precios.get(product_id)) : null)
     if (precio == null) return falla('SIN_PRECIO', `El producto ${product_id} no tiene precio mayorista cargado`, `lineas[${i}]`)
     lineas.push({ product_id, size_id, cantidad, precio })
   }
@@ -276,8 +281,8 @@ async function preciosMayoristas(db, marca, ids) {
  * CAMBIAR el pedido (Darío §2): cantidades, sacar y agregar. El total se recalcula (redondeo del canal mayorista) y el stock
  * se acomoda solo (`reemplazarVenta`: la venta vieja vuelve, la nueva sale). Queda quién cambió qué. ⛔ se toca si el depósito
  * ya empezó a escanear. Si ya estaba «a preparar», devuelve `avisar_deposito` (el aviso lo da Logística).
- * Repetir el mismo cambio ⇒ `sin_cambios`.
- * @param {import('pg').ClientBase} db  @param {{ pedido_id: string, lineas: Array<{product_id, size_id, cantidad}>, usuario: string }} e
+ * Repetir el mismo cambio ⇒ `sin_cambios`. `precio` en un renglón ⇒ ese precio (ver `lineasCambiadas`: lo decide la puerta).
+ * @param {import('pg').ClientBase} db  @param {{ pedido_id: string, lineas: Array<{product_id, size_id, cantidad, precio?}>, usuario: string }} e
  */
 export async function cambiarPedidoMayorista(db, e, { env = process.env } = {}) {
   const usuario = texto(e?.usuario)
