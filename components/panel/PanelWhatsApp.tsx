@@ -1336,7 +1336,11 @@ function PanelInterno({
   const telsCliente = telsDelCliente(telChatDeLaFicha, c.phone, cuenta?.personas)
   const telFicha = pedido?.tel || c.phone || ''
   // Con un pedido abierto que debe, el pago va en ESE pedido y ⛔ se repite arriba (Darío 15-nov: cada botón una sola vez).
-  const pedidoQueDebe = !!pedidosErp?.pedidos.some((p) => p.etapa !== 'anulado' && p.etapa !== 'despachado' && !!p.pago && p.pago.falta > 0)
+  const debenPedidos = (pedidosErp?.pedidos ?? []).filter((p) => p.etapa !== 'anulado' && p.etapa !== 'despachado' && !!p.pago && p.pago.falta > 0)
+    .reduce((s, p) => s + (p.pago?.falta ?? 0), 0)
+  // Con pedido que debe, el pago va en el pedido; PERO si debe algo aparte (saldo viejo, otras compras), «$ Cargar pago» del
+  // saldo sigue: paga lo más viejo primero (Darío 18-nov, María de la Paz: saldo viejo $215.950 + 2 pedidos, sin botón).
+  const pedidoQueDebe = debenPedidos > 0 && !((cuenta?.estado.saldo ?? 0) > debenPedidos + 1)
   const sigue = loQueSigue(pedidosErp, cuenta)
 
   return (

@@ -126,7 +126,7 @@ export function textoCredito(c: CuentaConCliente['credito']): string {
 
 /**
  * El saldo en UNA línea, abajo de los números (Pedidos · Total · Último), con el crédito al lado (Darío 15-nov: «Saldo» en vez de
- * «Cuenta corriente»). «$ Cargar pago» va acá SÓLO sin un pedido abierto que deba: con pedido, el pago va en el pedido
+ * «Cuenta corriente»). «$ Cargar pago» va acá sin un pedido abierto que deba, o si debe MÁS que esos pedidos (saldo viejo); si no, el pago va en el pedido
  * (cada botón una sola vez) ⇒ `onCargar = null`.
  */
 export function FranjaCuenta({ cuenta, onCargar }: { cuenta: CuentaConCliente; onCargar: (() => void) | null }) {

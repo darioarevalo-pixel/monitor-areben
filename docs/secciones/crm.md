@@ -112,8 +112,8 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
     «Elegir cliente» anota el número y le pasa el pedido, sin chat; tocar el pedido abre su hoja. Textos de Darío: sin pie,
     ⛔ aviso al terminar y ⛔ se habla de fundas «apartadas» en el panel (`tests/panel-elegir-cliente.test.tsx`).
   - **La ficha con el ERP** (Darío 15-nov, página https://claude.ai/artifact/XiTbXCnZ4RqBs6Gog2Ea9m): saldo en UNA línea con el
-    crédito al lado (`FranjaCuenta`, «Sin crédito» / «Con crédito · hasta $X · N días»); «$ Cargar pago» arriba SÓLO sin pedido
-    abierto que deba (cada botón una sola vez). Abajo, en orden: «Lo que sigue» (`loQueSigue`: sin cliente → armado sin pagar →
+    crédito al lado (`FranjaCuenta`, «Sin crédito» / «Con crédito · hasta $X · N días»); «$ Cargar pago» arriba sin pedido abierto que
+    deba, o si debe MÁS que esos pedidos (saldo viejo: el pago va a lo más viejo; Darío 18-nov). Abajo, en orden: «Lo que sigue» (`loQueSigue`: sin cliente → armado sin pagar →
     compra vieja, uno a la vista y «+N más»), Pedidos con barra Pedido·Pago·Preparación·Despacho y el botón del paso, Logística,
     la cuenta (sólo si debe), notas, última compra y «Más del cliente» plegado (Quién compra se abre solo con número sin anotar).
     Sin la temperatura («Sin marcar»): sale de la ficha, de los filtros de la Agenda y de la columna «Cómo viene» del CRM
