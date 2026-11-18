@@ -309,6 +309,11 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
   const [anulando, setAnulando] = useState(false)
   const [ocupado, setOcupado] = useState(false)
   const [vuelta, setVuelta] = useState(0)
+  const mostrar = (r: FichaPedido) => {
+    setFicha(r)
+    setCantidades(Object.fromEntries(r.lineas.map((l) => [`${l.product_id}:${l.size_id}`, l.cantidad])))
+    setAgregados([])
+  }
   useEffect(() => {
     let vivo = true
     // La primera vez, la que la ficha ya trajo (`adelantarPedidoPanel`); después de un cambio, siempre al servidor.
@@ -318,9 +323,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
         if (!vivo) return
         if (vuelta === 0) enviarMedicion('hoja-pedido', t0, {}, `hoja-${pedidoId}-${t0}`)
         if (!r.prendido) { setError('La cuenta corriente del panel está apagada.'); return }
-        setFicha(r)
-        setCantidades(Object.fromEntries(r.lineas.map((l) => [`${l.product_id}:${l.size_id}`, l.cantidad])))
-        setAgregados([])
+        mostrar(r)
       })
       .catch((e) => { if (vivo) setError(e instanceof Error ? e.message : 'No se pudo leer el pedido.') })
     return () => { vivo = false }
@@ -345,13 +348,17 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
     setCantidades((c) => ({ ...c, [k]: (c[k] ?? 0) + 1 }))
     setBuscando(false)
   }
-  const hacer = async (fn: () => Promise<{ avisarDeposito?: boolean; sinCambios?: boolean }>, ok: string) => {
+  const hacer = async (fn: () => Promise<{ avisarDeposito?: boolean; sinCambios?: boolean; ficha?: FichaPedido }>, ok: string, que = 'guardar') => {
     setOcupado(true)
     setError(null)
+    const t0 = marca()
     try {
       const r = await fn()
+      // La hoja nueva viene en la respuesta (cambio y envío): se muestra ya, sin volver a pedirla (Darío 18-nov, ~5 s).
+      if (r.ficha?.prendido) mostrar(r.ficha)
+      else setVuelta((v) => v + 1)
+      enviarMedicion(`hoja-${que}`, t0, { conHoja: !!r.ficha }, `hoja-${que}-${t0}`)
       onHecho(r.avisarDeposito ? `${ok} Al depósito le aparece el aviso de que el pedido cambió.` : ok)
-      setVuelta((v) => v + 1)
       setAnulando(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo.')
@@ -422,7 +429,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
             <EnvioDelPedido envio={p.envio ?? null} transporte={p.transporte ?? null}
               sinFactura={!!ficha.facturacion?.entera && ficha.facturacion.entera.total < p.total}
               cambiar={ficha.escribir && !cambiado && !ocupado && !(ficha.facturacion?.entera || (ficha.facturacion?.partes ?? 0) > 0)}
-              guardar={(envio, transporte) => hacer(() => ponerEnvioPedidoPanel(pedidoId, envio, transporte), envio ? 'Envío guardado.' : 'Envío sacado.')} />
+              guardar={(envio, transporte) => hacer(() => ponerEnvioPedidoPanel(pedidoId, envio, transporte), envio ? 'Envío guardado.' : 'Envío sacado.', 'envio')} />
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: font.sm, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
             <span>Total{cambiado ? ' (sin guardar)' : ''}</span>

@@ -115,6 +115,17 @@ export async function pedidoDelPanel({ pedidoId = '', usuario = null }, deps) {
   const escribir = deps.escribir ?? (await escribirPrendido())
   return deps.conMotor('bdi', 'El pedido', async (pg) => {
     if (!(await hay064(pg))) return { status: 409, error: 'Falta la migración del pedido en la base (sql/064).' }
+    return fichaConConexion(pg, String(pedidoId), escribir)
+  })
+}
+
+/**
+ * La ficha con una conexión ya abierta: la usa la hoja y, después de un cambio o del envío, la misma acción (Darío 18-nov:
+ * guardar el envío tardaba ~5 s porque, al terminar, la hoja volvía a pedirse con otra conexión).
+ * @param {import('pg').ClientBase} pg @param {string} pedidoId @param {boolean} escribir
+ */
+async function fichaConConexion(pg, pedidoId, escribir) {
+  {
     const { fichaDePedidoMayorista } = await import('../motor/pedido/venta.mjs')
     const r = await fichaDePedidoMayorista(pg, { pedido_id: pedidoId })
     if (!r.ok) return { status: r.error?.codigo === 'NO_ENCONTRADO' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo leer el pedido.' }
@@ -127,7 +138,7 @@ export async function pedidoDelPanel({ pedidoId = '', usuario = null }, deps) {
       prendido: true, escribir, redondeo: redondeo ? { paso: Number(redondeo.paso), modo: redondeo.modo } : null, pedido: { ...r.pedido, falta_cliente: esFichaSinCliente(r.pedido.cliente_id) }, cambios: r.cambios,
       lineas: r.lineas.map((l) => ({ ...l, nombre: n.producto.get(String(l.product_id)) ?? null, talle: l.size_id == null ? null : n.talle.get(`${l.product_id}:${l.size_id}`) ?? null })),
     }
-  })
+  }
 }
 
 /**
@@ -276,7 +287,17 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
     }
     if (!r.ok) return { status: statusDe(r.error?.codigo), error: r.error?.mensaje ?? 'No se pudo.' }
     if (accion === 'pedido-entrar' || accion === 'pedido-a-preparar') await whatsappDesdeElPedido(pg, pedido_id)
-    return { ok: true, ya: !!r.ya, sinCambios: !!r.sin_cambios, avisarDeposito: !!r.avisar_deposito, ventaId: r.venta_id ?? null }
+    // Cambio y envío: la hoja nueva viaja en la misma respuesta, así la pantalla ⛔ la vuelve a pedir (Darío 18-nov, ~5 s).
+    let ficha
+    if (accion === 'pedido-cambiar' || accion === 'pedido-envio') {
+      try {
+        const f = await fichaConConexion(pg, pedido_id, true)
+        if (!f.status) ficha = f
+      } catch (e) {
+        console.warn('[erp-pedido] la hoja después del cambio:', e?.message)
+      }
+    }
+    return { ok: true, ya: !!r.ya, sinCambios: !!r.sin_cambios, avisarDeposito: !!r.avisar_deposito, ventaId: r.venta_id ?? null, ...(ficha ? { ficha } : {}) }
   })
 }
 

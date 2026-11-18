@@ -915,7 +915,7 @@ export const leerEstadoPedidos = (numeros: number[]) =>
   pedir<{ prendido: false } | { prendido: true; estados: Record<string, EstadoPedidoPanel>; falta064?: boolean }>(null, `&vista=estado-pedidos-panel&marca=bdi&numeros=${numeros.slice(0, 200).join(',')}&nc=${Date.now()}`, 'No se pudo leer el estado de los pedidos.')
 export const leerPreparadosSinPagar = () =>
   pedir<{ prendido: false } | { prendido: true; pedidos: PreparadoSinPagar[]; falta064?: boolean }>(null, `&vista=preparados-sin-pagar&marca=bdi&nc=${Date.now()}`, 'No se pudo leer «Preparados sin pagar».')
-type RespuestaPedido = { ok: true; ya: boolean; sinCambios: boolean; avisarDeposito: boolean; ventaId: string | null }
+type RespuestaPedido = { ok: true; ya: boolean; sinCambios: boolean; avisarDeposito: boolean; ventaId: string | null; /** Cambio y envío: la hoja ya actualizada (⛔ volver a pedirla). */ ficha?: FichaPedido }
 export const entrarPedidoPanel = (p: { pedidoId: string; clienteId: string; personaId?: string | null }) =>
   pedir<RespuestaPedido>(post({ accion: 'pedido-entrar', marca: 'bdi', ...p }), '', 'No se pudo entrar el pedido.')
 export const cambiarPedidoPanel = (pedidoId: string, lineas: Array<{ productId: number; sizeId: number; cantidad: number }>) =>

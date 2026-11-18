@@ -170,6 +170,23 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
     expect(entradaInvalida({ method: 'POST', body: { accion: 'pedido-envio', marca: 'bdi', pedidoId: P, envio: 4500 } })).toBeNull()
   })
 
+  it('el envío y el cambio devuelven la hoja nueva en la misma respuesta (Darío 18-nov: ~5 s al guardar el envío)', async () => {
+    pv.fichaDePedidoMayorista.mockReset().mockResolvedValue({ ok: true, pedido: { id: P, venta_id: 'v2', total: 93000, cliente_id: C }, lineas: [], cambios: [] })
+    pv.ponerEnvioPedido.mockReset().mockResolvedValue({ ok: true, sin_cambios: false, venta_id: 'v2' })
+    pv.cambiarPedidoMayorista.mockReset().mockResolvedValue({ ok: true, sin_cambios: false, venta_id: 'v2' })
+    const dep = { conMotor: conMotor(base(CON064)), prendido: true, escribir: true, facturacion: async () => ({ entera: null, partes: 0 }) }
+    const r = await accionDePedido({ accion: 'pedido-envio', body: { pedidoId: P, envio: 4500 }, usuario: 'darío' }, dep)
+    expect(r).toMatchObject({ ok: true, ventaId: 'v2', ficha: { prendido: true, escribir: true, pedido: { total: 93000 } } })
+    const c = await accionDePedido({ accion: 'pedido-cambiar', body: { pedidoId: P, lineas: [{ productId: 1, sizeId: 10, cantidad: 2 }] }, usuario: 'darío' }, dep)
+    expect(c).toMatchObject({ ok: true, ficha: { pedido: { total: 93000 } } })
+    // si leer la hoja falla, lo guardado sale igual (la pantalla la vuelve a pedir)
+    pv.fichaDePedidoMayorista.mockReset().mockResolvedValueOnce({ ok: true, pedido: { venta_id: null, total: 1 } }).mockRejectedValueOnce(new Error('se cortó'))
+    pv.ponerEnvioPedido.mockReset().mockResolvedValue({ ok: true, sin_cambios: false, venta_id: 'v3' })
+    const sin = await accionDePedido({ accion: 'pedido-envio', body: { pedidoId: P, envio: '' }, usuario: 'darío' }, dep)
+    expect(sin).toMatchObject({ ok: true, ventaId: 'v3' })
+    expect(sin).not.toHaveProperty('ficha')
+  })
+
   it('anular: sólo Darío y Bruno (puedeAnular) y con motivo (Darío 15-nov)', async () => {
     const dep = { conMotor: conMotor(base(CON064)), prendido: true, escribir: true }
     pv.anularPedidoDelErp.mockReset()

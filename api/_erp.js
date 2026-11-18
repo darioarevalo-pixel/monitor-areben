@@ -2129,6 +2129,7 @@ export default async function handler(req, res) {
     }
     if (req.method === 'POST' && ACCIONES_PEDIDO.includes(body.accion)) {
       const r = await accionDePedido({ accion: body.accion, body, usuario: perfil.user || perfil.email || perfil.name || null, quien: [perfil.user, perfil.email] }, { conMotor, puedeAnular: esAprobador(perfil) })
+      if (!r.status && r.ficha) r.ficha = await conFacturacion(r.ficha)
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     // La facturación de mayoristas desde el panel (pedido de Darío §5): la factura LIBRE y las facturas de la ficha.
