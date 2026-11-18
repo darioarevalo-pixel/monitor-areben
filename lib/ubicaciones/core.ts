@@ -19,13 +19,17 @@ export function ubiValido(v: string | null | undefined): boolean {
 
 /**
  * Compone la lista por producto a partir de las filas de inventario (una por
- * variante) y el set de productos activos. Port del cómputo de ubicacionesInit.
+ * variante) y el set de productos DADOS DE BAJA. Port del cómputo de ubicacionesInit.
+ *
+ * 🔑 Se saltean los inactivos, ⛔ no se exige estar en la lista de activos: esa lista (`productos`) es la copia
+ * del sistema viejo, y los productos creados en Areben Gestión (ids 1000000xxx, ej. PLAID CASE) no están ahí.
+ * Con «solo los activos» la carga nueva no aparecía en Ubicaciones (Darío 18-nov).
  */
-export function computarUbicaciones(rows: FilaInvUbi[], activos: Set<number | string>): UbiProducto[] {
+export function computarUbicaciones(rows: FilaInvUbi[], inactivos: Set<number | string>): UbiProducto[] {
   const map = new Map<number | string, { product_id: number | string; name: string; sku: string; obsList: string[] }>()
   for (const r of rows) {
     const pid = r.product_id
-    if (activos.size && !activos.has(pid)) continue // saltear inactivos
+    if (inactivos.has(pid) || inactivos.has(String(pid)) || inactivos.has(Number(pid))) continue // saltear dados de baja
     if (!map.has(pid)) map.set(pid, { product_id: pid, name: r.product_name || '#' + pid, sku: r.sku || '', obsList: [] })
     map.get(pid)!.obsList.push((r.observation == null ? '' : String(r.observation)).trim()) // una entrada por variante
   }

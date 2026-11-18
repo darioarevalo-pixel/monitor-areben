@@ -25,7 +25,7 @@ import type { FilaInvUbi, UbiProducto } from './tipos'
  */
 export const DEPOSITO: Record<Marca, string> = { bdi: 'Deposito Minorista', zattia: 'Deposito ' }
 
-/** Lee inventario del depósito de la marca + productos activos y arma la lista por producto. */
+/** Lee inventario del depósito de la marca + productos dados de baja y arma la lista por producto. */
 export async function cargarUbicaciones(marca: Marca): Promise<UbiProducto[]> {
   const cuenta: Cuenta = CUENTAS[marca]
   const [rows, prods] = await Promise.all([
@@ -38,11 +38,13 @@ export async function cargarUbicaciones(marca: Marca): Promise<UbiProducto[]> {
     // contra la base: 2.703 renglones, 2.703 combinaciones). El orden por nombre que se ve en
     // pantalla lo pone `computarUbicaciones` al final, así que no se pierde nada.
     fetchAll<FilaInvUbi>(cuenta, 'inventario', `select=product_id,size_id,product_name,sku,store_name,observation&store_name=eq.${encodeURIComponent(DEPOSITO[marca])}&order=product_id,size_id`),
-    fetchAll<{ id: number | string }>(cuenta, 'productos', 'select=id&active=eq.1&order=id'),
+    // Los DADOS DE BAJA, ⛔ «solo los activos»: `productos` es la copia del sistema viejo y lo creado en Areben Gestión no
+    // está ahí ⇒ con «solo activos» la carga nueva (PLAID, FAIRY, STARLIGHT…) no aparecía (Darío 18-nov).
+    fetchAll<{ id: number | string }>(cuenta, 'productos', 'select=id&active=eq.false&order=id'),
   ])
-  const activos = new Set(prods.map((p) => p.id))
+  const inactivos = new Set(prods.map((p) => p.id))
   // Las líneas que ya cortaron leen la ubicación del ERP (motor sql/066): GN ⛔ se escribe más para ellas.
-  return computarUbicaciones(await conUbicacionDelErp(marca, rows), activos)
+  return computarUbicaciones(await conUbicacionDelErp(marca, rows), inactivos)
 }
 
 /** Respuesta del endpoint de observaciones (por producto). */

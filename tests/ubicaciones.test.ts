@@ -28,7 +28,7 @@ describe('ubicaciones/core — validación', () => {
 describe('ubicaciones/core — computarUbicaciones', () => {
   it('ubicación dominante NN-N + consistente', () => {
     const rows = [fila(1, '11-1'), fila(1, '11-1'), fila(1, '11-1')]
-    const [p] = computarUbicaciones(rows, new Set([1]))
+    const [p] = computarUbicaciones(rows, new Set())
     expect(p.actual).toBe('11-1')
     expect(p.inconsistente).toBe(false)
     expect(p.reparable).toBe(false)
@@ -37,7 +37,7 @@ describe('ubicaciones/core — computarUbicaciones', () => {
 
   it('variantes desparejas con dominante → reparable', () => {
     const rows = [fila(1, '11-1'), fila(1, '11-1'), fila(1, '')]
-    const [p] = computarUbicaciones(rows, new Set([1]))
+    const [p] = computarUbicaciones(rows, new Set())
     expect(p.actual).toBe('11-1')
     expect(p.inconsistente).toBe(true)
     expect(p.reparable).toBe(true)
@@ -45,28 +45,34 @@ describe('ubicaciones/core — computarUbicaciones', () => {
 
   it('elige el NN-N más frecuente como dominante', () => {
     const rows = [fila(1, '11-1'), fila(1, '22-2'), fila(1, '22-2')]
-    const [p] = computarUbicaciones(rows, new Set([1]))
+    const [p] = computarUbicaciones(rows, new Set())
     expect(p.actual).toBe('22-2')
     expect(p.valores.sort()).toEqual(['11-1', '22-2'])
   })
 
   it('formato viejo (sin NN-N) → malFormato, no reparable', () => {
     const rows = [fila(1, 'estante A'), fila(1, 'estante A')]
-    const [p] = computarUbicaciones(rows, new Set([1]))
+    const [p] = computarUbicaciones(rows, new Set())
     expect(p.actual).toBe('')
     expect(p.malFormato).toBe(true)
     expect(p.reparable).toBe(false)
   })
 
-  it('saltea productos inactivos', () => {
+  it('saltea productos dados de baja', () => {
     const rows = [fila(1, '11-1'), fila(2, '22-2')]
-    const out = computarUbicaciones(rows, new Set([1]))
+    const out = computarUbicaciones(rows, new Set([2]))
     expect(out.map((p) => p.product_id)).toEqual([1])
+  })
+
+  it('un producto creado en Areben Gestión (no está en la lista vieja) aparece igual', () => {
+    const rows = [fila(1, '11-1'), fila(1000000097, '', 'PLAID CASE')]
+    const out = computarUbicaciones(rows, new Set([5]))
+    expect(out.map((p) => p.name)).toContain('PLAID CASE')
   })
 
   it('ordena por nombre', () => {
     const rows = [fila(1, '1-1', 'Zeta'), fila(2, '2-2', 'Alfa')]
-    const out = computarUbicaciones(rows, new Set([1, 2]))
+    const out = computarUbicaciones(rows, new Set())
     expect(out.map((p) => p.name)).toEqual(['Alfa', 'Zeta'])
   })
 })
