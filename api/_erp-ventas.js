@@ -260,6 +260,7 @@ export async function queSabeElMotor() {
   const [ficha, cuenta, correccion, medio] = await Promise.all([moduloDelMotor('ficha'), moduloDelMotor('cuenta'), moduloDelMotor('correccion'), moduloDelMotor('correccion-medio')])
   return {
     corregir: typeof correccion?.corregirPrecio === 'function',
+    corregirProductos: typeof correccion?.corregirProductos === 'function',
     corregirMedio: typeof medio?.corregirMedioCobro === 'function',
     editar: typeof ficha?.editarVenta === 'function',
     notas: typeof ficha?.agregarNota === 'function',
@@ -333,6 +334,35 @@ export async function corregirPrecioErp({ marca, body, usuario }, deps = {}) {
   return correr(async (db) => {
     const r = await m.corregirPrecio(db, { venta_id: body.ventaId, motivo, usuario, lineas })
     return r.ok ? { ok: true, correccion: r.correccion } : errorDe(r.error)
+  })
+}
+
+/**
+ * Corregir los PRODUCTOS de una venta hecha, con el MISMO número (motor sql/088, Bruno 16/18-nov): sacar o bajar renglones y
+ * agregar prendas. El motor agrega líneas (⛔ edita) con su movimiento en el depósito de la venta, compara el total nuevo con lo
+ * cobrado y frena lo que ⛔ se corrige acá (factura, cambio, TN/ML, mayorista, a cuenta). `ref` = el reintento del mismo guardado.
+ */
+export async function corregirProductosErp({ marca, body, usuario }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!UUID.test(String(body?.ventaId || ''))) return { status: 400, error: 'Venta inválida' }
+  const motivo = String(body?.motivo ?? '').trim()
+  if (!motivo) return { status: 400, error: 'Escribí el motivo.' }
+  const ref = String(body?.ref ?? '').trim()
+  if (ref.length < 8 || ref.length > 80) return { status: 400, error: 'Falta el identificador del guardado.' }
+  const entero = (x) => Number.isInteger(x) && x > 0
+  const sacar = Array.isArray(body?.sacar) ? body.sacar.map((s) => ({ linea_id: String(s?.lineaId ?? ''), cantidad: Number(s?.cantidad) })) : []
+  const agregar = Array.isArray(body?.agregar) ? body.agregar.map((a) => ({ product_id: Number(a?.producto), size_id: Number(a?.talle), cantidad: Number(a?.cantidad), precio: Number(a?.precio) })) : []
+  if (sacar.some((s) => !UUID.test(s.linea_id) || !entero(s.cantidad))) return { status: 400, error: 'Lo que se saca va con su renglón y una cantidad entera.' }
+  if (agregar.some((a) => !entero(a.product_id) || !Number.isInteger(a.size_id) || a.size_id < 0 || !entero(a.cantidad) || !Number.isFinite(a.precio) || a.precio < 0)) {
+    return { status: 400, error: 'Lo que se agrega va con su producto, una cantidad entera y un precio desde 0.' }
+  }
+  if (!sacar.length && !agregar.length) return { status: 400, error: 'No hay nada que sacar ni agregar.' }
+  const m = deps.correccion || await moduloDelMotor('correccion')
+  if (typeof m?.corregirProductos !== 'function') return { status: 409, error: ESPERA_AL_MOTOR }
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
+  return correr(async (db) => {
+    const r = await m.corregirProductos(db, { venta_id: body.ventaId, motivo, usuario, ref, sacar, agregar })
+    return r.ok ? { ok: true, correccion: r.correccion, avisos: r.avisos ?? [], yaExistia: r.ya_existia === true } : errorDe(r.error)
   })
 }
 

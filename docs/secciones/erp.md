@@ -404,6 +404,13 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
 
 ## Reglas que el código no dice
 
+- 🔴 **Corregir una venta ⛔ la edita (motor sql/036 precio, sql/088 productos; Bruno 16/18-nov: «mismo número»).** La venta
+  y sus líneas son inmutables: corregir PRODUCTOS agrega líneas (negativa = lo que se sacó, con `linea_origen_id` a la original;
+  positiva = lo agregado), cada una con su movimiento en el depósito de la venta ⇒ las reglas de la noche cierran igual. El
+  TOTAL VIGENTE lo da `venta_ficha.total` (la última corrección; `total_original` al lado) y `espejo_motor.ventas`. Quien lea
+  renglones de una VENTA para mostrarlos o facturarlos pasa por `netearLineas` (`lib/erp/venta.core.js`): sin eso, lo sacado
+  se ve como «devuelta» y la factura lleva la historia. Mismo permiso e interruptor que el precio. ⛔ TN/ML (se corrige en la
+  plataforma), mayorista y a cuenta (fase 2: el panel y la cuenta corriente).
 - 🔴 **Cada línea ve lo suyo (Bruno, 30-oct: «no quiero que siga pasando»).** Zattia y Stunned comparten la base: toda
   vista nueva que lea ventas, cobros, facturas, gastos o cuentas recibe `linea` y la exige en Zattia (`lineaDelPedido` en
   `api/_erp.js`; sin ella, 400 — antes contestaba las dos sumadas y nadie se enteraba). El espejo de GN ⛔ tiene línea:

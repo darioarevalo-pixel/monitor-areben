@@ -142,7 +142,7 @@ import { ACCIONES_DEPOSITO, accionDeDeposito, depositosDeLinea } from './_erp-de
 import { ACCIONES as ACCIONES_SALIDA } from '../lib/erp/salida.core.js'
 import { accionDeCatalogo, historialDeProducto } from './_erp-catalogo.js'
 import { ACCIONES as ACCIONES_CATALOGO } from '../lib/erp/catalogo-edicion.core.js'
-import { anularPagoCuentaErp, cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
+import { anularPagoCuentaErp, cobrarCuentaErp, cobrarVentaErp, corregirMedioErp, corregirPrecioErp, corregirProductosErp, editarVentaErp, extraDeVenta, listaDeVentas, notaDeVentaErp } from './_erp-ventas.js'
 import { comparacionConTiendas, listaDeMovimientos, listaDeStock, listaDeTransferencias, pedidosParaStock } from './_erp-stock.js'
 import { listaDeProductos } from './_erp-productos.js'
 import { anotarWhatsappPanel, bcraDelPanel, clienteNuevoPanel, clientesDelPanel, cuentaDeCliente, cuentaDelPanel, cuentasDeLaMarca, libroDePruebaDelPanel, sacarWhatsappPanel, fichaDeCliente, listaDeClientes, ponerContactoCliente, ponerCreditoCliente, sqlClienteDeGn, sqlClienteDeLinea } from './_erp-clientes.js'
@@ -2324,6 +2324,10 @@ export default async function handler(req, res) {
     }
     if (body.accion === 'corregir-precio') {
       const r = await corregirPrecioErp({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+    if (body.accion === 'corregir-productos') {
+      const r = await corregirProductosErp({ marca: String(body.marca || ''), body, usuario: perfil.name || perfil.user || null })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
     if (body.accion === 'confirmar-vuelta') {

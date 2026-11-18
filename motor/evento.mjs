@@ -56,6 +56,9 @@ export async function avisar(c, { tipo, clave, origen = null }) {
  * Toma el próximo evento listo, o `null`. Antes devuelve a la cola los `corriendo` vencidos (la función murió): si ya hay
  * otro pendiente del mismo trabajo, el vencido queda `abandonado` (el pendiente lo cubre).
  */
+// 🔴 `proximo_en` nace con `now()` de la base (MICROsegundos) y `ahora` es un Date de JS (MILIsegundos): el evento avisado en el
+// mismo milisegundo en que se pide quedaba «todavía no» (…123456 > …123) y esperaba la vuelta siguiente — el rojo intermitente de
+// `logistica-lectura-pg` §9 (18-nov). Se compara al milisegundo.
 export async function tomar(c, ahora = new Date()) {
   await c.query('begin')
   try {
@@ -76,7 +79,7 @@ export async function tomar(c, ahora = new Date()) {
       `update motor_evento set estado = 'corriendo', tomado_en = $2, intentos = intentos + 1
         where id = (
           select p.id from motor_evento p
-           where p.empresa_id = $1 and p.estado = 'pendiente' and p.proximo_en <= $2
+           where p.empresa_id = $1 and p.estado = 'pendiente' and p.proximo_en < $2::timestamptz + interval '1 millisecond'
              and not exists (select 1 from motor_evento q where q.empresa_id = p.empresa_id and q.tipo = p.tipo and q.clave = p.clave and q.estado = 'corriendo')
            order by p.proximo_en, p.id limit 1)
         returning id, tipo, clave, origen, avisos, intentos, creado_en`,

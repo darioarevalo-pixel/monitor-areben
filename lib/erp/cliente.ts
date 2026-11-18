@@ -248,7 +248,7 @@ export type VentaPropia = {
 export type FichaDeVenta = {
   /** La compra a cuenta la cargó GN a un cliente sin crédito (`detalle.cuenta_autoriza.motivo = 'gn'`). */
   sinCreditoGN?: boolean
-  venta: VentaPropia & { subtotal: number; usuario: string; registradaEn: string; origenRef: string; gnSaleId: string | null; ventaOriginalId: string | null }
+  venta: VentaPropia & { totalOriginal?: number | null; subtotal: number; usuario: string; registradaEn: string; origenRef: string; gnSaleId: string | null; ventaOriginalId: string | null }
   cliente: { nombre: string | null; doc: string | null; email: string | null; whatsapp: string | null } | null
   lineas: Array<{
     id: string; n: number; producto: string; talle: string; nombre: string | null; talleNombre: string | null; sku: string | null
@@ -257,6 +257,8 @@ export type FichaDeVenta = {
     cambiado: number
     /** El código de barras de la prenda (espejo `inventario`): lo que se escanea en el desarme. */
     codigo: string | null
+    /** Corregida (motor sql/088): nació de una corrección / la cantidad vendida si después se sacó algo. */
+    agregada?: boolean; cantidadOriginal?: number | null
   }>
   pagos: Array<{ cuenta: string | null; medio: string | null; monto: number; base: number | null; porcentaje: number | null }>
   anulacion: { motivo: string; usuario: string; anuladaEn: string; devolucion: unknown; vuelta: Vuelta } | null
@@ -540,7 +542,7 @@ export type FilaVentaLista = {
   /** Abierto, con el pago anulado y ya preparado (después del corte): está en una bolsa, hay que desarmarlo o cancelarlo. */
   paraDesarmar?: boolean
 }
-export type QueSabeElMotor = { editar: boolean; notas: boolean; cobrar: boolean; corregir?: boolean; corregirMedio?: boolean }
+export type QueSabeElMotor = { editar: boolean; notas: boolean; cobrar: boolean; corregir?: boolean; corregirProductos?: boolean; corregirMedio?: boolean }
 export const leerListaDeVentas = (marca: MarcaErp, desde: string, hasta: string, linea: '' | 'zattia' | 'stunned' = '', { reusar = false } = {}) => {
   const consulta = `&vista=ventas-lista&marca=${marca}&desde=${desde}&hasta=${hasta}${linea ? `&linea=${linea}` : ''}`
   return compartida(consulta, reusar, () => pedir<{ filas: FilaVentaLista[]; desde: string; hasta: string; puede: QueSabeElMotor; tnLeidaEn?: string | null }>(null, `${consulta}&nc=${Date.now()}`, 'No se pudieron leer las ventas.'))
@@ -562,8 +564,10 @@ export type ExtraDeVenta = {
   nota: { id: string; texto: string; de: string } | null
   /** Correcciones de precio (motor sql/036): la diferencia contra lo cobrado queda a la vista, ⛔ se mueve plata sola. */
   correcciones?: {
-    correcciones: Array<{ id: string; motivo: string; usuario: string; creada_en: string; total_antes: number; total_despues: number; cobrado: number; diferencia: number
-      lineas: Array<{ n: number; precio_antes: number; precio_despues: number }> }>
+    correcciones: Array<{ id: string; tipo?: 'precio' | 'productos'; motivo: string; usuario: string; creada_en: string; total_antes: number; total_despues: number; cobrado: number; diferencia: number
+      lineas: Array<{ n: number; precio_antes: number; precio_despues: number }>
+      /** De productos (motor sql/088): los renglones que agregó (negativo = lo que se sacó). */
+      renglones?: Array<{ linea_id: string; n: number; product_id: string; size_id: string; sku: string | null; cantidad: number; precio: number; importe: number; linea_origen_id: string | null }> }>
     total: number | null; cobrado: number | null; diferencia: number
   }
   /** null = el motor contestó; si no, por qué el historial ⛔ trae ediciones ni notas. */
@@ -582,6 +586,11 @@ export const editarVentaErp = (marca: MarcaErp, ventaId: string, cambios: Cambio
 export type CorreccionHecha = { total_antes: number; total_despues: number; cobrado: number; diferencia: number }
 export const corregirPrecioDeVenta = (marca: MarcaErp, ventaId: string, motivo: string, lineas: Array<{ n: number; precio: number }>) =>
   pedir<{ ok: true; correccion: CorreccionHecha }>(post({ accion: 'corregir-precio', marca, ventaId, motivo, lineas }), '', 'No se pudo corregir el precio.')
+/** Corregir los PRODUCTOS (motor sql/088): `ref` es el del guardado (el reintento devuelve lo mismo). */
+export type ProductosACorregir = { motivo: string; ref: string; sacar: Array<{ lineaId: string; cantidad: number }>; agregar: Array<{ producto: string; talle: string; cantidad: number; precio: number }> }
+export const corregirProductosDeVenta = (marca: MarcaErp, ventaId: string, c: ProductosACorregir) =>
+  pedir<{ ok: true; correccion: CorreccionHecha; avisos: Array<{ codigo: string; sku: string | null; nivel: number }>; yaExistia: boolean }>(
+    post({ accion: 'corregir-productos', marca, ventaId, ...c }), '', 'No se pudieron corregir los productos.')
 export type MedioCorregido = { medio_antes: string; medio_despues: string; cuenta_antes: string; cuenta_despues: string; monto: number; comision_despues: number | null }
 export const corregirMedioDeVenta = (marca: MarcaErp, ventaId: string, c: { medio: string; motivo: string; pagoId?: string; cuenta?: string | number; cuentaReal?: string }) =>
   pedir<{ ok: true; correccion: MedioCorregido; avisos: string[] }>(post({ accion: 'corregir-medio', marca, ventaId, ...c }), '', 'No se pudo corregir la forma de pago.')
