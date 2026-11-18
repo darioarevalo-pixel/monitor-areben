@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { claveHueco, useHuecosLogistica } from '@/components/panel/huecos-logistica'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import {
   cambiosDeEnvio,
@@ -198,6 +200,8 @@ export function PedidosLogistica({ clienteId, tel, despacho, onLeidos, codigos =
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `reemplazar` cambia en cada dibujo; lo que manda es qué falta.
   }, [faltanKey, clave, vuelta])
 
+  const huecos = useHuecosLogistica()?.huecos ?? {}
+  const huecoDe = (codigo: string | number | null | undefined) => huecos[claveHueco(codigo)] ?? null
   if (!r || r.t === 'sin-permiso') return null
   if (r.t === 'error')
     return (
@@ -205,29 +209,42 @@ export function PedidosLogistica({ clienteId, tel, despacho, onLeidos, codigos =
         <div style={{ fontSize: font.xs, color: color.mut2 }}>Logística: {r.motivo}</div>
       </Caja>
     )
-  if (!r.datos.length && !faltan.length && !desc.avisos.length) return null
-  return (
-    <Caja>
-      <div style={{ fontSize: font.xs, fontWeight: 700, letterSpacing: 0.4, color: color.mut2, textTransform: 'uppercase', marginBottom: 6 }}>
-        Logística
-      </div>
-      {r.datos.map((p, i) => (
-        <Pedido key={p.id} p={p} primero={i === 0} sugerencia={sugerencias.get(p.id) ?? null} despacho={despacho} onCambio={reemplazar} onSale={quitar} />
-      ))}
-      {faltan.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: font.sm, color: color.mut2, padding: '4px 0' }}>
-          <span>{faltan.map((n) => codigoPedido(n)).join(', ')} · {agotada ? 'Todavía no llegó a Logística' : 'Llegando a Logística…'}</span>
-          {agotada && (
-            <Button size="sm" variant="soft" onClick={() => setEspera((e) => ({ clave, nums: '', agotada: false, vuelta: (e.clave === clave ? e.vuelta : 0) + 1 }))}>
-              Volver a mirar
-            </Button>
-          )}
-        </div>
+  // Debajo de su pedido cuando la tarjeta de Pedidos lo muestra (Darío 18-nov); el resto, en el cuadro de siempre.
+  const sueltos = r.datos.filter((p) => !huecoDe(p.gn_number))
+  const faltanSueltos = faltan.filter((n) => !huecoDe(codigoPedido(n)))
+  const lineaFaltan = (nums: string[], enPedido = false) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: font.sm, color: color.mut2, padding: '4px 0' }}>
+      <span>{enPedido ? '🚚 ' : `${nums.map((n) => codigoPedido(n)).join(', ')} · `}{agotada ? 'Todavía no llegó a Logística' : 'Llegando a Logística…'}</span>
+      {agotada && (
+        <Button size="sm" variant="soft" onClick={() => setEspera((e) => ({ clave, nums: '', agotada: false, vuelta: (e.clave === clave ? e.vuelta : 0) + 1 }))}>
+          Volver a mirar
+        </Button>
       )}
-      {desc.avisos.map((a) => (
-        <div key={a} style={{ fontSize: font.xs, color: color.mut2, padding: '2px 0' }}>{a}</div>
-      ))}
-    </Caja>
+    </div>
+  )
+  const portales = [
+    ...r.datos.filter((p) => huecoDe(p.gn_number)).map((p) => createPortal(
+      <Pedido p={p} primero enPedido sugerencia={sugerencias.get(p.id) ?? null} despacho={despacho} onCambio={reemplazar} onSale={quitar} />,
+      huecoDe(p.gn_number) as HTMLElement, `logi-${p.id}`)),
+    ...faltan.filter((n) => huecoDe(codigoPedido(n))).map((n) => createPortal(lineaFaltan([n], true), huecoDe(codigoPedido(n)) as HTMLElement, `falta-${n}`)),
+  ]
+  if (!sueltos.length && !faltanSueltos.length && !desc.avisos.length) return portales.length ? <>{portales}</> : null
+  return (
+    <>
+      {portales}
+      <Caja>
+        <div style={{ fontSize: font.xs, fontWeight: 700, letterSpacing: 0.4, color: color.mut2, textTransform: 'uppercase', marginBottom: 6 }}>
+          Logística
+        </div>
+        {sueltos.map((p, i) => (
+          <Pedido key={p.id} p={p} primero={i === 0} sugerencia={sugerencias.get(p.id) ?? null} despacho={despacho} onCambio={reemplazar} onSale={quitar} />
+        ))}
+        {faltanSueltos.length > 0 && lineaFaltan(faltanSueltos)}
+        {desc.avisos.map((a) => (
+          <div key={a} style={{ fontSize: font.xs, color: color.mut2, padding: '2px 0' }}>{a}</div>
+        ))}
+      </Caja>
+    </>
   )
 }
 
@@ -252,6 +269,7 @@ type Modo = 'forma' | 'etiqueta' | 'em' | 'despachar'
 function Pedido({
   p,
   primero,
+  enPedido = false,
   sugerencia,
   despacho,
   onCambio,
@@ -259,6 +277,8 @@ function Pedido({
 }: {
   p: PedidoLogistica
   primero: boolean
+  /** Debajo de su pedido en la tarjeta de Pedidos: sin el número (ya está arriba), con 🚚. */
+  enPedido?: boolean
   sugerencia: PendienteLogistica['suggestion']
   despacho?: string
   onCambio: (p: PedidoLogistica) => void
@@ -330,9 +350,11 @@ function Pedido({
   }
 
   return (
-    <div style={{ paddingTop: primero ? 0 : space[2], marginTop: primero ? 0 : space[2], borderTop: primero ? 0 : `1px solid ${color.line2}` }}>
+    <div style={enPedido ? { marginTop: 6 } : { paddingTop: primero ? 0 : space[2], marginTop: primero ? 0 : space[2], borderTop: primero ? 0 : `1px solid ${color.line2}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-        <span style={{ fontSize: font.base, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{p.gn_number || p.id}</span>
+        {enPedido
+          ? <span aria-label="Logística" style={{ fontSize: font.sm }}>🚚</span>
+          : <span style={{ fontSize: font.base, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{p.gn_number || p.id}</span>}
         <span
           style={{
             fontSize: font.sm,

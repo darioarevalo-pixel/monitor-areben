@@ -191,11 +191,14 @@ async function fichaConConexion(pg, pedidoId, escribir, { reglas = null, precioM
     const { fichaDePedidoMayorista } = await import('../motor/pedido/venta.mjs')
     const r = await fichaDePedidoMayorista(pg, { pedido_id: pedidoId })
     if (!r.ok) return { status: r.error?.codigo === 'NO_ENCONTRADO' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo leer el pedido.' }
-    const n = await nombresDe(pg, r.lineas)
     const { esFichaSinCliente } = await import('../motor/venta/cliente.mjs')
     // Para el total en el momento (Darío 18-nov): el mismo redondeo que aplica el cambio al guardar.
     const { redondeoDe } = await import('../motor/venta/redondeo-db.mjs')
-    const redondeo = await redondeoDe(pg, { marca: r.pedido.marca ?? 'bdi', canal: 'mayorista' }).catch(() => null)
+    // Nombres y redondeo a la vez (la base está lejos: cada consulta en fila suma; Darío 18-nov).
+    const [n, redondeo] = await Promise.all([
+      nombresDe(pg, r.lineas),
+      redondeoDe(pg, { marca: r.pedido.marca ?? 'bdi', canal: 'mayorista' }).catch(() => null),
+    ])
     const conNombre = r.lineas.map((l) => ({ ...l, nombre: n.producto.get(String(l.product_id)) ?? null, talle: l.size_id == null ? null : n.talle.get(`${l.product_id}:${l.size_id}`) ?? null }))
     const t = await tiendaDeLaFicha(pg, r.pedido.marca ?? 'bdi', conNombre, reglas).catch((e) => { console.warn('[erp-pedido] tienda de la hoja:', e?.message); return { lineas: conNombre, tienda: null } })
     return {
@@ -366,7 +369,9 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
     } else if (accion === 'pedido-envio') {
       const crudo = body.envio == null || String(body.envio).trim() === '' ? null : Number(body.envio)
       if (crudo != null && (!Number.isFinite(crudo) || crudo < 0)) return { status: 400, error: 'El envío es un monto en pesos' }
-      const ficha = await pv.fichaDePedidoMayorista(pg, { pedido_id })
+      // Sólo la venta y el total (una consulta, ⛔ la hoja entera: Darío 18-nov, el envío tardaba 9 s).
+      const [fila] = (await pg.query('select venta_id::text, total from pedido_mayorista where id = $1', [pedido_id])).rows
+      const ficha = fila ? { ok: true, pedido: fila } : { ok: false }
       if (ficha.ok && ficha.pedido.venta_id) {
         const leer = deps.facturacion || (async (ventaId, total) => {
           const { facturacionDeVenta } = await import('./_erp-factura-mayorista.js')
@@ -385,12 +390,13 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
       r = await pv.anularPedidoDelErp(pg, { pedido_id, motivo: String(body.motivo ?? ''), usuario })
     }
     if (!r.ok) return { status: statusDe(r.error?.codigo), error: r.error?.mensaje ?? 'No se pudo.' }
+    const reglas = (accion === 'pedido-cambiar' || accion === 'pedido-envio') ? leerReglas(deps) : null
     if (accion === 'pedido-entrar' || accion === 'pedido-a-preparar') await whatsappDesdeElPedido(pg, pedido_id)
     // Cambio y envío: la hoja nueva viaja en la misma respuesta, así la pantalla ⛔ la vuelve a pedir (Darío 18-nov, ~5 s).
     let ficha
     if (accion === 'pedido-cambiar' || accion === 'pedido-envio') {
       try {
-        const f = await fichaConConexion(pg, pedido_id, true, { reglas: await leerReglas(deps), precioManual: !!deps.precioManual })
+        const f = await fichaConConexion(pg, pedido_id, true, { reglas: await reglas, precioManual: !!deps.precioManual })
         if (!f.status) ficha = f
       } catch (e) {
         console.warn('[erp-pedido] la hoja después del cambio:', e?.message)

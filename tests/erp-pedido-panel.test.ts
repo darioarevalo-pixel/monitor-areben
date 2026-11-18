@@ -163,10 +163,10 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
   })
 
   it('el ENVÍO (Darío 15-nov): llega al motor con quién lo pone; con el pedido FACTURADO ⛔ (cambiaría una venta facturada)', async () => {
-    const ficha = { ok: true, pedido: { venta_id: 'v1', total: 88500 } }
-    pv.fichaDePedidoMayorista.mockResolvedValue(ficha)
+    // Antes de guardar lee SÓLO venta y total (una consulta; Darío 18-nov, el envío tardaba 9 s).
     pv.ponerEnvioPedido.mockReset().mockResolvedValue({ ok: true, sin_cambios: false, venta_id: 'v2' })
-    const dep = (fac: { entera: unknown; partes: number } | null) => ({ conMotor: conMotor(base(CON064)), prendido: true, escribir: true, facturacion: async () => fac })
+    const db = base({ ...CON064, 'from pedido_mayorista where id': [{ venta_id: 'v1', total: 88500 }] })
+    const dep = (fac: { entera: unknown; partes: number } | null) => ({ conMotor: conMotor(db), prendido: true, escribir: true, facturacion: async () => fac })
     expect(await accionDePedido({ accion: 'pedido-envio', body: { pedidoId: P, envio: 4500, transporte: 'EM' }, usuario: 'darío' }, dep({ entera: null, partes: 0 })))
       .toEqual({ ok: true, ya: false, sinCambios: false, avisarDeposito: false, ventaId: 'v2' })
     expect(pv.ponerEnvioPedido.mock.calls[0][1]).toEqual({ pedido_id: P, envio: 4500, transporte: 'EM', usuario: 'darío' })

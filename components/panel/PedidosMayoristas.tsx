@@ -10,6 +10,7 @@
  * (el día del corte de BDI): hasta entonces el pedido se maneja en Gestión Nube y el servidor contesta 409.
  */
 
+import { HuecoLogistica } from '@/components/panel/huecos-logistica'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { adelantarPedidoPanel, tomarPedidoPanel } from '@/lib/erp/pedido-adelantado'
 import { enviarMedicion, marca } from '@/lib/medir'
@@ -153,6 +154,7 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
               </div>
             )}
             {p.etapa !== 'anulado' && <BarraDePasos p={p} />}
+            {p.etapa !== 'anulado' && <HuecoLogistica codigo={codigoPedido(p.numero)} />}
           </div>
         )
       })}
@@ -276,8 +278,8 @@ function EnvioDelPedido({ envio, transporte, sinFactura, cambiar, guardar }: {
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
         <Button size="sm" variant="outline" onClick={() => setAbierto(false)}>Cancelar</Button>
-        {hay && <Button size="sm" variant="ghost" tone="danger" onClick={() => void guardar(null, null).then(() => setAbierto(false))}>Sacar</Button>}
-        <Button size="sm" variant="solid" tone="brand" disabled={!valido || n <= 0} onClick={() => void guardar(n, trans).then(() => setAbierto(false))}>Guardar</Button>
+        {hay && <Button size="sm" variant="ghost" tone="danger" onClick={() => { setAbierto(false); void guardar(null, null) }}>Sacar</Button>}
+        <Button size="sm" variant="solid" tone="brand" disabled={!valido || n <= 0} onClick={() => { setAbierto(false); void guardar(n, trans) }}>Guardar</Button>
       </div>
     </div>
   )
@@ -402,6 +404,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
       setAnulando(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo.')
+      if (que === 'envio') setVuelta((v) => v + 1) // el total adelantado vuelve a lo guardado
     } finally {
       setOcupado(false)
     }
@@ -456,7 +459,11 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
             <EnvioDelPedido envio={p.envio ?? null} transporte={p.transporte ?? null}
               sinFactura={!!ficha.facturacion?.entera && ficha.facturacion.entera.total < p.total}
               cambiar={ficha.escribir && !cambiado && !ocupado && !(ficha.facturacion?.entera || (ficha.facturacion?.partes ?? 0) > 0)}
-              guardar={(envio, transporte) => hacer(() => ponerEnvioPedidoPanel(pedidoId, envio, transporte), envio ? 'Envío guardado.' : 'Envío sacado.', 'envio')} />
+              guardar={(envio, transporte) => {
+                // El total cambia YA (Darío 18-nov: tardaba ~9 s); el guardado sigue atrás y la hoja que vuelve lo confirma.
+                setFicha((f) => f && { ...f, pedido: { ...f.pedido, envio: envio || null, transporte: envio ? transporte : null, total: f.pedido.total - envioDelPedido + (envio || 0) } })
+                return hacer(() => ponerEnvioPedidoPanel(pedidoId, envio, transporte), envio ? 'Envío guardado.' : 'Envío sacado.', 'envio')
+              }} />
           )}
           {cuentaTienda && cuentaTienda.descuento > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: font.sm, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
@@ -591,11 +598,11 @@ export function ElegirCliente({ tel, persona, escribir, decir, onCambio, onElegi
   })
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, border: `1px solid ${color.line}`, borderRadius: radius.md, padding: space[2], marginBottom: 6 }}>
-      <div style={{ fontSize: font.sm }}><b>¿Es de un cliente que ya tenés?</b> <span style={{ color: color.mut2 }}>Este número todavía no está en ningún cliente.</span></div>
-      <Field label="¿Quién es?"><Input value={quien} onChange={(e) => setQuien(e.target.value)} placeholder="Ej. Rodrigo, gerente" /></Field>
+      {/* La búsqueda PRIMERO (Darío 18-nov: escribía en «¿Quién es?» creyendo que buscaba, y no aparecía nadie). */}
+      <div style={{ fontSize: font.sm }}><b>Buscar el cliente</b></div>
       {error && <Notice tone="danger">{error}</Notice>}
       {!nuevo ? (<>
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre o CUIT del cliente" aria-label="Buscar el cliente" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar: nombre, WhatsApp o CUIT" aria-label="Buscar el cliente" autoFocus />
         {vista && !vista.length && !error && <div style={{ fontSize: font.xs, color: color.mut2 }}>No hay clientes con «{q.trim()}».</div>}
         {vista?.map((c) => (
           <Button key={c.id} size="sm" variant="outline" disabled={ocupado} onClick={() => elegir(c)}>
@@ -611,6 +618,7 @@ export function ElegirCliente({ tel, persona, escribir, decir, onCambio, onElegi
           <Button size="sm" variant="solid" tone="brand" disabled={!nombre.trim() || ocupado} onClick={crear}>Crear cliente</Button>
         </div>
       </>)}
+      <Field label="Quién escribe (opcional)"><Input value={quien} onChange={(e) => setQuien(e.target.value)} placeholder="Ej. Rodrigo, el encargado" /></Field>
     </div>
   )
 }
@@ -626,6 +634,16 @@ function MarcaPrecio({ tipo }: { tipo?: TipoPrecio }) {
 }
 
 const sinIphone = (t: string | null) => (t ?? 'Única').replace(/^iPhone\s+/i, '')
+/**
+ * Los modelos como en la tienda mayorista: del más nuevo al más viejo (17 Pro Max arriba, 13 abajo; Darío 18-nov). Por el
+ * número del modelo; dentro del mismo número, al revés de como vienen (vienen 17 · 17 Pro · 17 Pro Max). Sin número, al final.
+ */
+export function nuevosPrimero<T>(lista: T[], talle: (x: T) => string | null): T[] {
+  const gen = (x: T) => { const m = (talle(x) ?? '').match(/\d+/); return m ? Number(m[0]) : -1 }
+  return lista.map((x, i) => ({ x, i, g: gen(x) }))
+    .sort((a, b) => (a.g < 0) !== (b.g < 0) ? (a.g < 0 ? 1 : -1) : b.g - a.g || (a.g < 0 ? a.i - b.i : b.i - a.i))
+    .map((e) => e.x)
+}
 
 /** Un pack del pedido: su armado y cuántos tenía al abrir la hoja (ya descontados de la tienda). */
 type InfoPack = { pack: PackTienda; nombre: string; inicial: number }
@@ -796,7 +814,7 @@ function BuscarProducto({ pedidoId, onElegir, onCerrar, precioManual, sueltos, e
             </div>
             {m === 'pack' && pack ? (<>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', padding: '5px 9px', borderTop: `1px solid ${color.line}`, fontSize: font.xs, color: color.mut }}>
-                {pack.modelos.map((x) => <span key={x.size_id}>{sinIphone(x.talle)} <b style={{ color: color.ink2 }}>×{x.cantidad}</b></span>)}
+                {nuevosPrimero(pack.modelos, (x) => x.talle).map((x) => <span key={x.size_id}>{sinIphone(x.talle)} <b style={{ color: color.ink2 }}>×{x.cantidad}</b></span>)}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 9px', borderTop: `1px solid ${color.line}`, fontSize: font.xs, color: color.mut }}>
                 <span style={{ flex: 1, fontVariantNumeric: 'tabular-nums' }}>{pack.fundas} fundas · {plata(pack.precio)} c/u{pack.quedan != null ? ` · quedan ${pack.quedan}` : ''}</span>
@@ -813,7 +831,7 @@ function BuscarProducto({ pedidoId, onElegir, onCerrar, precioManual, sueltos, e
                 </div>
               )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))' }}>
-                {p.variantes.map((v) => {
+                {nuevosPrimero(p.variantes, (v) => v.talle).map((v) => {
                   const n = pedir[`${p.product_id}:${v.size_id}`]?.cantidad ?? 0
                   const nombre = v.talle ?? 'Única'
                   const precio = precioDe(p.product_id) ?? v.precio ?? p.precio

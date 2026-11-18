@@ -1,5 +1,6 @@
 'use client'
 
+import { ConHuecosLogistica } from '@/components/panel/huecos-logistica'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Icono } from '@/components/ui'
 import { Aislado } from './Aislado'
@@ -1438,6 +1439,7 @@ function PanelInterno({
       <div style={{ paddingTop: space[2] }}>
         {/* «Lo que sigue» (Darío 15-nov): lo urgente de este cliente, uno a la vista y «+N más». */}
         <LoQueSigue key={`sigue-${c.id}`} items={sigue} />
+        <ConHuecosLogistica>
         {pedidosErp && (
           <Aislado nombre="Pedidos de Areben Gestión">
             <TarjetaPedidos pedidos={pedidosErp} clienteId={cuenta?.cliente.id ?? null} personaId={cuenta?.delChat?.id ?? null} tel={quien?.telefono ?? null} cuenta={cuenta} decir={decir} onCambio={() => { releerPedidos(); releerCuenta() }} />
@@ -1445,6 +1447,7 @@ function PanelInterno({
         )}
         {/* Los pedidos en curso en Logística (22-oct-2026): sin pedidos no se dibuja. */}
         <PedidosLogistica key={`logistica-${c.id}`} clienteId={c.id} tel={telFicha || telNorm || null} despacho={seg.despacho || ''} codigos={codigosAbiertos} enviados={numerosEnviados} />
+        </ConHuecosLogistica>
         {cuenta && (
           <Aislado nombre="Cuenta corriente">
             <TarjetaCuenta cuenta={cuenta} sinRefs={refsDePedidosAbiertos(pedidosErp)} />

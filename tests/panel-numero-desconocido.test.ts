@@ -14,7 +14,7 @@ const mc = vi.hoisted(() => ({
 }))
 vi.mock('../motor/venta/cliente.mjs', () => mc)
 
-import { clienteNuevoPanel, clientesDelPanel } from '../api/_erp-clientes.js'
+import { clienteNuevoPanel, clientesDelPanel, paramsBuscar } from '../api/_erp-clientes.js'
 
 const base = (rows: Record<string, unknown[]> = {}) => {
   const sqls: string[] = []
@@ -45,9 +45,16 @@ describe('Pedido de un número desconocido en el panel', () => {
     expect(await clientesDelPanel({ q: 'celu' }, { conMotor: abrir, prendido: false })).toEqual({ prendido: false })
     expect(await clientesDelPanel({ q: 'c' }, { conMotor: abrir, prendido: true })).toEqual({ prendido: true, clientes: [] })
     expect(abrir).not.toHaveBeenCalled()
+    // Nombre: la búsqueda propia (sin tildes, palabras en cualquier orden, también por WhatsApp; Darío 18-nov).
+    const db = base({ ...MARCA, 'from cliente': [{ id: 'u1', nombre: 'Celulares Rosario', doc: '20123456786' }] })
+    expect(await clientesDelPanel({ q: 'celu' }, { conMotor: conMotor(db), prendido: true })).toEqual({ prendido: true, clientes: [{ id: 'u1', nombre: 'Celulares Rosario', doc: '20123456786' }] })
+    expect(mc.buscarClientes).not.toHaveBeenCalled()
+    expect(paramsBuscar('areben', 'Martínez  MELI')).toEqual(['areben', ['martinez', 'meli'], ''])
+    expect(paramsBuscar('areben', '+54 9 11 5467-9146')).toEqual(['areben', [], '1154679146'])
+    // Un documento corto, el del motor.
     mc.buscarClientes.mockResolvedValue({ ok: true, clientes: [{ id: 'u1', nombre: 'Celulares Rosario', doc: '20123456786', whatsapp: 'x' }] })
-    expect(await clientesDelPanel({ q: 'celu' }, { conMotor: conMotor(base(MARCA)), prendido: true })).toEqual({ prendido: true, clientes: [{ id: 'u1', nombre: 'Celulares Rosario', doc: '20123456786' }] })
-    expect(mc.buscarClientes.mock.calls[0][1]).toEqual({ empresa_id: 'areben', texto: 'celu', limite: 8 })
+    expect(await clientesDelPanel({ q: '2012' }, { conMotor: conMotor(base(MARCA)), prendido: true })).toEqual({ prendido: true, clientes: [{ id: 'u1', nombre: 'Celulares Rosario', doc: '20123456786' }] })
+    expect(mc.buscarClientes.mock.calls[0][1]).toEqual({ empresa_id: 'areben', texto: '2012', limite: 15 })
   })
 
   it('crear: con la llave de escribir apagada, 409 sin abrir la base', async () => {

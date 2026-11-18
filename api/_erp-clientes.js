@@ -392,6 +392,21 @@ export async function anotarWhatsappPanel({ body, usuario, quien = usuario }, de
  * el número del chat). La misma llave que la cuenta del panel.
  * @param {{ q?: string, usuario?: any }} p @param {{ conMotor: Function, prendido?: boolean }} deps
  */
+const SIN_TILDE = (x) => `translate(lower(${x}), 'áéíóúüñàèìòù', 'aeiouunaeiou')`
+/** Cada palabra tiene que estar en el nombre (sin tildes); un número largo busca en el WhatsApp o el documento. */
+export const SQL_BUSCAR = `select id::text, nombre, doc from cliente
+  where empresa_id = $1 and id <> '00000000-0000-4000-8000-00000000a001'
+    and ((cardinality($2::text[]) > 0 and not exists (select 1 from unnest($2::text[]) w where ${SIN_TILDE('nombre')} not like '%' || w || '%'))
+      or ($3::text <> '' and (regexp_replace(coalesce(whatsapp, ''), '\\D', '', 'g') like '%' || $3 || '%' or regexp_replace(coalesce(doc, ''), '\\D', '', 'g') like $3 || '%')))
+  order by nombre limit 15`
+/** @param {string} empresa @param {string} texto */
+export function paramsBuscar(empresa, texto) {
+  const plano = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const palabras = plano.split(/\s+/).map((w) => w.replace(/[\\%_]/g, '')).filter((w) => /[a-z]/.test(w))
+  const digitos = texto.replace(/\D/g, '')
+  return [empresa, palabras, digitos.length >= 6 ? digitos.slice(-10) : '']
+}
+
 export async function clientesDelPanel({ q = '', usuario = null }, deps) {
   if (!(deps.prendido ?? await panelAbierto(usuario))) return { prendido: false }
   const texto = String(q || '').trim().slice(0, 80)
@@ -400,9 +415,15 @@ export async function clientesDelPanel({ q = '', usuario = null }, deps) {
     const { buscarClientes } = await import('../motor/venta/cliente.mjs')
     const [m] = (await pg.query(`select empresa_id from marca where id = 'bdi'`)).rows
     if (!m) return { status: 409, error: 'La marca no está en Areben Gestión.' }
-    const r = await buscarClientes(pg, { empresa_id: m.empresa_id, texto, limite: 8 })
-    if (!r.ok) return { status: 400, error: r.error?.mensaje ?? 'No se pudo buscar.' }
-    return { prendido: true, clientes: r.clientes.map((c) => ({ id: String(c.id), nombre: c.nombre, doc: c.doc ?? null })) }
+    // CUIT/DNI: el del motor. Nombre: SIN tildes, cada palabra en cualquier orden, y también por WhatsApp (Darío 18-nov:
+    // «martinez meli» ⛔ encontraba a «María de la Paz Martínez Meli» y parecía que sólo se podía crear uno nuevo).
+    if (/^[\d.\s-]+$/.test(texto) && texto.replace(/\D/g, '').length < 7) {
+      const r = await buscarClientes(pg, { empresa_id: m.empresa_id, texto, limite: 15 })
+      if (!r.ok) return { status: 400, error: r.error?.mensaje ?? 'No se pudo buscar.' }
+      return { prendido: true, clientes: r.clientes.map((c) => ({ id: String(c.id), nombre: c.nombre, doc: c.doc ?? null })) }
+    }
+    const filas = await pg.query(SQL_BUSCAR, paramsBuscar(m.empresa_id, texto)).then((x) => x.rows)
+    return { prendido: true, clientes: filas.map((c) => ({ id: String(c.id), nombre: c.nombre, doc: c.doc ?? null })) }
   })
 }
 
