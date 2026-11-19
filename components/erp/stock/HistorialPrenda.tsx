@@ -260,8 +260,8 @@ export function HistorialPrenda({ marca, producto, talle, datos, onCerrar }: {
       pie={panel ? recuadro : <>
         <span style={{ marginRight: 'auto', fontSize: font.sm, color: color.mut }}>{h ? `${filas.length} ${filas.length === 1 ? 'movimiento' : 'movimientos'}` : ''}</span>
         <Button variant="outline" onClick={() => window.open('/etiquetas', '_blank', 'noopener')}>Etiquetas ↗</Button>
-        {ajusta && deps.length > 1 && <Button variant="outline" disabled={!h} onClick={abrirTransferir}>Transferir</Button>}
-        {ajusta && deps.length > 0 && <Button variant="outline" disabled={!h} onClick={abrirAjustar}>Ajustar</Button>}
+        {ajusta && deps.length > 1 && <Button variant="solid" tone="brand" disabled={!h} onClick={abrirTransferir}>Transferir</Button>}
+        {ajusta && deps.length > 0 && <Button variant="solid" tone="brand" disabled={!h} onClick={abrirAjustar}>Ajustar</Button>}
       </>}>
       {/* Mismo alto siempre: con pocos renglones la ventana se achicaba y saltaba al cambiar de filtro. */}
       <div style={{ minHeight: angosta ? undefined : 'calc(100vh - 250px)' }}>
