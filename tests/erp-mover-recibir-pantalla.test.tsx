@@ -260,4 +260,16 @@ describe('Mover y recibir', () => {
     expect(m.recibirTransferenciaDoc).toHaveBeenCalledWith('stunned', doc({}).id, [{ product_id: '10', size_id: '1', sku: 'STU-REM-0019-M', barcode: '779001', cantidad: 3 }])
     pregunta.mockRestore()
   })
+
+  it('mientras cargan, «Cargando transferencias…» y ⛔ la lista en 0 (Darío, 18-nov: parpadeaba)', async () => {
+    let soltar: (v: unknown) => void = () => {}
+    m.leerTransferenciasDoc.mockReturnValue(new Promise((r) => { soltar = r }))
+    await montar({ unificada: true })
+    expect(document.body.textContent).toContain('Cargando transferencias…')
+    expect(document.querySelector('[role="tablist"]')).toBeNull()
+    await act(async () => { soltar({ transferencias: [doc({})], enTransito: [] }) })
+    await esperar()
+    expect(document.body.textContent).not.toContain('Cargando transferencias…')
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain('En camino')
+  })
 })

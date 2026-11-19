@@ -209,6 +209,9 @@ type Opcion = { key: 'bdi' | 'zattia' | 'stunned'; titulo: string }
 let ventaAFacturarPendiente: string | null = null
 
 /** «Ver como»: mientras el Admin mira con otro rol, todo lo de adentro recibe ese perfil. La `key` rearma las pantallas al cambiar. */
+/** Si cada línea ya pasó al ERP (`erp_corte`), leído una vez por pestaña del navegador: la sección ⛔ parpadea al volver a entrar. */
+const CORTE_LEIDO = new Map<string, boolean>()
+
 export function Erp({ ruta = [] }: { ruta?: string[] }) {
   const { perfil } = useSesion()
   const visto = useRolVisto()
@@ -274,13 +277,14 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
   // la línea que se mira (`erp_corte`: Stunned 28-oct, BDI 15/16-nov, Zattia 23-nov).
   // Si la configuración no se puede leer queda el texto de siempre (el prudente).
   const lineaDelCartel = lineaVista || 'bdi'
-  const [cortada, setCortada] = useState<string | null>(null)
-  const [leida, setLeida] = useState<string | null>(null)
+  // 🔑 Lo leído se RECUERDA (Darío, 18-nov: «primero me abre otra pantalla»): entrar de nuevo ⛔ espera la lectura; se relee igual.
+  const [cortada, setCortada] = useState<string | null>(() => (CORTE_LEIDO.get(lineaDelCartel) ? lineaDelCartel : null))
+  const [leida, setLeida] = useState<string | null>(() => (CORTE_LEIDO.has(lineaDelCartel) ? lineaDelCartel : null))
   useEffect(() => {
     let vivo = true
     usarMarcaCaja(marca === 'bdi' ? 'bdi' : 'zattia')
     leerCorteDeLinea(lineaDelCartel)
-      .then((c) => { if (vivo) { setCortada(c.en_erp ? lineaDelCartel : null); setLeida(lineaDelCartel) } })
+      .then((c) => { CORTE_LEIDO.set(lineaDelCartel, !!c.en_erp); if (vivo) { setCortada(c.en_erp ? lineaDelCartel : null); setLeida(lineaDelCartel) } })
       .catch(() => { if (vivo) setLeida(lineaDelCartel) })
     return () => { vivo = false }
   }, [lineaDelCartel, marca])
@@ -290,7 +294,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
   const transferenciaEnErp = lineaEnErp
   const corteLeido = leida === lineaDelCartel
   // Las vistas ocultas (Facturar una venta) ⛔ son pestaña; «Mover y recibir» ⛔ va aparte de la línea cortada (`MoverYRecibir unificada`); Con Gestión Nube ⛔ para la línea cortada (ya ⛔ tiene GN).
-  const vistasDeAca = paraVer(itemActual?.vistas).filter((v) => !(transferenciaEnErp && v.key === 'mover') && !((lineaEnErp || lineaVista === 'stunned') && v.key === 'diferencias'))
+  const vistasDeAca = paraVer(itemActual?.vistas).filter((v) => !((transferenciaEnErp || !corteLeido) && v.key === 'mover') && !((lineaEnErp || lineaVista === 'stunned') && v.key === 'diferencias'))
   // Contadores rojos del menú y de las pestañas: los mismos números de «Para hacer» de Inicio (la marca como Inicio: BDI o Zattia).
   const contadores = useContadoresErp(marca === 'bdi' ? 'bdi' : 'zattia', lineaVista)
   const opciones = marcas.flatMap((m): Opcion[] => m === 'bdi' ? [{ key: 'bdi', titulo: 'BDI' }] : (soloStunned ? [] : [{ key: 'zattia', titulo: 'Zattia' } as Opcion]).concat({ key: 'stunned', titulo: 'Stunned' }))

@@ -597,7 +597,9 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
 
       {!recibiendo && !(unificada && moviendo) && <>
 
-      <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
+      {/* Hasta que llegan las transferencias, un cartel: antes se veía la lista en 0 («No hay transferencias») y después se llenaba (Darío, 18-nov). */}
+      {!docs && !error && <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, padding: space[6] }}><EmptyState title="Cargando transferencias…" /></div>}
+      {docs && <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS_DOC.map((v) => (v[0] === 'en_camino' && enCaminoU ? [v[0], `En camino · ${u(enCaminoU)}`] as const : v))} valor={vista} conteo={conteo} onCambio={setVista} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en las transferencias" placeholder="Nº, producto o quién la hizo" />
@@ -616,7 +618,7 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
           ) : <div style={{ padding: space[6] }}><EmptyState title="Leyendo…" /></div>}
         />
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>{filas.length.toLocaleString('es-AR')} de {todos.length.toLocaleString('es-AR')}</div>
-      </div>
+      </div>}
       </>}
 
       {ficha && <FichaDoc d={ficha} nombres={nombres} trabajando={trabajando} toca={toca} recibe={recibe} onCerrar={() => setFichaId(null)} onRecibir={() => abrirRecepcion(ficha)} onPreparar={() => abrirPreparado(ficha)} onCancelar={() => cancelar(ficha)} />}
