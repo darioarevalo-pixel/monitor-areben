@@ -8,8 +8,9 @@
  * sale de lo que ya existe: Pagado / Pagó una parte (falta $X) / Sin pagar = lo pendiente de esa compra.
  * 🔄 (Bruno 30-oct, pedido de Darío §3) «Mandar a preparar» lo decide Darío A MANO, esté pago o no; el FRENO va en el
  * DESPACHO: sin pagar + cliente sin cuenta corriente ⇒ Logística lo manda a «Pendiente de pago» (`zonaDeDespacho`).
- * Se cambia hasta que el depósito empieza a escanear (`preparacion_en`, lo pone Logística): cambiar = CORREGIR la venta con el
- * MISMO número (`corregirPedidoDentro`, sql/090; antes `reemplazarVenta`, que la anulaba y hacía otra).
+ * Se cambia hasta que se DESPACHA (Bruno 18-nov; antes, hasta que el depósito empezaba a escanear): cambiar = CORREGIR la venta
+ * con el MISMO número (`corregirPedidoDentro`, sql/090; antes `reemplazarVenta`, que la anulaba y hacía otra). Con el depósito ya
+ * armando, lo que baja es un FALTANTE (ajuste «Faltante o robo» aplicado en el acto) salvo lo que vuelve al estante (`vuelven`).
  * El que se cae ⇒ `anularVenta` (suelta la reserva; lo que ya pagó queda a favor en su cuenta).
  * ❓ (plan 1b) la reserva del mayorista ⛔ vence sola (la de TN, 15 días): se suelta A MANO, anulando.
  *
@@ -292,12 +293,15 @@ export async function cambiarPedidoMayorista(db, e, { env = process.env } = {}) 
   // 🔑 MISMO NÚMERO (sql/090; Bruno 18-nov: «son más las ventas mayoristas que se editan que otra cosa»): la venta del pedido
   // ⛔ se anula ni nace otra (era `reemplazarVenta`); se CORRIGE (`corregirPedidoDentro`) y la diferencia va a la cuenta.
   // Todo en UNA transacción con el pedido bloqueado: ⛔ queda la venta cambiada con el pedido viejo (o al revés).
-  return enTransaccion(db, async () => {
+  // 🔑 Con el depósito ARMANDO también (Bruno 18-nov: «sí, podría editarse obvio … falta un producto, esa venta se tiene que editar
+  // y descontar ese producto»): hasta que se DESPACHA. Desde que el depósito lo tocó, lo que baja es un FALTANTE (⛔ vuelve al
+  // estante: ⛔ está) salvo lo que venga en `vuelven` (el depósito lo devolvió al estante).
+  return conFalla(() => enTransaccion(db, async () => {
     const p = await leerPedido(db, e?.pedido_id, { bloquear: true })
     if (!p) return falla('NO_ENCONTRADO', 'No está ese pedido', 'pedido_id')
     if (p.anulado_en) return falla('ANULADO', `El pedido ${p.numero} está anulado`)
     if (!p.venta_id) return falla('SIN_ENTRAR', `El pedido ${p.numero} todavía no entró al ERP`)
-    if (p.preparacion_en) return falla('EN_PREPARACION', `El depósito ya empezó a armar el pedido ${p.numero}: no se cambia`)
+    if (p.despachado_en) return falla('DESPACHADO', `El pedido ${p.numero} ya se despachó: no se cambia`)
     const pedidasIds = [...new Set((Array.isArray(e.lineas) ? e.lineas : []).map((l) => Number(l?.product_id)).filter((x) => Number.isSafeInteger(x) && x > 0))]
     const c = lineasCambiadas(p.lineas, e.lineas, await preciosMayoristas(db, p.marca, pedidasIds))
     if (!c.ok) return c
@@ -309,14 +313,26 @@ export async function cambiarPedidoMayorista(db, e, { env = process.env } = {}) 
     const llave = await llaveSigue(db, p, env)
     if (!llave.ok) return llave
     const r = await corregirPedidoDentro(db, { venta_id: p.venta_id, lineas: c.lineas, total, detalle: { ajuste: pesos(total - envioDe(p) - totalCatalogo) },
-      motivo: `Pedido ${p.numero}: cambiado por ${usuario}`, usuario, pedido_id: p.id })
+      motivo: `Pedido ${p.numero}: cambiado por ${usuario}`, usuario, pedido_id: p.id, pedido_numero: p.numero,
+      faltante: !!p.preparacion_en, vuelven: e.vuelven })
     if (!r.ok) return r
     const despues = { total, unidades, lineas: c.lineas }
     await q(db, `update pedido_mayorista set lineas = $2::jsonb, total = $3, unidades = $4, total_catalogo = $5, editado_en = now() where id = $1`,
       [p.id, JSON.stringify(c.lineas), total, unidades, totalCatalogo])
     await cambio(db, p, 'cambio', usuario, foto(p), despues)
-    return { ok: true, sin_cambios: false, pedido: { id: p.id, numero: p.numero, total, unidades }, venta_id: p.venta_id, avisar_deposito: !!p.a_preparar_en, avisos: r.avisos ?? [] }
-  })
+    return { ok: true, sin_cambios: false, pedido: { id: p.id, numero: p.numero, total, unidades }, venta_id: p.venta_id, avisar_deposito: !!(p.a_preparar_en || p.preparacion_en),
+      avisos: r.avisos ?? [], ...(r.faltante ? { faltante: r.faltante } : {}) }
+  }))
+}
+
+/** Un `throw` con `falla` adentro (lo que frena DESPUÉS de escribir, p. ej. el ajuste del faltante) ⇒ rollback y la falla, ⛔ un 500. */
+async function conFalla(fn) {
+  try {
+    return await fn()
+  } catch (x) {
+    if (x?.falla) return x.falla
+    throw x
+  }
 }
 
 /** La venta del pedido entró de prueba o real: si la llave cambió desde entonces, ⛔ se corrige (se anula y se vuelve a entrar). */
@@ -588,7 +604,7 @@ export async function fichaDePedidoMayorista(db, e) {
   return {
     ok: true,
     pedido: {
-      id: p.id, numero: p.numero, marca: p.marca, origen: p.origen, recibido_en: p.recibido_en, etapa: etapaDe(p), editable: !p.anulado_en && !p.preparacion_en,
+      id: p.id, numero: p.numero, marca: p.marca, origen: p.origen, recibido_en: p.recibido_en, etapa: etapaDe(p), editable: !p.anulado_en && !p.despachado_en,
       total: p.total, unidades: Number(p.unidades), deposito, cliente_id: p.cliente_id, venta_id: p.venta_id, contacto: p.contacto ?? null,
       envio: envioDe(p) || null, transporte: texto(p.transporte),
       persona: persona ?? null, a_preparar_en: p.a_preparar_en, a_preparar_por: p.a_preparar_por,

@@ -155,7 +155,17 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
     pv.fichaDePedidoMayorista.mockResolvedValueOnce({ ok: true, pedido: { id: P, marca: 'bdi' }, lineas: [{ product_id: 1, size_id: 10, cantidad: 1, precio: 500 }], cambios: [] })
     expect(await accionDePedido({ accion: 'pedido-cambiar', body: { pedidoId: P, lineas: [{ productId: 1, sizeId: 10, cantidad: 2 }] }, usuario: 'darío' }, dep)).toEqual({ status: 409, error: 'El depósito ya empezó' })
     // el precio lo pone la puerta: el que ya tenía (sin lista en la base, se respeta tal cual)
-    expect(pv.cambiarPedidoMayorista.mock.calls[0][1]).toEqual({ pedido_id: P, lineas: [{ product_id: 1, size_id: 10, cantidad: 2, precio: 500 }], usuario: 'darío' })
+    expect(pv.cambiarPedidoMayorista.mock.calls[0][1]).toEqual({ pedido_id: P, lineas: [{ product_id: 1, size_id: 10, cantidad: 2, precio: 500 }], usuario: 'darío', vuelven: [] })
+    // ARMANDO (Bruno 18-nov): lo que vuelve al estante llega al motor (lo inválido ⛔); el faltante vuelve en la respuesta, y DESPACHADO es 409.
+    pv.cambiarPedidoMayorista.mockReset().mockResolvedValue({ ok: true, sin_cambios: false, venta_id: 'v1', avisar_deposito: true, faltante: { ajuste: 31, renglones: [{ product_id: 1, size_id: 10, sku: 'F-1', cantidad: 1 }] } })
+    pv.fichaDePedidoMayorista.mockResolvedValueOnce({ ok: true, pedido: { id: P, marca: 'bdi' }, lineas: [{ product_id: 1, size_id: 10, cantidad: 3, precio: 500 }, { product_id: 2, size_id: 20, cantidad: 1, precio: 800 }], cambios: [] })
+    const arm = await accionDePedido({ accion: 'pedido-cambiar', body: { pedidoId: P, lineas: [{ productId: 1, sizeId: 10, cantidad: 2 }, { productId: 2, sizeId: 20, cantidad: 0 }],
+      vuelven: [{ productId: 2, sizeId: 20, cantidad: 1 }, { productId: 'x', sizeId: 20, cantidad: 1 }, { productId: 2, sizeId: 20, cantidad: 0 }] }, usuario: 'darío' }, dep)
+    expect(arm).toMatchObject({ ok: true, avisarDeposito: true, faltante: { ajuste: 31, renglones: [{ product_id: 1, cantidad: 1 }] } })
+    expect(pv.cambiarPedidoMayorista.mock.calls[0][1].vuelven).toEqual([{ product_id: 2, size_id: 20, cantidad: 1 }])
+    pv.cambiarPedidoMayorista.mockReset().mockResolvedValue({ ok: false, error: { codigo: 'DESPACHADO', mensaje: 'El pedido 9 ya se despachó: no se cambia' } })
+    pv.fichaDePedidoMayorista.mockResolvedValueOnce({ ok: true, pedido: { id: P, marca: 'bdi' }, lineas: [{ product_id: 1, size_id: 10, cantidad: 1, precio: 500 }], cambios: [] })
+    expect(await accionDePedido({ accion: 'pedido-cambiar', body: { pedidoId: P, lineas: [{ productId: 1, sizeId: 10, cantidad: 2 }] }, usuario: 'darío' }, dep)).toMatchObject({ status: 409 })
     pv.anularPedidoDelErp.mockResolvedValue({ ok: true })
     await accionDePedido({ accion: 'pedido-anular', body: { pedidoId: P, motivo: 'no lo quiere' }, usuario: 'darío' }, dep)
     expect(pv.anularPedidoDelErp.mock.calls[0][1]).toEqual({ pedido_id: P, motivo: 'no lo quiere', usuario: 'darío' })

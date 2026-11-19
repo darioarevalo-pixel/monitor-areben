@@ -59,7 +59,7 @@ const claveDe = (r) => `${r.product_id}:${r.size_id}`
  * @param {{ empresa_id: string, depositos: string[], niveles: Map<string, number>, costos?: Map<number, { costo: number, fuente: string }> }} ctx
  *   el libro de ese depósito, por variante, y el costo por producto (`costosDe`)
  */
-export function armarAjuste(e, { empresa_id, depositos, niveles, costos = new Map(), devuelveCanje = false }) {
+export function armarAjuste(e, { empresa_id, depositos, niveles, costos = new Map(), devuelveCanje = false, instantaneo = false }) {
   if (!e || typeof e !== 'object') return falla('ENTRADA_INVALIDA', 'Falta el ajuste')
   const usuario = String(e.usuario ?? '').trim()
   if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién hace el ajuste', 'usuario')
@@ -108,7 +108,7 @@ export function armarAjuste(e, { empresa_id, depositos, niveles, costos = new Ma
     ajuste: {
       empresa_id, linea: e.linea, deposito: e.deposito, motivo: e.motivo, detalle, fuente, creado_por: usuario, sin_movimiento: e.sin_movimiento === true,
       ref: e.ref == null || e.ref === '' ? null : String(e.ref).slice(0, 120),
-      categoria_gasto: CATEGORIAS[e.motivo] ?? null, estado: INSTANTANEOS.has(e.motivo) ? 'aplicado' : 'para_aprobar',
+      categoria_gasto: CATEGORIAS[e.motivo] ?? null, estado: INSTANTANEOS.has(e.motivo) || instantaneo ? 'aplicado' : 'para_aprobar',
     },
     renglones,
   }
@@ -242,7 +242,12 @@ export async function devolverCanje(db, e, { ahora = new Date() } = {}) {
 }
 
 /** `crearAjuste` SIN transacción propia: la abre quien llama (el cierre de una salida arma varios juntos). */
-export async function guardarAjuste(db, e, { ahora = new Date(), devolucionCanje = null } = {}) {
+/**
+ * `instantaneo` (sólo desde el MOTOR, ⛔ de una pantalla): nace `aplicado` aunque el motivo espere a un admin. Lo usa el pedido
+ * mayorista al que le FALTA una prenda mientras se arma (Bruno 18-nov): ya se sabe que ⛔ está, y esperar la aprobación dejaría el
+ * libro con una unidad que la tienda podría vender.
+ */
+export async function guardarAjuste(db, e, { ahora = new Date(), devolucionCanje = null, instantaneo = false } = {}) {
   const ctx = await contexto(db, e?.linea)
   if (!ctx) return falla('ENTRADA_INVALIDA', `Línea desconocida: ${e?.linea}`, 'linea')
   // Con `ref` el ajuste es idempotente (sql/050): repetir el pedido devuelve el que ya está. ⛔ se nombra la columna sin `ref`.
@@ -254,7 +259,7 @@ export async function guardarAjuste(db, e, { ahora = new Date(), devolucionCanje
   const variantes = Array.isArray(e.renglones) ? e.renglones.filter((r) => entero(r?.product_id) && entero(r?.size_id)) : []
   const niveles = await nivelesDe(db, e.deposito, variantes)
   const costos = devolucionCanje?.costos ?? await costosDe(db, [...new Set(variantes.map((v) => Number(v.product_id)))])
-  const armado = armarAjuste(e, { ...ctx, niveles, costos, devuelveCanje: Boolean(devolucionCanje) })
+  const armado = armarAjuste(e, { ...ctx, niveles, costos, devuelveCanje: Boolean(devolucionCanje), instantaneo: instantaneo === true })
   if (!armado.ok) return armado
   const [n] = await q(db, `insert into stock_ajuste_numero (linea, ultimo) values ($1, 1)
     on conflict (linea) do update set ultimo = stock_ajuste_numero.ultimo + 1 returning ultimo`, [e.linea])

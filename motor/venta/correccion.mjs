@@ -10,6 +10,7 @@
 import { randomUUID } from 'node:crypto'
 import { movimientoDe, mueveStock } from './armar.mjs'
 import { costosDe } from './costo.mjs'
+import { guardarAjuste } from '../stock/ajuste.mjs'
 
 const q = async (db, sql, p = []) => (await db.query(sql, p)).rows
 const falla = (codigo, mensaje, campo) => ({ ok: false, error: campo ? { codigo, mensaje, campo } : { codigo, mensaje } })
@@ -235,7 +236,11 @@ async function productosDentro(db, { venta_id, motivo, usuario, ref, sacar, agre
  * Sin transacción propia: corre DENTRO de la del pedido (bloquea la venta). Frena: anulada, cambio, factura, ⛔ mayorista.
  * @param {import('pg').ClientBase} db
  * @param {{ venta_id: string, lineas: { product_id: number, size_id: number, cantidad: number, precio: number }[], total: number,
- *   detalle?: Record<string, any>|null, motivo: string, usuario: string, pedido_id?: string }} e
+ *   detalle?: Record<string, any>|null, motivo: string, usuario: string, pedido_id?: string, pedido_numero?: number,
+ *   faltante?: boolean, vuelven?: { product_id: number, size_id: number, cantidad: number }[] }} e
+ * `faltante` (el depósito ya lo está armando, Bruno 18-nov: «falta un producto ⇒ se edita y se descuenta»): lo que BAJA ⛔ vuelve
+ * al estante —⛔ está— ⇒ además de la línea negativa, un ajuste «Faltante o robo» APLICADO en el acto que lo saca del libro (queda
+ * en Stock › Ingresos y ajustes con el pedido y la venta). Lo que el depósito sí vuelve a poner en el estante va en `vuelven`.
  * @returns {Promise<{ ok: true, sin_cambios: boolean, correccion?: any, movimientos: number, avisos: any[], delta: number } | { ok: false, error: any }>}
  */
 export async function corregirPedidoDentro(db, e) {
@@ -285,9 +290,12 @@ export async function corregirPedidoDentro(db, e) {
   }
   const sacar = []   // { linea, cantidad }
   const agregar = [] // { product_id, size_id, cantidad, precio }
+  const bajas = []   // lo que BAJA de cada talle (⛔ lo que cambia de precio): { product_id, size_id, sku, barcode, cantidad }
   for (const k of new Set([...vivas.keys(), ...quiero.keys()])) {
     const hay = vivas.get(k) ?? []
     const q2 = quiero.get(k)
+    const vivo = hay.reduce((s, l) => s + l.queda, 0)
+    if (vivo > (q2 ? q2.cantidad : 0)) bajas.push({ product_id: Number(hay[0].product_id), size_id: Number(hay[0].size_id), sku: hay[0].sku, barcode: hay[0].barcode, cantidad: vivo - (q2 ? q2.cantidad : 0) })
     // Las de OTRO precio salen enteras; las del mismo precio se ajustan (de la más nueva a la más vieja).
     const mismas = q2 ? hay.filter((l) => cent(l.unitario) === cent(q2.precio)) : []
     for (const l of hay) if (!mismas.includes(l)) sacar.push({ linea: l, cantidad: l.queda })
@@ -330,6 +338,23 @@ export async function corregirPedidoDentro(db, e) {
     values ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9, 'pedido', $10::jsonb) returning id::text`,
   [v.empresa_id, v.marca, v.id, motivo, totalAntes, total, pesos(cobrado + delta), v.prueba, usuario, detalle ? JSON.stringify(detalle) : null])
   const { movimientos, avisos } = await escribirRenglones(db, v, k.id, nuevas, lineas)
+  // FALTA (pedido ya en manos del depósito): lo que baja ⛔ vuelve al estante ⇒ sale del libro con un ajuste, en esta transacción.
+  let faltante = null
+  if (e.faltante && !v.prueba && bajas.length) {
+    const vuelven = new Map()
+    for (const x of Array.isArray(e.vuelven) ? e.vuelven : []) {
+      const kk = kv(x?.product_id, x?.size_id)
+      vuelven.set(kk, (vuelven.get(kk) ?? 0) + Math.max(0, Math.trunc(Number(x?.cantidad) || 0)))
+    }
+    const renglones = bajas.map((b) => ({ ...b, cantidad: -(b.cantidad - Math.min(b.cantidad, vuelven.get(kv(b.product_id, b.size_id)) ?? 0)) })).filter((b) => b.cantidad < 0)
+    if (renglones.length) {
+      const pedido = e.pedido_numero != null ? `el pedido ${e.pedido_numero}` : 'el pedido'
+      const a = await guardarAjuste(db, { linea: v.marca, deposito: v.deposito, motivo: 'faltante_robo', usuario, ref: `pedido-faltante:${k.id}`,
+        detalle: `Faltó al armar ${pedido} (venta ${v.numero})`, renglones }, { instantaneo: true })
+      if (!a.ok) throw Object.assign(new Error(a.error?.mensaje ?? 'No se pudo registrar el faltante'), { falla: a })
+      faltante = { ajuste: Number(a.ajuste.numero), renglones: renglones.map((r) => ({ product_id: r.product_id, size_id: r.size_id, sku: r.sku, cantidad: -r.cantidad })) }
+    }
+  }
   if (delta) {
     const [compra] = await q(db, `select cliente_id::text, marca, empresa_id, prueba from cuenta_movimiento where empresa_id = $1 and ref = $2 and tipo = 'compra'`, [v.empresa_id, `venta:${v.id}`])
     if (!compra) throw new Error(`La venta ${v.numero} no tiene su compra en la cuenta corriente: no se puede corregir el total`)
@@ -338,7 +363,7 @@ export async function corregirPedidoDentro(db, e) {
     [compra.empresa_id, compra.marca, compra.cliente_id, `venta:${v.id}:correccion:${k.id}`, delta, v.id,
       JSON.stringify({ correccion: k.id, motivo, ...(e.pedido_id ? { pedido: String(e.pedido_id) } : {}) }), compra.prueba, usuario])
   }
-  return { ok: true, sin_cambios: false, correccion: await unaCorreccion(db, k.id), movimientos: movimientos.length, avisos, delta }
+  return { ok: true, sin_cambios: false, correccion: await unaCorreccion(db, k.id), movimientos: movimientos.length, avisos, delta, faltante }
 }
 
 /**

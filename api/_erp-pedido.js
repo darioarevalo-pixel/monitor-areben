@@ -310,7 +310,7 @@ export async function productosParaElPanel({ pedidoId = '', q = '', usuario = nu
 
 /** El código del motor ⇒ el status de la puerta. */
 const statusDe = (codigo) => (codigo === 'NO_ENCONTRADO' ? 404
-  : ['ANULADO', 'VENDIDO_EN_GN', 'EN_PREPARACION', 'SIN_ENTRAR', 'FALTA_CLIENTE', 'TIENE_PAGOS', 'SIN_PRECIO', 'SIN_TALLE', 'SIN_RENGLONES', 'CAMBIO_DE_LLAVE', 'SIN_CUENTA_CORRIENTE', 'CONFLICTO_IDEMPOTENCIA'].includes(codigo) ? 409 : 400)
+  : ['ANULADO', 'VENDIDO_EN_GN', 'EN_PREPARACION', 'DESPACHADO', 'SIN_ENTRAR', 'FALTA_CLIENTE', 'TIENE_PAGOS', 'SIN_PRECIO', 'SIN_TALLE', 'SIN_RENGLONES', 'CAMBIO_DE_LLAVE', 'SIN_CUENTA_CORRIENTE', 'CONFLICTO_IDEMPOTENCIA'].includes(codigo) ? 409 : 400)
 
 /** Darío (admin): el único que pone precio a mano en el pedido (18-nov: «solo yo, soy el único que usa el CRM»). */
 export function esDario(perfil) {
@@ -326,7 +326,9 @@ export const ACCIONES_PEDIDO = ['pedido-entrar', 'pedido-cambiar', 'pedido-a-pre
  * total; `envio` vacío o 0 lo saca. 🔴 Con el pedido FACTURADO (entera o alguna parte) ⛔: cambiaría el total de una venta ya
  * facturada. Eso lo ve esta puerta (las facturas viven en `facturas`, ⛔ en el motor).
  * @param {{ accion: string, body: any, usuario: string|null, quien?: any }} p
- * `pedido-cambiar` (Darío 18-nov): `{ lineas: [{ productId, sizeId, cantidad, precio? }], packs?: [{ productId, packs }] }` — el
+ * `pedido-cambiar` (Darío 18-nov): `{ lineas: [{ productId, sizeId, cantidad, precio? }], packs?: [{ productId, packs }], vuelven?: [{ productId, sizeId, cantidad }] }`
+ * — con el depósito ARMANDO lo que baja es faltante (ajuste «Faltante o robo» en el acto, devuelve `faltante: { ajuste, renglones }`) salvo
+ * lo de `vuelven` (lo pusieron de nuevo en el estante); se edita hasta el despacho (Bruno 18-nov). El
  * precio de cada renglón lo pone `preciosDelCambio` con las reglas de la tienda; `precio` sólo en uno NUEVO y sólo Darío.
  * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, puedeAnular?: boolean, precioManual?: boolean, reglas?: (fresco: boolean) => Promise<any>, anotarPacks?: (id: string, delta: number) => Promise<boolean>, facturacion?: (ventaId: string, total: number) => Promise<{ entera: any, partes: number }|null> }} deps
  */
@@ -361,7 +363,11 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
       const datos = await datosDeProductos(pg, actual.pedido.marca ?? 'bdi', ids)
       const c = preciosDelCambio({ actuales: actual.lineas, lineas: body.lineas, packs: body.packs, reglas: R, datos, precioManual: !!deps.precioManual })
       if (c.status) return c
-      r = await pv.cambiarPedidoMayorista(pg, { pedido_id, lineas: c.pedidas, usuario })
+      // Con el depósito ARMANDO, lo que baja es un FALTANTE (ajuste en el acto) salvo lo que vuelve al estante (Bruno 18-nov).
+      const vuelven = (Array.isArray(body.vuelven) ? body.vuelven : [])
+        .map((x) => ({ product_id: Number(x?.productId), size_id: Number(x?.sizeId), cantidad: Number(x?.cantidad) }))
+        .filter((x) => Number.isSafeInteger(x.product_id) && x.product_id > 0 && Number.isSafeInteger(x.size_id) && x.size_id > 0 && Number.isInteger(x.cantidad) && x.cantidad > 0)
+      r = await pv.cambiarPedidoMayorista(pg, { pedido_id, lineas: c.pedidas, usuario, vuelven })
       if (r.ok && !r.sin_cambios) {
         const anotar = deps.anotarPacks || (async (id, d) => (await import('./_tienda-precios.js')).anotarPacksEnTienda(id, d))
         for (const [id, d] of c.deltaPacks) if (!(await anotar(id, d))) avisos.push('El pack no se pudo descontar de la tienda: corregilo en Marketing › Lotes.')
@@ -402,7 +408,9 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
         console.warn('[erp-pedido] la hoja después del cambio:', e?.message)
       }
     }
-    return { ok: true, ya: !!r.ya, sinCambios: !!r.sin_cambios, avisarDeposito: !!r.avisar_deposito, ventaId: r.venta_id ?? null, ...(avisos.length ? { avisos } : {}), ...(ficha ? { ficha } : {}) }
+    // El faltante (A-n con lo que faltó) para que el panel lo diga.
+    const faltante = r.faltante ? { ajuste: r.faltante.ajuste, renglones: r.faltante.renglones } : null
+    return { ok: true, ya: !!r.ya, sinCambios: !!r.sin_cambios, avisarDeposito: !!r.avisar_deposito, ventaId: r.venta_id ?? null, ...(faltante ? { faltante } : {}), ...(avisos.length ? { avisos } : {}), ...(ficha ? { ficha } : {}) }
   })
 }
 
