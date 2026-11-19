@@ -89,10 +89,12 @@ export function movimientosDeLibro(filas) {
   const pedidoDe = new Map()
   for (const f of filas) {
     if (f.tipo === 'compra' && f.pedido) pedidoDe.set(f.ref, String(f.pedido))
-    const base = f.tipo === 'anulacion' ? String(f.ref).replace(/:anulacion$/, '') : f.ref
+    // La CORRECCIÓN de un pedido mayorista (sql/090: `venta:<id>:correccion:<k>`) suma o resta a la compra de su venta, como la
+    // anulación: ⛔ es un movimiento aparte (la fecha y el detalle siguen siendo los de la compra).
+    const base = f.tipo === 'anulacion' ? String(f.ref).replace(/:anulacion$/, '') : f.tipo === 'correccion' ? String(f.ref).replace(/:correccion:.*$/, '') : f.ref
     const m = por.get(base) ?? { ref: base, neto: 0, fecha: null, detalle: '' }
     m.neto = pesos(m.neto + Number(f.monto))
-    if (f.tipo !== 'anulacion') { m.fecha = f.fecha; m.detalle = f.detalle ?? ''; m.imputar = f.imputar ?? null }
+    if (f.tipo !== 'anulacion' && f.tipo !== 'correccion') { m.fecha = f.fecha; m.detalle = f.detalle ?? ''; m.imputar = f.imputar ?? null }
     por.set(base, m)
   }
   const movs = []

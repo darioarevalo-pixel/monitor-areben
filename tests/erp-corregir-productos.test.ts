@@ -52,6 +52,14 @@ describe('la cuenta de la ventana', () => {
 })
 
 describe('el historial', () => {
+  it('el cambio de un PEDIDO mayorista (motor sql/090) se ve como «Cambió el pedido», con lo que entró y salió', () => {
+    const ficha = { venta: { tipo: 'venta', origen: 'mayorista', ocurridaEn: '2026-11-18T15:00:00Z', usuario: 'darío' }, pagos: [] }
+    const h = historialDeVenta(ficha, { correcciones: { correcciones: [{ tipo: 'pedido', creada_en: '2026-11-18T18:01:00Z', motivo: 'Pedido 121: cambiado por darío', usuario: 'darío',
+      total_antes: 135100, total_despues: 163000, lineas: [], renglones: [{ cantidad: 2, sku: 'F-0211-17PM' }] }] } })
+    const c = h.find((x) => x.titulo === 'Cambió el pedido')
+    expect(c?.detalle).toContain('+2 F-0211-17PM')
+    expect(h.some((x) => x.titulo === 'Corrigió el precio')).toBe(false)
+  })
   it('dice qué se corrigió, el motivo y quién, con el total antes → después', () => {
     const ficha = { venta: { tipo: 'venta', origen: 'manual', ocurridaEn: '2026-11-16T15:00:00Z', usuario: 'bruno' }, pagos: [] }
     const h = historialDeVenta(ficha, { correcciones: { correcciones: [{ tipo: 'productos', creada_en: '2026-11-18T15:00:00Z', motivo: 'Era 9D PREMIUM', usuario: 'bruno', total_antes: 20000, total_despues: 22000,

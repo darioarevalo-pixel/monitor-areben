@@ -8,7 +8,8 @@
  * sale de lo que ya existe: Pagado / Pagó una parte (falta $X) / Sin pagar = lo pendiente de esa compra.
  * 🔄 (Bruno 30-oct, pedido de Darío §3) «Mandar a preparar» lo decide Darío A MANO, esté pago o no; el FRENO va en el
  * DESPACHO: sin pagar + cliente sin cuenta corriente ⇒ Logística lo manda a «Pendiente de pago» (`zonaDeDespacho`).
- * Se cambia hasta que el depósito empieza a escanear (`preparacion_en`, lo pone Logística): cambiar = `reemplazarVenta`.
+ * Se cambia hasta que el depósito empieza a escanear (`preparacion_en`, lo pone Logística): cambiar = CORREGIR la venta con el
+ * MISMO número (`corregirPedidoDentro`, sql/090; antes `reemplazarVenta`, que la anulaba y hacía otra).
  * El que se cae ⇒ `anularVenta` (suelta la reserva; lo que ya pagó queda a favor en su cuenta).
  * ❓ (plan 1b) la reserva del mayorista ⛔ vence sola (la de TN, 15 días): se suelta A MANO, anulando.
  *
@@ -19,6 +20,7 @@
  * Devuelven `{ ok: true, … }` o `{ ok: false, error }`.
  */
 import { anularVenta, reemplazarVenta, registrarVenta } from '../venta/registrar.mjs'
+import { corregirPedidoDentro } from '../venta/correccion.mjs'
 import { redondear } from '../venta/redondeo.mjs'
 import { redondeoDe } from '../venta/redondeo-db.mjs'
 import { pendienteDeVentas } from '../cuenta/cuenta.mjs'
@@ -279,7 +281,7 @@ async function preciosMayoristas(db, marca, ids) {
 
 /**
  * CAMBIAR el pedido (Darío §2): cantidades, sacar y agregar. El total se recalcula (redondeo del canal mayorista) y el stock
- * se acomoda solo (`reemplazarVenta`: la venta vieja vuelve, la nueva sale). Queda quién cambió qué. ⛔ se toca si el depósito
+ * se acomoda solo (la corrección saca lo que baja y descuenta lo que sube, en la MISMA venta). Queda quién cambió qué. ⛔ se toca si el depósito
  * ya empezó a escanear. Si ya estaba «a preparar», devuelve `avisar_deposito` (el aviso lo da Logística).
  * Repetir el mismo cambio ⇒ `sin_cambios`. `precio` en un renglón ⇒ ese precio (ver `lineasCambiadas`: lo decide la puerta).
  * @param {import('pg').ClientBase} db  @param {{ pedido_id: string, lineas: Array<{product_id, size_id, cantidad, precio?}>, usuario: string }} e
@@ -287,35 +289,42 @@ async function preciosMayoristas(db, marca, ids) {
 export async function cambiarPedidoMayorista(db, e, { env = process.env } = {}) {
   const usuario = texto(e?.usuario)
   if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién lo cambia', 'usuario')
-  const p = await leerPedido(db, e?.pedido_id)
-  if (!p) return falla('NO_ENCONTRADO', 'No está ese pedido', 'pedido_id')
-  if (p.anulado_en) return falla('ANULADO', `El pedido ${p.numero} está anulado`)
-  if (!p.venta_id) return falla('SIN_ENTRAR', `El pedido ${p.numero} todavía no entró al ERP`)
-  if (p.preparacion_en) return falla('EN_PREPARACION', `El depósito ya empezó a armar el pedido ${p.numero}: no se cambia`)
-  const pedidasIds = [...new Set((Array.isArray(e.lineas) ? e.lineas : []).map((l) => Number(l?.product_id)).filter((x) => Number.isSafeInteger(x) && x > 0))]
-  const c = lineasCambiadas(p.lineas, e.lineas, await preciosMayoristas(db, p.marca, pedidasIds))
-  if (!c.ok) return c
-  if (mismasLineas(c.lineas, p.lineas)) return { ok: true, sin_cambios: true, pedido: { id: p.id, numero: p.numero }, venta_id: p.venta_id }
-  const totalCatalogo = pesos(c.lineas.reduce((s, l) => s + l.precio * l.cantidad, 0))
-  // El envío (sql/084) ⛔ se redondea: va aparte, sumado.
-  const total = pesos(redondear(totalCatalogo, await redondeoDe(db, { marca: p.marca, canal: 'mayorista' })) + envioDe(p))
-  const unidades = c.lineas.reduce((s, l) => s + l.cantidad, 0)
-  const [{ n }] = await q(db, `select count(*)::int as n from venta where origen = 'mayorista' and (origen_ref = $1 or origen_ref like $2)`, [origenRefPedido(p), `${origenRefPedido(p)}:%`])
-  const [vieja] = await q(db, 'select cliente_id::text, prueba from venta where id = $1', [p.venta_id])
-  const cuenta = await cuentaCorrienteDe(db, p.marca)
-  if (!cuenta) return falla('SIN_CUENTA_CORRIENTE', `${p.marca} no tiene la cuenta «Cuenta corriente» (sql/025)`)
+  // 🔑 MISMO NÚMERO (sql/090; Bruno 18-nov: «son más las ventas mayoristas que se editan que otra cosa»): la venta del pedido
+  // ⛔ se anula ni nace otra (era `reemplazarVenta`); se CORRIGE (`corregirPedidoDentro`) y la diferencia va a la cuenta.
+  // Todo en UNA transacción con el pedido bloqueado: ⛔ queda la venta cambiada con el pedido viejo (o al revés).
+  return enTransaccion(db, async () => {
+    const p = await leerPedido(db, e?.pedido_id, { bloquear: true })
+    if (!p) return falla('NO_ENCONTRADO', 'No está ese pedido', 'pedido_id')
+    if (p.anulado_en) return falla('ANULADO', `El pedido ${p.numero} está anulado`)
+    if (!p.venta_id) return falla('SIN_ENTRAR', `El pedido ${p.numero} todavía no entró al ERP`)
+    if (p.preparacion_en) return falla('EN_PREPARACION', `El depósito ya empezó a armar el pedido ${p.numero}: no se cambia`)
+    const pedidasIds = [...new Set((Array.isArray(e.lineas) ? e.lineas : []).map((l) => Number(l?.product_id)).filter((x) => Number.isSafeInteger(x) && x > 0))]
+    const c = lineasCambiadas(p.lineas, e.lineas, await preciosMayoristas(db, p.marca, pedidasIds))
+    if (!c.ok) return c
+    if (mismasLineas(c.lineas, p.lineas)) return { ok: true, sin_cambios: true, pedido: { id: p.id, numero: p.numero }, venta_id: p.venta_id }
+    const totalCatalogo = pesos(c.lineas.reduce((s, l) => s + l.precio * l.cantidad, 0))
+    // El envío (sql/084) ⛔ se redondea: va aparte, sumado.
+    const total = pesos(redondear(totalCatalogo, await redondeoDe(db, { marca: p.marca, canal: 'mayorista' })) + envioDe(p))
+    const unidades = c.lineas.reduce((s, l) => s + l.cantidad, 0)
+    const llave = await llaveSigue(db, p, env)
+    if (!llave.ok) return llave
+    const r = await corregirPedidoDentro(db, { venta_id: p.venta_id, lineas: c.lineas, total, detalle: { ajuste: pesos(total - envioDe(p) - totalCatalogo) },
+      motivo: `Pedido ${p.numero}: cambiado por ${usuario}`, usuario, pedido_id: p.id })
+    if (!r.ok) return r
+    const despues = { total, unidades, lineas: c.lineas }
+    await q(db, `update pedido_mayorista set lineas = $2::jsonb, total = $3, unidades = $4, total_catalogo = $5, editado_en = now() where id = $1`,
+      [p.id, JSON.stringify(c.lineas), total, unidades, totalCatalogo])
+    await cambio(db, p, 'cambio', usuario, foto(p), despues)
+    return { ok: true, sin_cambios: false, pedido: { id: p.id, numero: p.numero, total, unidades }, venta_id: p.venta_id, avisar_deposito: !!p.a_preparar_en, avisos: r.avisos ?? [] }
+  })
+}
+
+/** La venta del pedido entró de prueba o real: si la llave cambió desde entonces, ⛔ se corrige (se anula y se vuelve a entrar). */
+async function llaveSigue(db, p, env) {
+  const [vieja] = await q(db, 'select prueba from venta where id = $1', [p.venta_id])
   const real = ventaMayoristaReal(p.marca, await leerCortes(db), env)
   if (real === vieja.prueba) return falla('CAMBIO_DE_LLAVE', `El pedido ${p.numero} entró ${vieja.prueba ? 'de prueba' : 'real'} y la llave cambió: se anula y se vuelve a entrar`)
-  const nueva = ventaDePedido({ pedido: p, lineas: c.lineas, total, cliente_id: vieja.cliente_id, cuenta, usuario, real, n: n + 1 })
-  const r = await reemplazarVenta(db, { venta_id: p.venta_id, motivo: `Pedido ${p.numero}: cambiado por ${usuario}`, usuario, nueva })
-  if (!r.ok) return r
-  const despues = { total, unidades, lineas: c.lineas }
-  await enTransaccion(db, async () => {
-    await q(db, `update pedido_mayorista set lineas = $2::jsonb, total = $3, unidades = $4, total_catalogo = $5, venta_id = $6, editado_en = now() where id = $1`,
-      [p.id, JSON.stringify(c.lineas), total, unidades, totalCatalogo, r.venta.id])
-    await cambio(db, p, 'cambio', usuario, foto(p), despues)
-  })
-  return { ok: true, sin_cambios: false, pedido: { id: p.id, numero: p.numero, total, unidades }, venta_id: r.venta.id, avisar_deposito: !!p.a_preparar_en, avisos: r.avisos ?? [] }
+  return { ok: true }
 }
 
 /**
@@ -334,28 +343,24 @@ export async function ponerEnvioPedido(db, e, { env = process.env } = {}) {
   const envio = pesos(crudo)
   const transporte = envio > 0 ? texto(e?.transporte) : null
   if (transporte && transporte.length > 80) return falla('ENTRADA_INVALIDA', 'El transporte va en pocas palabras', 'transporte')
-  const p = await leerPedido(db, e?.pedido_id)
-  if (!p) return falla('NO_ENCONTRADO', 'No está ese pedido', 'pedido_id')
-  if (p.anulado_en) return falla('ANULADO', `El pedido ${p.numero} está anulado`)
-  if (!p.venta_id) return falla('SIN_ENTRAR', `El pedido ${p.numero} todavía no entró al ERP`)
-  const antes = envioDe(p)
-  if (antes === envio && (texto(p.transporte) ?? null) === transporte) return { ok: true, sin_cambios: true, pedido: { id: p.id, numero: p.numero, total: p.total }, venta_id: p.venta_id }
-  const total = pesos(p.total - antes + envio)
-  const [{ n }] = await q(db, `select count(*)::int as n from venta where origen = 'mayorista' and (origen_ref = $1 or origen_ref like $2)`, [origenRefPedido(p), `${origenRefPedido(p)}:%`])
-  const [vieja] = await q(db, 'select cliente_id::text, prueba from venta where id = $1', [p.venta_id])
-  const cuenta = await cuentaCorrienteDe(db, p.marca)
-  if (!cuenta) return falla('SIN_CUENTA_CORRIENTE', `${p.marca} no tiene la cuenta «Cuenta corriente» (sql/025)`)
-  const real = ventaMayoristaReal(p.marca, await leerCortes(db), env)
-  if (real === vieja.prueba) return falla('CAMBIO_DE_LLAVE', `El pedido ${p.numero} entró ${vieja.prueba ? 'de prueba' : 'real'} y la llave cambió: se anula y se vuelve a entrar`)
-  const nueva = ventaDePedido({ pedido: { ...p, envio: envio || null, transporte }, lineas: p.lineas, total, cliente_id: vieja.cliente_id, cuenta, usuario, real, n: n + 1 })
-  const r = await reemplazarVenta(db, { venta_id: p.venta_id, motivo: `Pedido ${p.numero}: envío puesto por ${usuario}`, usuario, nueva })
-  if (!r.ok) return r
-  await enTransaccion(db, async () => {
-    await q(db, `update pedido_mayorista set envio = $2, transporte = $3, total = $4, venta_id = $5, editado_en = now() where id = $1`,
-      [p.id, envio || null, transporte, total, r.venta.id])
+  // MISMO NÚMERO (sql/090): ⛔ `reemplazarVenta`; una corrección SIN renglones (las mismas líneas) con el total y el envío nuevos.
+  return enTransaccion(db, async () => {
+    const p = await leerPedido(db, e?.pedido_id, { bloquear: true })
+    if (!p) return falla('NO_ENCONTRADO', 'No está ese pedido', 'pedido_id')
+    if (p.anulado_en) return falla('ANULADO', `El pedido ${p.numero} está anulado`)
+    if (!p.venta_id) return falla('SIN_ENTRAR', `El pedido ${p.numero} todavía no entró al ERP`)
+    const antes = envioDe(p)
+    if (antes === envio && (texto(p.transporte) ?? null) === transporte) return { ok: true, sin_cambios: true, pedido: { id: p.id, numero: p.numero, total: p.total }, venta_id: p.venta_id }
+    const total = pesos(p.total - antes + envio)
+    const llave = await llaveSigue(db, p, env)
+    if (!llave.ok) return llave
+    const r = await corregirPedidoDentro(db, { venta_id: p.venta_id, lineas: p.lineas, total, detalle: { envio: envio || null, transporte },
+      motivo: `Pedido ${p.numero}: envío puesto por ${usuario}`, usuario, pedido_id: p.id })
+    if (!r.ok) return r
+    await q(db, `update pedido_mayorista set envio = $2, transporte = $3, total = $4, editado_en = now() where id = $1`, [p.id, envio || null, transporte, total])
     await cambio(db, p, 'envio', usuario, { total: p.total, envio: antes || null, transporte: texto(p.transporte) }, { total, envio: envio || null, transporte })
+    return { ok: true, sin_cambios: false, pedido: { id: p.id, numero: p.numero, total, envio: envio || null, transporte }, venta_id: p.venta_id }
   })
-  return { ok: true, sin_cambios: false, pedido: { id: p.id, numero: p.numero, total, envio: envio || null, transporte }, venta_id: r.venta.id }
 }
 
 /**

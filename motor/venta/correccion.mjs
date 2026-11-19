@@ -218,6 +218,137 @@ async function productosDentro(db, { venta_id, motivo, usuario, ref, sacar, agre
   const [k] = await q(db, `insert into venta_correccion (empresa_id, marca, venta_id, motivo, total_antes, total_despues, cobrado, diferencia, prueba, usuario, tipo, ref)
     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'productos', $11) returning id::text`,
   [v.empresa_id, v.marca, v.id, motivo, totalAntes, totalDespues, pesos(cobrado), diferencia, v.prueba, usuario, ref])
+  const { movimientos, avisos } = await escribirRenglones(db, v, k.id, nuevas, lineas)
+  return { ok: true, ya_existia: false, correccion: await unaCorreccion(db, k.id), movimientos: movimientos.length, avisos }
+}
+
+/**
+ * CAMBIAR UN PEDIDO MAYORISTA CON EL MISMO NÚMERO (sql/090; Bruno 18-nov: «son más las ventas mayoristas que se editan que otra
+ * cosa»). Reemplaza a `reemplazarVenta` (anular + venta nueva con otro número) en el cambio de renglones y en el envío del pedido.
+ * Recibe cómo QUEDA el pedido —`lineas` (una por talle, con su precio unitario), el `total` (redondeado + envío) y el `detalle`
+ * que cambia (envío, transporte, ajuste)— y escribe sólo la DIFERENCIA, con las líneas de la 088:
+ *   · lo que baja o sale = línea NEGATIVA contra la original (`linea_origen_id`), al precio vigente;
+ *   · lo que sube o entra = línea positiva nueva;
+ *   · un talle que cambia de PRECIO sale entero y vuelve a entrar al precio nuevo (el libro mueve −n y +n: queda igual).
+ * La diferencia del total va a la CUENTA CORRIENTE (`cuenta_movimiento` tipo `correccion`, se netea con la compra): la mayorista
+ * es toda a cuenta ⇒ `cobrado` = el total nuevo y `diferencia` 0 (⛔ aparece «con saldo» por la corrección).
+ * Sin transacción propia: corre DENTRO de la del pedido (bloquea la venta). Frena: anulada, cambio, factura, ⛔ mayorista.
+ * @param {import('pg').ClientBase} db
+ * @param {{ venta_id: string, lineas: { product_id: number, size_id: number, cantidad: number, precio: number }[], total: number,
+ *   detalle?: Record<string, any>|null, motivo: string, usuario: string, pedido_id?: string }} e
+ * @returns {Promise<{ ok: true, sin_cambios: boolean, correccion?: any, movimientos: number, avisos: any[], delta: number } | { ok: false, error: any }>}
+ */
+export async function corregirPedidoDentro(db, e) {
+  const motivo = texto(e?.motivo), usuario = texto(e?.usuario)
+  if (!motivo) return falla('ENTRADA_INVALIDA', 'Falta el motivo', 'motivo')
+  if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién lo cambia', 'usuario')
+  if (!UUID.test(String(e?.venta_id ?? ''))) return falla('NO_ENCONTRADA', 'No está esa venta', 'venta_id')
+  const total = pesos(e.total)
+  if (!Number.isFinite(total) || total < 0) return falla('ENTRADA_INVALIDA', 'El total es un monto desde 0', 'total')
+  const [v] = await q(db, 'select * from venta where id = $1 for update', [e.venta_id])
+  if (!v) return falla('NO_ENCONTRADA', 'No está esa venta', 'venta_id')
+  if (v.estado === 'anulada') return falla('ANULADA', `La venta ${v.numero} está anulada`)
+  if (v.origen !== 'mayorista') return falla('NO_ES_MAYORISTA', `La venta ${v.numero} no es de un pedido mayorista`)
+  if (v.tipo !== 'venta') return falla('ES_CAMBIO', `La ${v.numero} es un cambio`)
+  const [f] = await q(db, 'select 1 from venta_factura where venta_id = $1 limit 1', [v.id])
+  if (f) return falla('FACTURADA', `La venta ${v.numero} ya tiene factura: se corrige con una nota de crédito`)
+  const [c] = await q(db, `select exists (select 1 from venta where venta_original_id = $1 and estado = 'confirmada') as hay`, [v.id])
+  if (c.hay) return falla('CON_CAMBIO', `La venta ${v.numero} ya tuvo un cambio`)
+
+  const lineas = await q(db, `select l.id::text as id, l.n, l.product_id::text, l.size_id::text, l.sku, l.barcode, l.cantidad, l.costo_unitario::float, l.costo_fuente,
+      coalesce(c.precio_despues, l.precio)::float as precio, coalesce(c.importe_despues, l.importe)::float as importe,
+      coalesce((select -sum(d.cantidad) from venta_linea d where d.linea_origen_id = l.id), 0)::int as sacado
+    from venta_linea l
+    left join lateral (select cl.precio_despues, cl.importe_despues from venta_correccion_linea cl join venta_correccion k on k.id = cl.correccion_id
+      where cl.venta_linea_id = l.id order by k.creada_en desc, k.id desc limit 1) c on true
+    where l.venta_id = $1 order by l.n`, [v.id])
+  const cent = (x) => Math.round(Number(x) * 100)
+  const kv = (pid, sid) => `${Number(pid)}:${Number(sid)}`
+  // Lo VIVO de cada talle: las líneas originales (cantidad > 0) con lo que les queda, a su precio unitario vigente.
+  const vivas = new Map()
+  for (const l of lineas.filter((x) => x.cantidad > 0)) {
+    const queda = l.cantidad - l.sacado
+    if (queda <= 0) continue
+    const k = kv(l.product_id, l.size_id)
+    if (!vivas.has(k)) vivas.set(k, [])
+    vivas.get(k).push({ ...l, queda, unitario: pesos(l.importe / l.cantidad) })
+  }
+  const quiero = new Map()
+  for (const [i, l] of (Array.isArray(e.lineas) ? e.lineas : []).entries()) {
+    const pid = Number(l?.product_id), sid = Number(l?.size_id), cantidad = Number(l?.cantidad), precio = pesos(l?.precio)
+    if (!Number.isSafeInteger(pid) || pid <= 0 || !Number.isSafeInteger(sid) || sid < 0) return falla('ENTRADA_INVALIDA', 'Falta el producto', `lineas[${i}]`)
+    if (!Number.isInteger(cantidad) || cantidad < 0) return falla('ENTRADA_INVALIDA', 'La cantidad es un entero desde 0', `lineas[${i}].cantidad`)
+    if (!Number.isFinite(precio) || precio < 0) return falla('ENTRADA_INVALIDA', 'El precio es un número desde 0', `lineas[${i}].precio`)
+    const k = kv(pid, sid)
+    if (quiero.has(k)) return falla('ENTRADA_INVALIDA', 'Un talle aparece dos veces', `lineas[${i}]`)
+    if (cantidad > 0) quiero.set(k, { product_id: pid, size_id: sid, cantidad, precio })
+  }
+  const sacar = []   // { linea, cantidad }
+  const agregar = [] // { product_id, size_id, cantidad, precio }
+  for (const k of new Set([...vivas.keys(), ...quiero.keys()])) {
+    const hay = vivas.get(k) ?? []
+    const q2 = quiero.get(k)
+    // Las de OTRO precio salen enteras; las del mismo precio se ajustan (de la más nueva a la más vieja).
+    const mismas = q2 ? hay.filter((l) => cent(l.unitario) === cent(q2.precio)) : []
+    for (const l of hay) if (!mismas.includes(l)) sacar.push({ linea: l, cantidad: l.queda })
+    let tengo = mismas.reduce((s, l) => s + l.queda, 0)
+    const quiero2 = q2 ? q2.cantidad : 0
+    if (quiero2 > tengo) agregar.push({ ...q2, cantidad: quiero2 - tengo })
+    for (const l of [...mismas].sort((a, b) => b.n - a.n)) {
+      if (tengo <= quiero2) break
+      const baja = Math.min(l.queda, tengo - quiero2)
+      sacar.push({ linea: l, cantidad: baja })
+      tengo -= baja
+    }
+  }
+  const nuevas = sacar.map(({ linea: l, cantidad }) => ({ product_id: Number(l.product_id), size_id: Number(l.size_id), sku: l.sku, barcode: l.barcode,
+    cantidad: -cantidad, precio: pesos(l.precio), importe: -pesos(l.unitario * cantidad), linea_origen_id: l.id, costo_unitario: l.costo_unitario, costo_fuente: l.costo_fuente }))
+  if (agregar.length) {
+    const vars = await q(db, `select va.product_id::text, va.size_id::text, va.sku, va.barcode from variante va join producto p on p.empresa_id = va.empresa_id and p.id = va.product_id
+      where va.empresa_id = $1 and p.marca = $2 and (va.product_id, va.size_id) in (select * from unnest($3::bigint[], $4::bigint[]))`,
+    [v.empresa_id, v.marca, agregar.map((a) => a.product_id), agregar.map((a) => a.size_id)])
+    const costos = await costosDe(db, [...new Set(agregar.map((a) => a.product_id))])
+    for (const a of agregar) {
+      const va = vars.find((x) => x.product_id === String(a.product_id) && x.size_id === String(a.size_id))
+      const costo = costos.get(a.product_id)
+      nuevas.push({ product_id: a.product_id, size_id: a.size_id, sku: va?.sku ?? null, barcode: va?.barcode ?? null, cantidad: a.cantidad,
+        precio: pesos(a.precio), importe: pesos(a.precio * a.cantidad), linea_origen_id: null,
+        costo_unitario: costo ? costo.costo : null, costo_fuente: costo ? costo.fuente : null })
+    }
+  }
+  const [ult] = await q(db, 'select total_despues::float as t from venta_correccion where venta_id = $1 order by creada_en desc, id desc limit 1', [v.id])
+  const totalAntes = pesos(ult ? ult.t : v.total)
+  const [fic] = await q(db, `select detalle from venta_ficha where id = $1`, [v.id])
+  const detalleAntes = fic?.detalle ?? v.detalle ?? {}
+  const detalle = e.detalle && typeof e.detalle === 'object' ? e.detalle : null
+  const cambiaDetalle = detalle && Object.entries(detalle).some(([key, val]) => JSON.stringify(detalleAntes[key] ?? null) !== JSON.stringify(val ?? null))
+  if (!nuevas.length && cent(total) === cent(totalAntes) && !cambiaDetalle) return { ok: true, sin_cambios: true, movimientos: 0, avisos: [], delta: 0 }
+  const delta = pesos(total - totalAntes)
+  const [{ cobrado }] = await q(db, 'select coalesce(sum(monto), 0)::float as cobrado from venta_pago where venta_id = $1', [v.id])
+  // La mayorista es toda a cuenta: la diferencia la toma la cuenta corriente (abajo) ⇒ lo «cobrado» acompaña al total.
+  const [k] = await q(db, `insert into venta_correccion (empresa_id, marca, venta_id, motivo, total_antes, total_despues, cobrado, diferencia, prueba, usuario, tipo, detalle)
+    values ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9, 'pedido', $10::jsonb) returning id::text`,
+  [v.empresa_id, v.marca, v.id, motivo, totalAntes, total, pesos(cobrado + delta), v.prueba, usuario, detalle ? JSON.stringify(detalle) : null])
+  const { movimientos, avisos } = await escribirRenglones(db, v, k.id, nuevas, lineas)
+  if (delta) {
+    const [compra] = await q(db, `select cliente_id::text, marca, empresa_id, prueba from cuenta_movimiento where empresa_id = $1 and ref = $2 and tipo = 'compra'`, [v.empresa_id, `venta:${v.id}`])
+    if (!compra) throw new Error(`La venta ${v.numero} no tiene su compra en la cuenta corriente: no se puede corregir el total`)
+    await q(db, `insert into cuenta_movimiento (empresa_id, marca, cliente_id, tipo, ref, monto, venta_id, detalle, prueba, usuario, ocurrida_en)
+      values ($1, $2, $3, 'correccion', $4, $5, $6, $7::jsonb, $8, $9, now())`,
+    [compra.empresa_id, compra.marca, compra.cliente_id, `venta:${v.id}:correccion:${k.id}`, delta, v.id,
+      JSON.stringify({ correccion: k.id, motivo, ...(e.pedido_id ? { pedido: String(e.pedido_id) } : {}) }), compra.prueba, usuario])
+  }
+  return { ok: true, sin_cambios: false, correccion: await unaCorreccion(db, k.id), movimientos: movimientos.length, avisos, delta }
+}
+
+/**
+ * Las líneas nuevas de una corrección (de productos o de pedido), su `venta_correccion_renglon` y su movimiento del libro en el
+ * DEPÓSITO DE LA VENTA, fechado AHORA (⛔ el día de la venta). La de prueba ⛔ mueve. Avisa (⛔ frena) lo que se agrega y el libro
+ * ⛔ tiene. Dentro de la transacción del que llama.
+ */
+async function escribirRenglones(db, v, correccionId, nuevas, lineas) {
+  if (!nuevas.length) return { movimientos: [], avisos: [] }
+  const k = { id: correccionId }
   const ultimoN = lineas.reduce((m, l) => Math.max(m, Number(l.n)), 0)
   const filas = nuevas.map((x, i) => ({ id: randomUUID(), venta_id: v.id, n: ultimoN + i + 1, product_id: x.product_id, size_id: x.size_id,
     sku: x.sku ?? null, barcode: x.barcode ?? null, cantidad: x.cantidad, precio: x.precio, descuento: 0, rebaja: 0, importe: x.importe,
@@ -238,7 +369,7 @@ async function productosDentro(db, { venta_id, motivo, usuario, ref, sacar, agre
     const [s] = await q(db, 'select coalesce(sum(cantidad), 0)::int as nivel from stock_movimiento where linea = $1 and product_id = $2 and size_id = $3 and deposito = $4', [v.marca, l.product_id, l.size_id, v.deposito])
     if (s.nivel < 0) avisos.push({ codigo: 'SIN_STOCK_EN_LIBRO', product_id: l.product_id, size_id: l.size_id, sku: l.sku, nivel: s.nivel })
   }
-  return { ok: true, ya_existia: false, correccion: await unaCorreccion(db, k.id), movimientos: movimientos.length, avisos }
+  return { movimientos, avisos }
 }
 
 /** Una corrección con sus líneas (de precio o de productos), como la devuelve `correccionesDe`. */
