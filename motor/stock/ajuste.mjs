@@ -342,6 +342,62 @@ export async function rechazarAjuste(db, e, { ahora = new Date() } = {}) {
   })
 }
 
+/**
+ * ¿Este ajuste aplicado se puede ELIMINAR? Puro. Sólo los que se hacen a mano (pantalla de Ajustes, sin `ref`) y los del Conteo de
+ * depósito (`ref` `conteo:…`). Los que arma OTRO flujo se deshacen desde ese flujo, ⛔ acá: el canje (`canje-…`, se cancela el
+ * canje y `devolverCanje` devuelve la prenda), el reemplazo de un reclamo (`devolucion-…`), el faltante del pedido mayorista
+ * (`pedido-faltante:…`) y el cierre de una salida (`sin_movimiento`: ⛔ movió el libro, lo movió la salida).
+ * Los de ANTES del corte de la línea tampoco: el corte alineó el libro con GN encima de ellos ⇒ deshacerlos lo descuadra.
+ * @returns {null | { codigo: string, mensaje: string }} null = se puede
+ */
+export function porQueNoSeElimina(a, corte) {
+  if (a.estado === 'eliminado') return { codigo: 'YA_RESUELTO', mensaje: `El ajuste A-${a.numero} ya está eliminado` }
+  if (a.estado !== 'aplicado') return { codigo: 'NO_APLICADO', mensaje: `El ajuste A-${a.numero} no está aplicado (${a.estado}): no movió el stock` }
+  if (a.sin_movimiento || (a.ref && !String(a.ref).startsWith('conteo:'))) return { codigo: 'DE_OTRO_FLUJO', mensaje: `El ajuste A-${a.numero} lo armó otro trámite (${a.ref || 'una salida'}): se deshace desde ahí` }
+  if (!corte || new Date(a.resuelto_en ?? a.creado_en) < new Date(corte)) return { codigo: 'ANTES_DEL_CORTE', mensaje: `El ajuste A-${a.numero} es de antes del corte: el corte ya igualó el stock con GN` }
+  return null
+}
+
+/** Los movimientos CONTRARIOS de un ajuste que se elimina: misma clave + `#2` (la clave suma 0), uno por renglón. Puro. */
+export function contrariosDe(ajuste, renglones, ahora) {
+  return movimientosDe(ajuste, renglones, ahora).map((m, i) => ({
+    ...m, cantidad: -m.cantidad, clave: `${m.clave}#2`, origen_ref: `${ajuste.id}:${renglones[i].n}:eliminado`,
+    detalle: { ...m.detalle, eliminado: true },
+  }))
+}
+
+/**
+ * ELIMINA un ajuste aplicado (Bruno 18-nov: «deshacer un ajuste y que no genere registro»; sólo Admin, lo frena el monitor). El libro es
+ * inmutable ⇒ escribe el movimiento contrario de cada renglón y marca el ajuste `eliminado` (sql/091): ⛔ nace un ajuste nuevo. Frena si
+ * el stock de hoy quedaría negativo (lo que entró ya se vendió). En UNA transacción, con el ajuste bloqueado.
+ * @param {import('pg').ClientBase} db @param {{ ajuste_id: string, usuario: string }} e @param {{ ahora?: Date }} [op]
+ */
+export async function eliminarAjuste(db, e, { ahora = new Date() } = {}) {
+  return enTransaccion(db, async () => {
+    const usuario = String(e?.usuario ?? '').trim()
+    if (!usuario) return falla('ENTRADA_INVALIDA', 'Falta quién elimina', 'usuario')
+    if (!/^[0-9a-f-]{36}$/i.test(String(e?.ajuste_id ?? ''))) return falla('ENTRADA_INVALIDA', 'Falta el ajuste', 'ajuste_id')
+    const [a] = await q(db, 'select * from stock_ajuste where id = $1 for update', [e.ajuste_id])
+    if (!a) return falla('NO_ENCONTRADO', 'No está ese ajuste')
+    const [corte] = await q(db, 'select instante from erp_corte where linea = $1', [a.linea])
+    const no = porQueNoSeElimina(a, corte?.instante ?? null)
+    if (no) return falla(no.codigo, no.mensaje)
+    const renglones = (await q(db, 'select * from stock_ajuste_renglon where ajuste_id = $1 order by n', [a.id]))
+      .map((r) => ({ ...r, product_id: Number(r.product_id), size_id: Number(r.size_id) }))
+    const hoy = await nivelesDe(db, a.deposito, renglones)
+    for (const r of renglones) {
+      const queda = (hoy.get(claveDe(r)) ?? 0) - r.diferencia
+      if (queda < 0) return falla('QUEDA_NEGATIVO', `${r.sku || claveDe(r)}: el ajuste sumó ${r.diferencia} en ${a.deposito} y hoy hay ${hoy.get(claveDe(r)) ?? 0}; eliminarlo lo deja en ${queda}`)
+    }
+    const movimientos = contrariosDe(a, renglones, ahora)
+    if (movimientos.length) await db.query(`insert into stock_movimiento (linea, product_id, size_id, sku, barcode, deposito, cantidad, tipo, origen, clave, origen_ref, ocurrido_en, hora_exacta, grupo, detalle)
+      select linea, product_id, size_id, sku, barcode, deposito, cantidad, tipo, origen, clave, origen_ref, ocurrido_en, hora_exacta, grupo, detalle
+      from jsonb_populate_recordset(null::stock_movimiento, $1::jsonb)`, [JSON.stringify(movimientos)])
+    await db.query(`update stock_ajuste set estado = 'eliminado', eliminado_por = $2, eliminado_en = $3 where id = $1`, [a.id, usuario, ahora.toISOString()])
+    return { ok: true, ajuste: { id: a.id, numero: a.numero, estado: 'eliminado' }, movimientos: movimientos.length }
+  })
+}
+
 /** Los ajustes de una línea (los más nuevos primero: el número es por línea), con sus renglones. Una base sin la 026 ⇒ `{ sinTablas: true }`. */
 export async function ajustesDe(db, { linea, estado = null, limite = 100 }) {
   const [{ hay }] = await q(db, `select to_regclass('stock_ajuste') is not null as hay`)
