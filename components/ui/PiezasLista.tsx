@@ -58,7 +58,7 @@ export function TileResumen({ titulo, valor, oscuro, tono, nota }: { titulo: str
 }
 
 /** Las vistas que son un PROBLEMA a revisar (§9 color): en rojo cuando tienen algo. */
-const VISTAS_PROBLEMA = new Set(['neg', 'sincosto', 'atrasadas', 'dif', 'sinpagar', 'sinfactura', 'debe', 'faltantes'])
+const VISTAS_PROBLEMA = new Set(['neg', 'sincosto', 'atrasadas', 'dif', 'sinpagar', 'sinfactura', 'debe', 'faltantes', 'sinaplicar'])
 
 export function VistasLista({ vistas, valor, conteo, onCambio, todasRojas }: {
   /** Todas las vistas son problemas (Diferencias, Conciliación). */

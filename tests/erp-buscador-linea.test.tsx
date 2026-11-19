@@ -41,7 +41,6 @@ async function escribir(input: HTMLInputElement, valor: string) {
   await act(async () => { set.call(input, valor); input.dispatchEvent(new Event('input', { bubbles: true })) })
 }
 const boton = (t: string) => [...host.querySelectorAll('button')].find((b) => b.textContent === t) as HTMLButtonElement
-const opciones = () => [...host.querySelectorAll('button')].map((b) => b.textContent ?? '').filter((t) => t.startsWith('+ '))
 
 describe('deLaTienda', () => {
   it('Stunned = los STU; Zattia = el resto; BDI = todo', () => {
@@ -56,9 +55,12 @@ describe('El buscador con Stunned elegido', () => {
     const { AjustesStock } = await import('@/components/erp/AjustesStock')
     await montar(<ProveedorLineaErp value="stunned"><AjustesStock /></ProveedorLineaErp>)
     await act(async () => { boton('Nuevo ajuste').click() })
-    await escribir(host.querySelector('input[placeholder="código, código de barras o nombre"]') as HTMLInputElement, 'remera')
-    await act(async () => { boton('Buscar').click() }); await esperar()
-    expect(opciones()).toEqual(['+ REMERA STU · M'])
+    await act(async () => { boton('Ingreso').click() })
+    const caja = host.querySelector('input[placeholder^="Código"]') as HTMLInputElement
+    await escribir(caja, 'remera')
+    await act(async () => { caja.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) }); await esperar()
+    // La tabla del buscador (la misma de Transferencias): una fila por modelo, sólo los de Stunned.
+    expect([...host.querySelectorAll('tbody tr')].map((t) => t.querySelector('td')?.textContent)).toEqual(['REMERA STU · M'])
   })
 
   it('Transferir: escanear el código de un producto de Zattia ⛔ lo suma', async () => {

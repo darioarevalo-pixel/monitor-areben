@@ -84,15 +84,19 @@ function imprimirRemito(d: TransferenciaDoc, nombres: Nombres) {
  * leída (`local`), sin ir al servidor: antes cada escaneo esperaba la respuesta y el que llegaba en el medio se perdía o se
  * pegaba al anterior («77900017790001»). Al servidor va sólo lo que no es un código (el nombre).
  */
-function Escaneo({ linea, onPrenda, autoFocus = true, hayDe, origen, rechazo, local, cantidadDe, onCantidad, destinoDe, destino }: { linea: TiendaErp; onPrenda: (p: PrendaEncontrada) => void; autoFocus?: boolean; /** Al recibir: por qué ⛔ se suma (no vino, o ya está todo). null = se suma. */ rechazo?: (p: PrendaEncontrada) => string | null; /** Al transferir: cuánto queda para sacar del origen (null = no se sabe, no se frena). */ hayDe?: (p: { producto: string; talle: string }) => number | null; origen?: string; /** El producto de un código de barras o SKU exacto, sin ir al servidor (null = ⛔ se conoce). */ local?: (codigo: string) => PrendaEncontrada | null
+export function Escaneo({ linea, onPrenda, autoFocus = true, hayDe, origen, rechazo, local, cantidadDe, onCantidad, destinoDe, destino, rotuloCantidad = 'A transferir', conTodo = true }: { linea: TiendaErp; onPrenda: (p: PrendaEncontrada) => void; autoFocus?: boolean; /** Al recibir: por qué ⛔ se suma (no vino, o ya está todo). null = se suma. */ rechazo?: (p: PrendaEncontrada) => string | null; /** Al transferir: cuánto queda para sacar del origen (null = no se sabe, no se frena). */ hayDe?: (p: { producto: string; talle: string }) => number | null; origen?: string; /** El producto de un código de barras o SKU exacto, sin ir al servidor (null = ⛔ se conoce). */ local?: (codigo: string) => PrendaEncontrada | null
   /** Al transferir (como en GN, Darío 18-nov): la búsqueda por nombre es una TABLA con la cantidad de cada modelo para completar. */
-  cantidadDe?: (p: PrendaEncontrada) => number; onCantidad?: (p: PrendaEncontrada, n: number) => void; destinoDe?: (p: PrendaEncontrada) => number | null; destino?: string }) {
+  cantidadDe?: (p: PrendaEncontrada) => number; onCantidad?: (p: PrendaEncontrada, n: number) => void; destinoDe?: (p: PrendaEncontrada) => number | null; destino?: string
+  /** Ajustes (Darío, 19-nov) usa la MISMA tabla: «Cantidad» y ⛔ «Todo el stock». Sin `hayDe` (o sin `destinoDe`) esa columna ⛔ va. */
+  rotuloCantidad?: string; conTodo?: boolean }) {
   const [texto, setTexto] = useState('')
   const [opciones, setOpciones] = useState<{ variantes: PrendaEncontrada[]; cortado: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState(false)
   const [marcada, setMarcada] = useState(0)
   const caja = useRef<HTMLInputElement>(null)
+  // 📱 En el celular la tabla no entra: el modelo baja a un 2º renglón (cortado decía «STARLIGH…») y el encabezado dice «Stock».
+  const angosta = usePantallaAngosta()
   // Al transferir sólo se ofrece lo que hay en el origen: lo demás ⛔ puede salir de ahí.
   const conStock = (p: PrendaEncontrada) => { const h = hayDe?.(p); return h == null || h > 0 }
   function sumar(una: PrendaEncontrada) {
@@ -171,7 +175,7 @@ function Escaneo({ linea, onPrenda, autoFocus = true, hayDe, origen, rechazo, lo
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base }}>
               <thead>
                 <tr style={{ position: 'sticky', top: 0, background: color.bg2, zIndex: 1 }}>
-                  {['Producto', `Stock en ${origen ?? 'origen'}`, `Stock en ${destino ?? 'destino'}`, 'A transferir'].map((t, k) => (
+                  {['Producto', ...(hayDe ? [angosta && !destinoDe ? 'Stock' : `Stock en ${origen ?? 'origen'}`] : []), ...(destinoDe ? [angosta && !hayDe ? 'Stock' : `Stock en ${destino ?? 'destino'}`] : []), angosta ? 'Cantidad' : rotuloCantidad].map((t, k) => (
                     <th key={t} style={{ height: 26, padding: '0 12px', fontSize: font.xs, fontWeight: weight.semibold, color: color.mut, textAlign: k ? 'right' : 'left', whiteSpace: 'nowrap' }}>{t}</th>
                   ))}
                 </tr>
@@ -182,13 +186,19 @@ function Escaneo({ linea, onPrenda, autoFocus = true, hayDe, origen, rechazo, lo
                   const tope = (h ?? 0) + n
                   return (
                     <tr key={`${p.producto}:${p.talle}`} style={{ borderTop: `1px solid ${color.bg2}`, background: n ? 'var(--mo-brand-bg)' : undefined }}>
-                      <td style={{ height: 30, padding: '0 12px', color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 0, width: '55%' }}>
-                        <b style={{ fontWeight: weight.semibold }}>{p.nombre ?? p.sku}</b>{p.talleNombre ? <span style={{ color: color.ink2 }}> · {p.talleNombre}</span> : null}
-                      </td>
-                      <td style={{ padding: '0 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: color.ink, fontWeight: weight.semibold }}>{h == null ? '—' : tope}</td>
-                      <td style={{ padding: '0 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: color.mut }}>{dst ?? '—'}</td>
+                      {angosta ? (
+                        <td style={{ padding: '6px 12px', color: color.ink, lineHeight: 1.25 }}>
+                          <b style={{ fontWeight: weight.semibold }}>{p.nombre ?? p.sku}</b>{p.talleNombre ? <div style={{ color: color.ink2 }}>{p.talleNombre}</div> : null}
+                        </td>
+                      ) : (
+                        <td style={{ height: 30, padding: '0 12px', color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 0, width: '55%' }}>
+                          <b style={{ fontWeight: weight.semibold }}>{p.nombre ?? p.sku}</b>{p.talleNombre ? <span style={{ color: color.ink2 }}> · {p.talleNombre}</span> : null}
+                        </td>
+                      )}
+                      {hayDe && <td style={{ padding: '0 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: color.ink, fontWeight: weight.semibold }}>{h == null ? '—' : tope}</td>}
+                      {destinoDe && <td style={{ padding: '0 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: hayDe ? color.mut : color.ink, fontWeight: hayDe ? undefined : weight.semibold }}>{dst ?? '—'}</td>}
                       <td style={{ padding: '2px 12px', textAlign: 'right' }}>
-                        <input type="number" min={0} max={h == null ? undefined : tope} inputMode="numeric" aria-label={`A transferir de ${nombreDe({ ...p, cantidad: 1 })}`} value={n || ''} placeholder="0"
+                        <input type="number" min={0} max={h == null ? undefined : tope} inputMode="numeric" aria-label={`${rotuloCantidad} de ${nombreDe({ ...p, cantidad: 1 })}`} value={n || ''} placeholder="0"
                           onChange={(e) => { const v = Math.max(0, Math.trunc(Number(e.target.value)) || 0); onCantidad(p, h == null ? v : Math.min(v, tope)) }}
                           style={{ width: 64, height: 26, textAlign: 'right' }} />
                       </td>
@@ -200,7 +210,7 @@ function Escaneo({ linea, onPrenda, autoFocus = true, hayDe, origen, rechazo, lo
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: space[2], padding: '6px 12px', borderTop: `1px solid ${color.line}`, background: color.bg2, color: color.mut, fontSize: font.sm }}>
             <span style={{ flex: 1 }}>{opciones.cortado ? 'Hay más productos: sumá otra palabra para achicar la búsqueda.' : `${opciones.variantes.length} ${opciones.variantes.length === 1 ? 'modelo' : 'modelos'}`}</span>
-            {hayDe && <Button size="sm" variant="outline" onClick={() => { for (const p of opciones.variantes) { const t = (hayDe(p) ?? 0) + cantidadDe(p); if (t > 0) onCantidad(p, t) } }}>Todo el stock</Button>}
+            {hayDe && conTodo && <Button size="sm" variant="outline" onClick={() => { for (const p of opciones.variantes) { const t = (hayDe(p) ?? 0) + cantidadDe(p); if (t > 0) onCantidad(p, t) } }}>Todo el stock</Button>}
             <Button size="sm" variant="outline" onClick={() => { setOpciones(null); setTexto(''); caja.current?.focus() }}>Listo</Button>
           </div>
         </div>

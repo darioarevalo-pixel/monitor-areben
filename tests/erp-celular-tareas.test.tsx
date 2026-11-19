@@ -21,7 +21,7 @@ vi.mock('@/lib/erp/cliente', () => m)
 
 let root: Root | null = null
 let host: HTMLDivElement
-beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
+beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; window.confirm = () => true })
 afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); document.body.innerHTML = ''; vi.clearAllMocks(); window.history.replaceState(null, '', '/') })
 beforeEach(() => {
   m.leerListaDeStock.mockResolvedValue({ filas: [{ producto: '10', talle: '1', nombre: 'REMERA OVERSIZE', talleNombre: 'M' }] })
@@ -102,8 +102,8 @@ describe('Nuevo ajuste en el celular', () => {
     await elegirSalida()
     const tarjeta = host.querySelector('[data-tarjeta-ajuste]') as HTMLElement
     expect(tarjeta.textContent).toContain('TOP ZARA · NEGRO')
-    expect(tarjeta.textContent).toContain('Areben Gestión dice 5 en Local')
-    const guardar = () => [...elPie()!.querySelectorAll('button')].find((b) => b.textContent === 'Guardar ajuste')!
+    expect(tarjeta.textContent).toContain('Stock en Local: 5')
+    const guardar = () => [...elPie()!.querySelectorAll('button')].find((b) => /^(Guardar ajuste|Sacar \d+ unidad)/.test(b.textContent ?? ''))!
     expect(guardar().disabled).toBe(true)
     await click(host.querySelector('button[aria-label="Más TOP ZARA · NEGRO"]')!)
     await click(host.querySelector('button[aria-label="Más TOP ZARA · NEGRO"]')!)
@@ -122,6 +122,6 @@ describe('Nuevo ajuste en el celular', () => {
     expect(host.querySelector('[data-tarjeta-ajuste]')).toBeNull()
     expect(host.querySelector('input[aria-label="Cantidad de TOP ZARA · NEGRO"]')).toBeTruthy()
     expect(elPie()).toBeNull()
-    expect(boton('Guardar ajuste')).toBeTruthy()
+    expect(boton('Cancelar')).toBeTruthy()
   })
 })
