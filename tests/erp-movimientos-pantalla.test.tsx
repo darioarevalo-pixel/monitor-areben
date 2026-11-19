@@ -25,6 +25,7 @@ const ficha: StockDePrenda = {
 vi.mock('@/lib/erp/cliente', () => ({
   leerMovimientos: (a: string, b: string, c: string) => leerMovimientos(a, b, c),
   leerStockDePrenda: async () => ficha,
+  leerHistorialDePrenda: async () => ({ filas: [], depositos: [], total: 0, prenda: { nombre: 'TOP SAHARA', talleNombre: 'S', sku: null, barcode: null } }),
 }))
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', perfil: { name: 'bruno' } }) }))
 const guardado = new Map<string, string>()
@@ -80,9 +81,10 @@ describe('la lista de movimientos', () => {
     expect(desde < hasta).toBe(true)
   })
 
-  it('la fila abre la ficha del producto al costado', async () => {
+  it('la fila abre los movimientos del producto en la ventana (Darío 18-nov)', async () => {
     await montar()
     await clic(filaDe('TOP SAHARA').querySelector('[role="cell"]:last-child')!)
-    expect(document.querySelector('aside[aria-label^="Ficha del producto"]')).toBeTruthy()
+    expect(document.querySelector('aside[aria-label^="Ficha del producto"]')).toBeNull()
+    expect(document.querySelector('.mo-modal')!.textContent).toContain('TOP SAHARA')
   })
 })

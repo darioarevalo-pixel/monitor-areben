@@ -51,7 +51,9 @@ COSTADO (por depósito ERP contra GN + «Ver movimientos»). 🆕 18-nov (Darío
 Salida · Saldo · Descripción, por depósito o Todos, filtro por tipo (con filtro ⛔ Saldo). 🔑 Regla de Darío: UN renglón por
 cada vez que entra o sale de verdad — el pedido de TN (venta + preparado + desarme «sin armar» del 16-nov) es una «Venta»;
 el desarme real es «Pedido cancelado/devuelto»; las correcciones de una venta que dan 0 ⛔ se ven (si no, «Ajuste de venta»).
-Colores por tipo: tokens `--mo-mov-*`. ⏭️ Transferir y Ajustar dentro de la ventana (propuesta ya aprobada). 🔑 Palabras del diseño: **en estantería** = el
+Colores por tipo: tokens `--mo-mov-*`. 🆕 18-nov (2): en Stock, Movimientos y la búsqueda general tocar el producto abre DIRECTO esta
+ventana (con código de barras, «Ajustar» y «Etiquetas ↗»); `FichaPrenda` al costado queda sólo en Diferencias, Conciliación y
+Comparación, donde lo que importa es contra Gestión Nube / Tienda Nube. ⏭️ Transferir y Ajustar dentro de la ventana (propuesta ya aprobada). 🔑 Palabras del diseño: **en estantería** = el
 **libro de stock** (`stock_movimiento`, la SUMA: es inmutable) · **en pedidos** = lo que apartan los pedidos de TN SIN
 PAGAR (cruce por SKU con `inventario`; el libro ⛔ los descontó) · **disponible** = estantería − pedidos, el número que
 manda. 🔴 La reserva del motor (`reservasTN`) además VENCE a las 72 h; mientras GN viva eso es seco ⇒ acá cuentan todos

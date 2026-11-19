@@ -6,12 +6,18 @@
  * depósito (arranca en el que más movimientos tiene) o todos juntos, y filtro por tipo. Con un filtro de tipo el Saldo ⛔ se
  * muestra: salta entre renglones (lo explican los que el filtro esconde) y confunde. En el celular, un renglón por movimiento.
  * Qué es un renglón (la venta de Tienda Nube con su preparado, las correcciones que se anulan): `lib/erp/historial-prenda.core.js`.
- * Sólo lectura: Transferir y Ajustar desde acá vienen en un segundo paso.
+ * 🆕 18-nov (Darío): es LO que se abre al tocar un producto en Stock, Movimientos y la búsqueda — la ficha del costado repetía
+ * la lista —; trae el código de barras, «Ajustar» (lleva a «Nuevo ajuste») y «Etiquetas ↗». Diferencias y Conciliación
+ * siguen con la ficha del costado: ahí lo que importa es la comparación con Gestión Nube y Tienda Nube.
+ * Transferir y Ajustar DENTRO de la ventana vienen en un segundo paso.
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Modal, Notice, color, font, space, weight } from '@/components/ui'
+import { Button, Modal, Notice, color, font, space, weight } from '@/components/ui'
 import { usePantallaAngosta } from '@/lib/movil'
+import { lineaDe } from '@/lib/lineas'
+import { usePuedeErp } from '@/lib/erp/usePuedeErp'
+import type { PrendaAAjustar } from './StockErp'
 import { leerHistorialDePrenda, type FilaHistorial, type HistorialDePrenda, type MarcaErp } from '@/lib/erp/cliente'
 import { FILTROS, depositoInicial, filtrarHistorial } from '@/lib/erp/historial-prenda.core.js'
 
@@ -36,8 +42,14 @@ function Etiqueta({ f }: { f: FilaHistorial }) {
   return <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: font.sm, fontWeight: weight.semibold, background: bg, color: fg, whiteSpace: 'nowrap' }}>{f.tipoNombre}</span>
 }
 
-export function HistorialPrenda({ marca, producto, talle, nombre, variante, codigo, onCerrar }: {
-  marca: MarcaErp; producto: string; talle: string; nombre: string; variante: string; codigo: string | null; onCerrar: () => void
+/** Lo que ya se sabe del producto (la fila de la lista); sin eso, lo trae el servidor. */
+export type DatosDelProducto = { nombre?: string | null; talleNombre?: string | null; sku?: string | null; barcode?: string | null; linea?: string | null }
+
+export function HistorialPrenda({ marca, producto, talle, datos, ajustar, onCerrar }: {
+  marca: MarcaErp; producto: string; talle: string; datos?: DatosDelProducto | null
+  /** «Ajustar» lleva a «Nuevo ajuste» con el producto cargado; sin esto, ⛔ se muestra. */
+  ajustar?: (p: PrendaAAjustar) => void
+  onCerrar: () => void
 }) {
   const [h, setH] = useState<HistorialDePrenda | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -52,6 +64,14 @@ export function HistorialPrenda({ marca, producto, talle, nombre, variante, codi
       .catch((e) => vivo && setError(e instanceof Error ? e.message : 'No se pudieron leer los movimientos del producto.'))
     return () => { vivo = false }
   }, [marca, producto, talle])
+
+  const ajusta = usePuedeErp(marca)('ajustar')
+  const nombre = datos?.nombre ?? h?.prenda?.nombre ?? 'Producto'
+  const variante = datos?.talleNombre ?? h?.prenda?.talleNombre ?? ''
+  const codigo = datos?.sku ?? h?.prenda?.sku ?? null
+  const barcode = datos?.barcode ?? h?.prenda?.barcode ?? null
+  const linea = datos?.linea ?? (codigo || h ? lineaDe(marca, codigo) : null)
+  const aAjustar = () => { if (ajustar && linea) { onCerrar(); ajustar({ linea, producto, talle, sku: codigo, barcode, nombre, talleNombre: variante }) } }
 
   const dep = deposito ?? 'todos'
   const filas = useMemo(() => (h ? filtrarHistorial(h.filas, { deposito: dep, filtro }) : []), [h, dep, filtro])
@@ -75,8 +95,8 @@ export function HistorialPrenda({ marca, producto, talle, nombre, variante, codi
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: space[4] }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: font.xs, fontWeight: weight.semibold, letterSpacing: '0.06em', textTransform: 'uppercase', color: color.mut }}>Movimientos</div>
-          <div style={{ fontSize: angosta ? font.xl : font['2xl'], fontWeight: weight.bold, color: color.ink, overflowWrap: 'anywhere' }}>{nombre} · {variante}</div>
-          {codigo && <div style={{ fontSize: font.sm, color: color.mut, fontWeight: weight.normal }}>{codigo}</div>}
+          <div style={{ fontSize: angosta ? font.xl : font['2xl'], fontWeight: weight.bold, color: color.ink, overflowWrap: 'anywhere' }}>{nombre}{variante ? ` · ${variante}` : ''}</div>
+          {(codigo || barcode) && <div style={{ fontSize: font.sm, color: color.mut, fontWeight: weight.normal }}>{[codigo, barcode].filter(Boolean).join(' · ')}</div>}
         </div>
         <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
           <div style={{ fontSize: font.sm, color: color.mut, fontWeight: weight.normal }}>{todos ? 'Total' : opciones.find((o) => o.k === dep)?.n ?? ''}</div>
@@ -106,7 +126,11 @@ export function HistorialPrenda({ marca, producto, talle, nombre, variante, codi
 
   return (
     <Modal abierto onCerrar={onCerrar} titulo={titulo} ancho="xl" variante="pos"
-      pie={<span style={{ marginRight: 'auto', fontSize: font.sm, color: color.mut }}>{h ? `${filas.length} ${filas.length === 1 ? 'movimiento' : 'movimientos'}` : ''}</span>}>
+      pie={<>
+        <span style={{ marginRight: 'auto', fontSize: font.sm, color: color.mut }}>{h ? `${filas.length} ${filas.length === 1 ? 'movimiento' : 'movimientos'}` : ''}</span>
+        <Button variant="outline" onClick={() => window.open('/etiquetas', '_blank', 'noopener')}>Etiquetas ↗</Button>
+        {ajustar && ajusta && <Button variant="soft" tone="brand" disabled={!linea} onClick={aAjustar}>Ajustar</Button>}
+      </>}>
       {/* Mismo alto siempre: con pocos renglones la ventana se achicaba y saltaba al cambiar de filtro. */}
       <div style={{ minHeight: angosta ? undefined : 'calc(100vh - 250px)' }}>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}

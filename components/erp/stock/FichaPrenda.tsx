@@ -129,7 +129,7 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
           <Button variant="soft" tone="brand" onClick={() => setVerMovimientos(true)} style={{ alignSelf: 'flex-start' }}>Ver movimientos</Button>
         )}
       </section>
-      {verMovimientos && <HistorialPrenda marca={marca} producto={prenda.producto} talle={prenda.talle} nombre={nombre} variante={talle} codigo={sku} onCerrar={() => setVerMovimientos(false)} />}
+      {verMovimientos && <HistorialPrenda marca={marca} producto={prenda.producto} talle={prenda.talle} datos={{ nombre, talleNombre: talle, sku, barcode, linea }} onCerrar={() => setVerMovimientos(false)} />}
     </FichaCostado>
   )
 }

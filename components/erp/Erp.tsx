@@ -62,7 +62,7 @@ import { ClientesErp } from './clientes/ClientesErp'
 import { ProveedoresErp } from './clientes/ProveedoresErp'
 import { InicioErp } from './inicio/InicioErp'
 import { BusquedaGlobal, HojaDeAtajos, useAtajosErp, type DestinoBusqueda } from './BusquedaGlobal'
-import { FichaPrenda } from './stock/FichaPrenda'
+import { HistorialPrenda } from './stock/HistorialPrenda'
 import { periodoDeVenta } from '@/lib/erp/busqueda-global.core.js'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
@@ -545,7 +545,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
       </Modal>
       {panel === 'buscar' && <BusquedaGlobal marca={marca} marcas={marcas} secciones={SECCIONES_BUSCABLES} onElegir={elegirDeLaBusqueda} onCerrar={() => setPanel(null)} />}
       {panel === 'atajos' && <HojaDeAtajos onCerrar={() => setPanel(null)} />}
-      {prendaGlobal && <FichaPrenda key={`${prendaGlobal.marca}/${prendaGlobal.producto}/${prendaGlobal.talle}`} marca={prendaGlobal.marca} prenda={{ producto: prendaGlobal.producto, talle: prendaGlobal.talle, fila: null }} onCerrar={() => setPrendaGlobal(null)} ajustar={ajustarPrenda} />}
+      {prendaGlobal && <HistorialPrenda key={`${prendaGlobal.marca}/${prendaGlobal.producto}/${prendaGlobal.talle}`} marca={prendaGlobal.marca} producto={prendaGlobal.producto} talle={prendaGlobal.talle} onCerrar={() => setPrendaGlobal(null)} ajustar={ajustarPrenda} />}
     </div>
   )
 }

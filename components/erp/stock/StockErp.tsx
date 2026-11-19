@@ -29,7 +29,8 @@ import {
 import { NOMBRE_TIPO } from '@/lib/erp/stock.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
-import { FichaPrenda, type PrendaAbierta } from './FichaPrenda'
+import { type PrendaAbierta } from './FichaPrenda'
+import { HistorialPrenda } from './HistorialPrenda'
 import { useLineaErp, useTiendaErp } from '@/lib/erp/linea-erp'
 import { useLineaEnErp } from '@/lib/erp/prueba-corte'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
@@ -224,9 +225,10 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
       </BarraSeleccion>
 
       {ficha && (
-        <FichaPrenda
-          key={`${ficha.marca}/${ficha.prenda.producto}/${ficha.prenda.talle}`} marca={ficha.marca} prenda={{ ...ficha.prenda, fila: filaDeFicha ?? null }}
-          onCerrar={() => setFicha(null)} ajustar={ajustar}
+        // 18-nov (Darío): tocar un producto abre DIRECTO sus movimientos (la ficha del costado repetía la lista).
+        <HistorialPrenda
+          key={`${ficha.marca}/${ficha.prenda.producto}/${ficha.prenda.talle}`} marca={ficha.marca} producto={ficha.prenda.producto} talle={ficha.prenda.talle}
+          datos={filaDeFicha} onCerrar={() => setFicha(null)} ajustar={ajustar}
         />
       )}
     </div>

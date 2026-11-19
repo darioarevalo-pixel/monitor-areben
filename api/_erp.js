@@ -671,8 +671,16 @@ export async function historialDePrenda({ marca, producto, talle }) {
   if (!/^\d+$/.test(String(producto)) || !/^\d+$/.test(String(talle))) return { status: 400, error: 'Falta un dato del producto' }
   const { url, key } = cfgDeMarca(marca)
   const b = createClient(url, key)
-  const movimientos = await leerTodo(b, 'stock_movimiento', (x) => x.select('id, deposito, cantidad, tipo, origen, origen_ref, ocurrido_en, hora_exacta, linea, detalle')
-    .eq('product_id', producto).eq('size_id', talle).order('id'))
+  const [movimientos, inv] = await Promise.all([
+    leerTodo(b, 'stock_movimiento', (x) => x.select('id, deposito, cantidad, tipo, origen, origen_ref, ocurrido_en, hora_exacta, linea, sku, barcode, detalle')
+      .eq('product_id', producto).eq('size_id', talle).order('id')),
+    b.from('inventario').select('product_name, size_name, sku, barcode').eq('product_id', producto).eq('size_id', talle).limit(1),
+  ])
+  if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
+  const i0 = inv.data?.[0] || {}
+  // Un producto nacido en Ingreso después del corte ⛔ está en la copia de GN: el código sale del movimiento.
+  const conCodigo = [...movimientos].reverse().find((m) => m.sku || m.barcode) || {}
+  const prenda = { nombre: i0.product_name ?? null, talleNombre: i0.size_name ?? null, sku: i0.sku ?? conCodigo.sku ?? null, barcode: i0.barcode ?? conCodigo.barcode ?? null }
   const uuid = /^[0-9a-f-]{36}$/i
   const primero = (r) => String(r ?? '').split(':')[0]
   const gnIds = [...new Set(movimientos.filter((m) => m.origen === 'gn').map((m) => primero(m.origen_ref)).filter((x) => /^\d+$/.test(x)))]
@@ -706,7 +714,7 @@ export async function historialDePrenda({ marca, producto, talle }) {
     ventasTn: new Map(porTn.map((v) => [String(v.origen_ref).split(':')[1], venta(v)])),
     ajustes: new Map(ajustes.map((a) => [String(a.id), a])),
   })
-  return r
+  return { ...r, prenda }
 }
 
 /**

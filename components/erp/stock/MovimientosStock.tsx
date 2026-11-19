@@ -4,7 +4,7 @@
  * ERP › Stock › Movimientos, con el molde del diseño aprobado (`~/Documents/erp-monitor/diseno.md` §3, §4 y §7; tablero 3
  * del v8): la lista de REGISTRO del libro de stock — todo lo que movió stock, con lo que quedó después y el documento que
  * lo explica. Nada se borra. Vistas con su número, período, buscador, resumen ARRIBA, columnas por usuario y «Exportar».
- * Clic en la fila ⇒ la ficha de la PRENDA al costado (`FichaPrenda`, la misma de Stock › Stock).
+ * Clic en la fila ⇒ los movimientos del PRODUCTO en la ventana grande (`HistorialPrenda`, la misma de Stock › Stock).
  * Núcleo puro: `lib/erp/movimientos.core.js`; servidor: `api/_erp-stock.js` (`vista=movimientos`).
  *
  * 🔑 Botones (§4, lista de REGISTRO): sólo «⋯» a la izquierda. Hoy todo corre en paralelo con GN.
@@ -26,7 +26,7 @@ import {
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
-import { FichaPrenda } from './FichaPrenda'
+import { HistorialPrenda } from './HistorialPrenda'
 import type { PrendaAAjustar } from './StockErp'
 import { useLineaErp } from '@/lib/erp/linea-erp'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
@@ -123,7 +123,7 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
 
   const acciones = (f: FilaMovimiento) => {
     const menu: AccionMenu[] = [
-      { key: 'ficha', label: 'Abrir la ficha del producto', icono: 'abrir', onClick: () => setFicha(f) },
+      { key: 'ficha', label: 'Ver los movimientos del producto', icono: 'abrir', onClick: () => setFicha(f) },
       ...(ajusta ? [{ key: 'ajustar', label: 'Ajustar el producto', icono: 'conteo' as const, onClick: () => ajustar(aAjustar(f)), hint: 'Abre «Nuevo ajuste» con este producto.' }] : []),
     ]
     return <MenuAcciones acciones={menu} etiqueta={`Más acciones del movimiento de ${f.nombre} ${f.talleNombre}`} vertical alinear="izquierda" />
@@ -193,9 +193,9 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
       </BarraSeleccion>
 
       {ficha && (
-        <FichaPrenda
-          key={`${ficha.producto}/${ficha.talle}`} marca={marca} prenda={{ producto: ficha.producto, talle: ficha.talle, fila: null }}
-          onCerrar={() => setFicha(null)} ajustar={ajustar}
+        <HistorialPrenda
+          key={`${ficha.producto}/${ficha.talle}`} marca={marca} producto={ficha.producto} talle={ficha.talle}
+          datos={{ nombre: ficha.nombre, talleNombre: ficha.talleNombre, sku: ficha.sku, barcode: ficha.barcode, linea: ficha.linea }} onCerrar={() => setFicha(null)} ajustar={ajustar}
         />
       )}
     </div>

@@ -32,9 +32,15 @@ const ficha: StockDePrenda = {
   sinDeposito: [],
 }
 const leerStockDePrenda = vi.fn(async () => ficha)
+const historial = {
+  filas: [{ id: '1', cuando: '2026-11-10T15:00:00Z', horaExacta: true, deposito: 'local', depositoNombre: 'Local', tipo: 'venta', tipoNombre: 'Venta', grupo: 'ventas', ref: '#296', cantidad: -1, saldo: 2, saldoTotal: 7, desc: 'Local', quien: null }],
+  depositos: [{ deposito: 'local', nombre: 'Local', saldo: 2, movimientos: 1 }], total: 7,
+  prenda: { nombre: 'TOP SAHARA', talleNombre: 'S - CHOCOLATE', sku: 'TOP-0110-CH-S', barcode: '771' },
+}
+const leerHistorialDePrenda = vi.fn(async () => historial)
 vi.mock('@/lib/erp/cliente', () => ({
   leerCorteDeLinea: async () => ({ en_erp: false }), // sin corte: los carteles de siempre (`useLineaEnErp`)
-  leerListaDeProductos: async () => ({ filas: [] }), leerListaDeStock: () => leerListaDeStock(), leerStockDePrenda: () => leerStockDePrenda() }))
+  leerListaDeProductos: async () => ({ filas: [] }), leerListaDeStock: () => leerListaDeStock(), leerStockDePrenda: () => leerStockDePrenda(), leerHistorialDePrenda: () => leerHistorialDePrenda() }))
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', perfil: { name: 'bruno' } }) }))
 
 const guardado = new Map<string, string>()
@@ -60,6 +66,7 @@ const boton = (t: string | RegExp, en: ParentNode = document.body) => [...en.que
 const clic = async (el: Element) => { await act(async () => { (el as HTMLElement).click() }); await act(async () => {}) }
 const filaDe = (t: string) => [...host.querySelectorAll('[role="row"]')].find((r) => r.textContent?.includes(t))!
 const fichaAbierta = () => document.querySelector('aside[aria-label^="Ficha del producto"]')
+const ventana = () => document.querySelector('.mo-modal')
 
 describe('la lista de stock', () => {
   it('vistas con su número, el disponible arriba y lo apartado por pedidos', async () => {
@@ -86,16 +93,16 @@ describe('la lista de stock', () => {
     expect(host.querySelector('[role="table"]')!.textContent).toContain('BUZO ROMA')
   })
 
-  it('la fila abre la ficha al costado: disponible, por depósito contra Gestión Nube y el botón de los movimientos', async () => {
+  it('la fila abre DIRECTO sus movimientos (Darío 18-nov): la ventana, ⛔ la ficha del costado', async () => {
     await montar()
     await clic(filaDe('TOP SAHARA').querySelector('[role="cell"]:last-child')!)
-    const f = fichaAbierta()!
-    expect(f).toBeTruthy()
-    expect(f.textContent).toContain('Disponible6')
-    expect(f.textContent).toContain('Gestión Nube +1')
-    // El historial vive en la ventana «Movimientos» (Darío 18-nov, `tests/erp-historial-prenda.test.ts`).
-    expect(f.textContent).toContain('Ver movimientos')
-    expect(f.textContent).not.toContain('venta:296')
+    expect(fichaAbierta()).toBeNull()
+    const v = ventana()!
+    expect(v.textContent).toContain('TOP SAHARA · S - CHOCOLATE')
+    expect(v.textContent).toContain('TOP-0110-CH-S · 771')
+    expect(v.textContent).toContain('#296')
+    expect(v.textContent).toContain('Ajustar')
+    expect(v.textContent).not.toContain('venta:296')
   })
 
   it('«Ajustar» de la fila lleva el producto a «Nuevo ajuste»', async () => {
@@ -105,9 +112,9 @@ describe('la lista de stock', () => {
     expect(fichaAbierta()).toBeNull()
   })
 
-  it('el producto pedida desde Diferencias abre su ficha sola, con lo apartado de su fila', async () => {
+  it('el producto pedido desde otra pantalla abre solo sus movimientos', async () => {
     await montar({ marca: 'zattia', producto: '1', talle: '1' })
-    expect(fichaAbierta()!.textContent).toContain('1 sin preparar')
+    expect(ventana()!.textContent).toContain('TOP SAHARA')
   })
 
   it('ocultar una columna queda guardado para ese usuario', async () => {

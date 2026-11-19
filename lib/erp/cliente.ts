@@ -180,7 +180,7 @@ export type FilaHistorial = {
   id: string; cuando: string; horaExacta: boolean; deposito: string; depositoNombre: string
   tipo: string; tipoNombre: string; grupo: string; ref: string; cantidad: number; saldo: number; saldoTotal: number; desc: string; quien: string | null
 }
-export type HistorialDePrenda = { filas: FilaHistorial[]; depositos: Array<{ deposito: string; nombre: string; saldo: number; movimientos: number }>; total: number }
+export type HistorialDePrenda = { filas: FilaHistorial[]; depositos: Array<{ deposito: string; nombre: string; saldo: number; movimientos: number }>; total: number; prenda?: { nombre: string | null; talleNombre: string | null; sku: string | null; barcode: string | null } }
 export const leerHistorialDePrenda = (marca: MarcaErp, producto: string, talle: string) =>
   pedir<HistorialDePrenda>(null, `&vista=historial-prenda&marca=${marca}&producto=${producto}&talle=${talle}&nc=${Date.now()}`, 'No se pudieron leer los movimientos del producto.')
 
