@@ -218,7 +218,7 @@ export function BusquedaGlobal({ marca, marcas, secciones, onElegir, onCerrar }:
           </div>
         ))}
         {listo && !!escrito.trim() && !planos.length && (hayLectura || lista.length === 0) && escrito.trim().length >= 3 && (
-          <div style={{ padding: '14px 18px', fontSize: font.md, color: color.mut }}>No encontré nada con «{escrito.trim()}».</div>
+          <div style={{ padding: '14px 18px', fontSize: font.md, color: color.mut }}>Ningún resultado para «{escrito.trim()}».</div>
         )}
         {listo && !!lectura?.errores.length && hayLectura && lectura.clave === clave && (
           <div style={{ padding: '8px 18px', fontSize: font.sm, color: color.dangerInk }}>{lectura.errores.join(' · ')}</div>

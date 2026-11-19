@@ -192,7 +192,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
           {irA && ajusta && (
             <span style={{ marginLeft: 'auto', display: 'flex', gap: space[2] }}>
               <Button variant="soft" tone="brand" onClick={() => irA('ajustes', 'ajustes')}>Nuevo ajuste</Button>
-              <Button variant="soft" tone="info" onClick={() => irA('transferencias', 'mover')}>Mover</Button>
+              <Button variant="soft" tone="brand" onClick={() => irA('transferencias', 'mover')}>Transferir</Button>
             </span>
           )}
         </div>

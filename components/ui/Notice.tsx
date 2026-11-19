@@ -17,8 +17,9 @@ export function Notice({ tone = 'neutral', icon, children, onClose, style }: Not
     <div
       style={{
         display: 'flex', alignItems: 'flex-start', gap: 8,
-        fontSize: font.sm, color: t.fg, background: t.bg, border: `1px solid ${t.border}`,
-        borderRadius: radius.md, padding: `${space[2]}px ${space[3]}px`,
+        // 14 px y medio (Darío, 18-nov: «letras muy chiquitas»): un aviso se tiene que leer, ⛔ es una nota al pie.
+        fontSize: font.md, fontWeight: 500, lineHeight: 1.45, color: t.fg, background: t.bg, border: `1px solid ${t.border}`,
+        borderRadius: radius.md, padding: `10px ${space[3]}px`,
         ...style,
       }}
     >

@@ -63,7 +63,7 @@ describe('Mover y recibir', () => {
     expect(sale).toContain('evento'); expect(va).toContain('evento')
   })
 
-  it('dos escaneos suman 2 y «Mover» crea, arma y envía con esos renglones', async () => {
+  it('dos escaneos suman 2 y «Transferir» crea, arma y envía con esos renglones', async () => {
     m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [], enTransito: [] })
     m.buscarPrendas.mockResolvedValue({ variantes: [REM], cortado: false })
     const t = doc({ estado: 'borrador' })
@@ -71,8 +71,8 @@ describe('Mover y recibir', () => {
     await montar()
     await escanear('779001'); await escanear('779001')
     expect(m.buscarPrendas).toHaveBeenCalledWith('zattia', '779001')
-    expect(boton('Mover 2 u')).toBeTruthy()
-    await act(async () => { boton('Mover 2 u').click() })
+    expect(boton('Transferir 2 unidades')).toBeTruthy()
+    await act(async () => { boton('Transferir 2 unidades').click() })
     await esperar()
     const renglones = [{ product_id: '10', size_id: '1', sku: 'STU-REM-0019-M', barcode: '779001', cantidad: 2 }]
     expect(m.crearTransferenciaDoc).toHaveBeenCalledWith('stunned', 'deposito', 'local', renglones)
@@ -87,7 +87,7 @@ describe('Mover y recibir', () => {
     m.crearTransferenciaDoc.mockResolvedValue(res(doc({ estado: 'borrador' }))); m.armarTransferenciaDoc.mockRejectedValue(new Error('Se cayó'))
     await montar()
     await escanear('779001')
-    await act(async () => { boton('Mover 1 u').click() })
+    await act(async () => { boton('Transferir 1 unidad').click() })
     await esperar()
     expect(m.enviarTransferenciaDoc).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('no salió nada del stock')
@@ -101,10 +101,14 @@ describe('Mover y recibir', () => {
     await abrirFicha()
     expect(document.body.textContent).toContain('REMERA OVERSIZE · M')
     await act(async () => { boton('Recibir').click() })
-    expect(boton('Recibir con 3 u de menos')).toBeTruthy()
+    expect(boton('Recibir con 3 de menos')).toBeTruthy()
     await escanear('779001'); await escanear('779001')
-    expect(boton('Recibir con 1 u de menos')).toBeTruthy()
-    await act(async () => { boton('Recibir con 1 u de menos').click() })
+    expect(boton('Recibir con 1 de menos')).toBeTruthy()
+    // Con faltantes PREGUNTA (Darío, 18-nov); sin el proveedor de diálogos cae al confirm del navegador.
+    const pregunta = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await act(async () => { boton('Recibir con 1 de menos').click() })
+    expect(pregunta).toHaveBeenCalled()
+    pregunta.mockRestore()
     await esperar()
     expect(m.recibirTransferenciaDoc).toHaveBeenCalledWith('stunned', doc({}).id, [{ product_id: '10', size_id: '1', sku: 'STU-REM-0019-M', barcode: '779001', cantidad: 2 }])
     expect(document.body.textContent).toContain('recibida con 1 u de menos')
@@ -119,7 +123,7 @@ describe('Mover y recibir', () => {
     await abrirFicha()
     expect(boton('Recibir')).toBeUndefined()
     await act(async () => { boton('Preparar').click() })
-    expect((boton('Enviar con 2 u de menos') as HTMLButtonElement).disabled).toBe(true)
+    expect((boton('Enviar con 2 de menos') as HTMLButtonElement).disabled).toBe(true)
     await escanear('779001'); await escanear('779001')
     await act(async () => { boton('Enviar completa').click() })
     await esperar()
@@ -145,15 +149,16 @@ describe('Mover y recibir', () => {
     expect(m.enviarTransferenciaDoc).not.toHaveBeenCalled()
   })
 
-  it('una prenda que no salió en la transferencia frena «Recibir»', async () => {
+  it('una prenda que no salió en la transferencia ⛔ se suma: lo dice al escanear (Darío, 18-nov)', async () => {
     m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [doc({})], enTransito: [] })
     m.buscarPrendas.mockResolvedValue({ variantes: [{ ...REM, producto: '99', talle: '5', sku: 'STU-OTRA-S', barcode: '779999' }], cortado: false })
     await montar()
     await abrirFicha()
     await act(async () => { boton('Recibir').click() })
     await escanear('779999')
-    expect(document.body.textContent).toContain('no salieron en esta transferencia')
-    expect((boton('Recibir con') as HTMLButtonElement).disabled).toBe(true)
+    expect(document.body.textContent).toContain('no está en esta transferencia')
+    expect(document.body.textContent).toContain('0 de 3')
+    expect(m.recibirTransferenciaDoc).not.toHaveBeenCalled()
   })
 
   it('la nota viaja como 5º argumento sólo si se escribió', async () => {
@@ -163,8 +168,8 @@ describe('Mover y recibir', () => {
     m.crearTransferenciaDoc.mockResolvedValue(res(t)); m.armarTransferenciaDoc.mockResolvedValue(res(t)); m.enviarTransferenciaDoc.mockResolvedValue(res(doc({})))
     await montar()
     await escanear('779001')
-    await escribir(document.querySelector('input[placeholder^="Para qué"]') as HTMLInputElement, 'Para el local de Rosario')
-    await act(async () => { boton('Mover 1 u').click() })
+    await escribir(document.querySelector('input[placeholder^="Motivo"]') as HTMLInputElement, 'Para el local de Rosario')
+    await act(async () => { boton('Transferir 1 unidad').click() })
     await esperar()
     expect(m.crearTransferenciaDoc).toHaveBeenCalledWith('stunned', 'deposito', 'local', [{ product_id: '10', size_id: '1', sku: 'STU-REM-0019-M', barcode: '779001', cantidad: 1 }], 'Para el local de Rosario')
   })
@@ -175,26 +180,84 @@ describe('Mover y recibir', () => {
     await montar()
     await act(async () => { [...document.querySelectorAll('[role="tab"]')].find((b) => b.textContent?.includes('Recibidas'))!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     await abrirFicha()
-    expect(document.body.textContent).toContain('Faltaron 1 u al recibir')
-    expect(document.body.textContent).toContain('2 (-1)')
+    // La ventana (Darío, 18-nov): el estado y la fila dicen lo que faltó; una sola columna «Cantidad».
+    expect(document.body.textContent).toContain('Recibida · faltó 1')
+    expect(document.body.textContent).toContain('faltó 1')
     expect(boton('Recibir')).toBeUndefined()
-    expect(boton('Imprimir remito')).toBeTruthy()
+    expect(boton('Remito')).toBeTruthy()
   })
-  it('lista única (Bruno, 30-oct): todas juntas con su origen, lo que faltó armar, y «Mover» se abre con su botón', async () => {
+  it('lista única (Bruno, 30-oct): todas juntas con su tipo, y «Nueva transferencia» se abre con su botón', async () => {
     m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [
       doc({ id: 'r', numero: 9, origen: 'reposicion', origen_ref: 'ra1:t1', estado: 'recibida', faltoArmar: 4 }),
       doc({ id: 'l', numero: 8, estado: 'recibida' }),
     ], enTransito: [] })
     await montar({ unificada: true })
     const texto = document.body.textContent ?? ''
-    expect(texto).toContain('Reposición del monitor')
-    expect(texto).toContain('Movida a mano')
-    expect(texto).toContain('Faltó preparar')
+    expect(texto).toContain('Reposición')
+    expect(texto).toContain('Manual')
+    expect(texto).not.toContain('Faltó preparar')
     expect(document.querySelector('input[placeholder^="Código"]')).toBeNull()
-    await act(async () => { boton('Mover').click() })
+    await act(async () => { boton('Nueva transferencia').click() })
     expect(document.querySelector('input[placeholder^="Código"]')).not.toBeNull()
     act(() => root?.unmount()); root = null; host.remove()
     await montar({ unificada: true, abrirMover: true })
     expect(document.querySelector('input[placeholder^="Código"]')).not.toBeNull()
+  })
+
+  // ── Darío, 18-nov: lo imposible ⛔ se ofrece, y el código se resuelve sin ir al servidor ──
+  const conStock = (deps: Record<string, number>) => m.leerListaDeStock.mockResolvedValue({ filas: [{ producto: '10', talle: '1', nombre: 'REMERA OVERSIZE', talleNombre: 'M', sku: 'STU-REM-0019-M', barcode: '779001', linea: 'stunned', deps }] })
+
+  it('el código de barras se resuelve con la lista de stock, sin buscar en el servidor', async () => {
+    conStock({ deposito: 5, local: 0 })
+    m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [], enTransito: [] })
+    await montar()
+    await escanear('779001'); await escanear('779001')
+    expect(m.buscarPrendas).not.toHaveBeenCalled()
+    expect(boton('Transferir 2 unidades')).toBeTruthy()
+  })
+
+  it('al transferir ⛔ se suma lo que no queda en el origen', async () => {
+    conStock({ deposito: 1, local: 0 })
+    m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [], enTransito: [] })
+    await montar()
+    await escanear('779001'); await escanear('779001')
+    expect(document.body.textContent).toContain('no queda stock en Depósito')
+    expect(boton('Transferir 1 unidad')).toBeTruthy()
+  })
+
+  it('con una cantidad mayor al stock del origen, la fila se marca y «Transferir» ⛔ anda', async () => {
+    conStock({ deposito: 2, local: 0 })
+    m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [], enTransito: [] })
+    await montar()
+    await escanear('779001')
+    await escribir(document.querySelector('input[aria-label="Cantidad de REMERA OVERSIZE · M"]') as HTMLInputElement, '5')
+    expect(document.body.textContent).toContain('No hay stock suficiente en Depósito')
+    expect((boton('Transferir 5 unidades') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('el destino ⛔ ofrece el mismo depósito que el origen', async () => {
+    m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [], enTransito: [] })
+    await montar()
+    const [sale, va] = [...document.querySelectorAll('select')] as HTMLSelectElement[]
+    expect([...va.options].map((o) => o.value)).not.toContain(sale.value)
+  })
+
+  it('al recibir completo ⛔ pregunta: la franja «Llegó todo» y un toque', async () => {
+    conStock({ deposito: 0, local: 0 })
+    m.leerTransferenciasDoc.mockResolvedValue({ transferencias: [doc({})], enTransito: [] })
+    m.recibirTransferenciaDoc.mockResolvedValue(res(doc({ estado: 'recibida' })))
+    const pregunta = vi.spyOn(window, 'confirm')
+    await montar()
+    await abrirFicha()
+    await act(async () => { boton('Recibir').click() })
+    await escanear('779001'); await escanear('779001'); await escanear('779001')
+    expect(document.body.textContent).toContain('Llegó todo')
+    await escanear('779001')
+    expect(document.body.textContent).toContain('ya escaneaste las 3 que se enviaron')
+    await act(async () => { boton('Recibir completa').click() })
+    await esperar()
+    expect(pregunta).not.toHaveBeenCalled()
+    expect(m.recibirTransferenciaDoc).toHaveBeenCalledWith('stunned', doc({}).id, [{ product_id: '10', size_id: '1', sku: 'STU-REM-0019-M', barcode: '779001', cantidad: 3 }])
+    pregunta.mockRestore()
   })
 })

@@ -6,10 +6,11 @@
 
 import { PASOS } from '@/lib/erp/transferencias.core.js'
 
-const AZUL = '#0284c7', VERDE = '#16a34a', ROJO = '#dc2626', PISTA = '#e3e8ef'
+// En curso = el índigo del sistema (Darío, 18-nov: el celeste ⛔ significaba nada).
+const AZUL = 'var(--mo-brand-solid)', VERDE = '#16a34a', ROJO = '#dc2626', PISTA = '#e3e8ef'
 /** El 4º paso sin control al llegar: GN mueve el stock de un golpe y nadie escanea en destino (⛔ verde lleno). */
 const RAYADO = `repeating-linear-gradient(135deg, ${VERDE} 0 3px, ${PISTA} 3px 6px)`
-const TEXTO = { curso: '#075985', rayado: '#15803d', ok: '#15803d', rojo: '#b42318', gris: '#5d6b82' } as const
+const TEXTO = { curso: 'var(--mo-brand)', rayado: '#15803d', ok: '#15803d', rojo: '#b42318', gris: '#5d6b82' } as const
 
 export function BarraPasos({ paso, fin, texto }: { paso: number; fin: 'curso' | 'rayado' | 'ok' | 'rojo' | 'gris'; texto: string }) {
   const fondo = (i: number) => {

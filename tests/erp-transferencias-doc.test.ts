@@ -17,8 +17,8 @@ describe('transferencias-doc', () => {
     expect(pasoDeDoc(d({ estado: 'armada' })).paso).toBe(2)
     expect(pasoDeDoc(d())).toMatchObject({ paso: 3, fin: 'curso' })
     expect(pasoDeDoc(d({ estado: 'recibida' }))).toMatchObject({ paso: 4, fin: 'ok' })
-    expect(pasoDeDoc(d({ estado: 'recibida', diferencias: [{ sku: 'a', enviada: 3, recibida: 1, diferencia: -2 }] }))).toMatchObject({ paso: 4, fin: 'rojo', texto: 'Recibida con 2 u de menos' })
-    expect(pasoDeDoc(d({ estado: 'cancelada' })).fin).toBe('gris')
+    expect(pasoDeDoc(d({ estado: 'recibida', diferencias: [{ sku: 'a', enviada: 3, recibida: 1, diferencia: -2 }] }))).toMatchObject({ paso: 4, fin: 'rojo', texto: 'Recibida · faltó 2' })
+    expect(pasoDeDoc(d({ estado: 'cancelada' }))).toMatchObject({ fin: 'gris', texto: 'Anulada' })
   })
   it('los sobrantes ⛔ cuentan como faltantes', () => {
     expect(faltantesDe(d({ diferencias: [{ diferencia: -2 }, { diferencia: 1 }] }))).toBe(2)
@@ -26,7 +26,7 @@ describe('transferencias-doc', () => {
   it('vistas con su número; se entra a «En camino» si hay, si no a «Todas»', () => {
     const docs = [d(), d({ numero: 2, estado: 'borrador' }), d({ numero: 3, estado: 'recibida' })]
     const c = contarVistasDoc(docs)
-    expect(c).toEqual({ en_camino: 1, sin_enviar: 1, recibidas: 1, todas: 3 })
+    expect(c).toEqual({ en_camino: 1, sin_enviar: 1, recibidas: 1, faltantes: 0, todas: 3 })
     expect(vistaDeEntradaDoc(c)).toBe('en_camino')
     expect(vistaDeEntradaDoc({ en_camino: 0 })).toBe('todas')
   })

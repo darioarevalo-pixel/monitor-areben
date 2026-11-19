@@ -63,7 +63,7 @@ describe('Recibir en el celular', () => {
     const tarjeta = () => host.querySelector('[data-tono]') as HTMLElement
     expect(tarjeta().textContent).toContain('REMERA OVERSIZE · M')
     expect(tarjeta().dataset.tono).toBe('nada')
-    expect(host.textContent).toContain('0 de 3 unidades contadas')
+    expect(host.textContent).toContain('0 de 3 escaneadas')
     // La lista de transferencias ⛔ está mientras se recibe: la tarea ocupa la pantalla.
     expect(host.querySelector('.mo-lista-fila, [role="listitem"]')).toBeNull()
     const mas = host.querySelector('button[aria-label="Más REMERA OVERSIZE · M"]') as HTMLButtonElement
@@ -73,7 +73,9 @@ describe('Recibir en el celular', () => {
     expect(tarjeta().textContent).toContain('faltan 2')
     await click(mas); await click(mas)
     expect(tarjeta().dataset.tono).toBe('success')
-    expect(host.textContent).toContain('3 de 3 unidades contadas')
+    // Completo: la franja verde «Llegó todo» (Darío, 18-nov).
+    expect(host.textContent).toContain('Llegó todo')
+    expect(host.textContent).toContain('3 de 3 escaneadas')
     const recibir = [...elPie()!.querySelectorAll('button')].find((b) => b.textContent === 'Recibir completa')!
     await click(recibir)
     expect(m.recibirTransferenciaDoc).toHaveBeenCalledWith('stunned', ID, [{ product_id: '10', size_id: '1', sku: 'STU-REM-0019-M', barcode: '779001', cantidad: 3 }])
@@ -85,7 +87,7 @@ describe('Recibir en el celular', () => {
     expect(host.querySelector('[data-tono]')).toBeNull()
     expect(host.querySelector('input[aria-label="Cantidad de REMERA OVERSIZE · M"]')).toBeTruthy()
     expect(elPie()).toBeNull()
-    expect(boton('Recibir con 3 u de menos')).toBeTruthy()
+    expect(boton('Recibir con 3 de menos')).toBeTruthy()
   })
 })
 

@@ -61,14 +61,14 @@ describe('El buscador con Stunned elegido', () => {
     expect(opciones()).toEqual(['+ REMERA STU · M'])
   })
 
-  it('Mover: escanear el código de un producto de Zattia ⛔ lo suma', async () => {
+  it('Transferir: escanear el código de un producto de Zattia ⛔ lo suma', async () => {
     m.buscarPrendas.mockResolvedValue({ variantes: [ZAT], cortado: false })
     const { MoverYRecibir } = await import('@/components/erp/stock/MoverYRecibir')
     await montar(<ProveedorLineaErp value="stunned"><MoverYRecibir /></ProveedorLineaErp>)
     const caja = host.querySelector('input[placeholder^="Código"]') as HTMLInputElement
     await escribir(caja, '779002')
     await act(async () => { caja.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) }); await esperar()
-    expect(host.textContent).toContain('No encontré «779002»')
-    expect(host.textContent).toContain('Todavía no se escaneó nada.')
+    expect(host.textContent).toContain('Ningún producto coincide con «779002»')
+    expect(host.textContent).toContain('Sin productos escaneados.')
   })
 })

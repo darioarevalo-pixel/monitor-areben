@@ -58,7 +58,7 @@ export function TileResumen({ titulo, valor, oscuro, tono, nota }: { titulo: str
 }
 
 /** Las vistas que son un PROBLEMA a revisar (§9 color): en rojo cuando tienen algo. */
-const VISTAS_PROBLEMA = new Set(['neg', 'sincosto', 'atrasadas', 'dif', 'sinpagar', 'sinfactura', 'debe'])
+const VISTAS_PROBLEMA = new Set(['neg', 'sincosto', 'atrasadas', 'dif', 'sinpagar', 'sinfactura', 'debe', 'faltantes'])
 
 export function VistasLista({ vistas, valor, conteo, onCambio, todasRojas }: {
   /** Todas las vistas son problemas (Diferencias, Conciliación). */
@@ -71,17 +71,18 @@ export function VistasLista({ vistas, valor, conteo, onCambio, todasRojas }: {
 }) {
   return (
     // `mo-vistas`: en el celular se deslizan de costado en un solo renglón (globals.css).
-    <div role="tablist" aria-label="Vistas" className="mo-vistas" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '12px 12px 0' }}>
+    // Pestañas subrayadas (Darío, 18-nov): la elegida en índigo con raya abajo; el número chico al lado, rojo sólo si es un problema.
+    <div role="tablist" aria-label="Vistas" className="mo-vistas" style={{ display: 'flex', gap: 20, flexWrap: 'wrap', padding: '0 16px', borderBottom: `1px solid ${color.line}` }}>
       {vistas.map(([k, nombre]) => {
         const on = valor === k
         const rojo = !on && (todasRojas || VISTAS_PROBLEMA.has(k)) && (conteo[k] ?? 0) > 0
         return (
           <button
             key={k} type="button" role="tab" aria-selected={on} onClick={() => onCambio(k)}
-            style={{ height: 32, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 12px', borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', fontSize: 13.5, fontWeight: weight.semibold, border: `1px solid ${on ? 'var(--mo-brand-solid)' : rojo ? 'var(--mo-danger-border)' : color.line}`, background: on ? 'var(--mo-brand-solid)' : rojo ? 'var(--mo-danger-bg)' : color.surface, color: on ? '#fff' : rojo ? 'var(--mo-danger-ink)' : color.ink2 }}
+            style={{ height: 44, display: 'inline-flex', alignItems: 'center', gap: 6, padding: 0, marginBottom: -1, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', fontSize: 14, fontWeight: on ? weight.semibold : weight.medium, border: 0, borderBottom: `2px solid ${on ? 'var(--mo-brand-solid)' : 'transparent'}`, borderRadius: 0, background: 'transparent', color: on ? 'var(--mo-brand)' : color.ink2 }}
           >
             {nombre}
-            <span style={{ fontSize: 12, fontWeight: weight.bold, padding: '0 6px', borderRadius: 999, background: on ? 'rgba(255,255,255,0.18)' : rojo ? 'var(--mo-danger-border)' : color.bg2, color: on ? '#fff' : rojo ? 'var(--mo-danger-ink)' : color.mut }}>{(conteo[k] ?? 0).toLocaleString('es-AR')}</span>
+            <span style={{ fontSize: 12, fontWeight: weight.semibold, minWidth: 20, padding: '1px 6px', borderRadius: 999, textAlign: 'center', fontVariantNumeric: 'tabular-nums', background: rojo ? 'var(--mo-danger-bg)' : on ? 'var(--mo-brand-bg)' : color.bg2, color: rojo ? 'var(--mo-danger-ink)' : on ? 'var(--mo-brand)' : color.mut }}>{(conteo[k] ?? 0).toLocaleString('es-AR')}</span>
           </button>
         )
       })}

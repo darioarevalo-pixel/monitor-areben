@@ -131,7 +131,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
         if (pedida) {
           const f = d.filas.find((x: FilaVentaLista) => x.id === pedida.id)
           if (f) setFicha({ fila: f })
-          else setAviso(`No encontré la venta #${pedida.numero} en ${periodos.find(([k]) => k === periodo)?.[1].toLowerCase() ?? 'este período'}.`)
+          else setAviso(`La venta #${pedida.numero} no está en ${periodos.find(([k]) => k === periodo)?.[1].toLowerCase() ?? 'este período'}.`)
           soltar?.()
         }
       })

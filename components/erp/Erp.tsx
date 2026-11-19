@@ -109,7 +109,7 @@ export const SECCIONES_ERP: Seccion[] = [
     key: 'stock', titulo: 'Stock', icono: 'M21 8l-9-5-9 5 9 5 9-5z M3 8v8l9 5 9-5V8 M12 13v8',
     pestanias: [
       { key: 'stock', label: 'Stock', vistas: [{ key: 'stock', label: 'Productos' }, { key: 'movimientos', label: 'Movimientos' }] },
-      { key: 'transferencias', label: 'Transferencias', vistas: [{ key: 'transferencias', label: 'Transferencias' }, { key: 'mover', label: 'Mover y recibir' }] },
+      { key: 'transferencias', label: 'Transferencias', vistas: [{ key: 'transferencias', label: 'Transferencias' }, { key: 'mover', label: 'Nueva transferencia' }] },
       { key: 'ajustes', label: 'Ingresos y ajustes', junta: 'Tipo', vistas: [{ key: 'ajustes', label: 'Ajustes' }, { key: 'ingresos', label: 'Ingresos de mercadería' }] },
       { key: 'diferencias', label: 'Diferencias', junta: 'Contra qué', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre', permiso: 'configurar' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Con Gestión Nube' }, { key: 'chequeo', label: 'Chequeo de movimientos', permiso: 'configurar' }] },
     ],
