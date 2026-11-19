@@ -12,24 +12,17 @@
 import { lineaDe } from '@/lib/lineas'
 import { useEffect, useState } from 'react'
 import { Button, MenuAcciones, Notice, color, font, space, weight, type AccionMenu } from '@/components/ui'
-import { DatoFicha, DatosFicha, FichaCostado, Historial, type HechoHistorial, type PieFicha } from '@/components/ui/FichaCostado'
+import { DatoFicha, DatosFicha, FichaCostado, type PieFicha } from '@/components/ui/FichaCostado'
+import { HistorialPrenda } from './HistorialPrenda'
 import { usePantallaAngosta } from '@/lib/movil'
-import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
+import { ChipEstado } from '@/components/ui/PiezasLista'
 import { leerStockDePrenda, type FilaStock, type MarcaErp, type StockDePrenda } from '@/lib/erp/cliente'
-import { NOMBRE_DEPOSITO, NOMBRE_ORIGEN, NOMBRE_TIPO } from '@/lib/erp/stock.core.js'
-import { documentoDe } from '@/lib/erp/movimientos.core.js'
-import type { NombreIcono } from '@/components/ui/Icono'
-import type { Tone } from '@/components/ui/tokens'
+import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 
 const nombreDe = (mapa: Record<string, string>, k: string) => mapa[k] ?? k
 const conSigno = (n: number) => (n > 0 ? `+${n}` : String(n))
 const LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
 
-/** El ícono y el tono de cada movimiento en el historial. */
-const HECHO: Record<string, [NombreIcono, Tone]> = {
-  apertura: ['historial', 'neutral'], venta: ['pesos', 'success'], anulacion: ['anular', 'danger'], correccion: ['lapiz', 'warning'],
-  transferencia: ['transferencia', 'action'], ingreso: ['recepciones', 'brand'], ajuste_conteo: ['conteo', 'warning'], reapertura: ['historial', 'neutral'], ajuste: ['conteo', 'warning'],
-}
 
 /** La prenda que se abre: con la fila de la lista, o sólo con su id (cuando viene de Diferencias o Conciliación). */
 export type PrendaAbierta = { producto: string; talle: string; fila: FilaStock | null }
@@ -42,6 +35,7 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
 }) {
   const [s, setS] = useState<StockDePrenda | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [verMovimientos, setVerMovimientos] = useState(false)
   useEffect(() => {
     let vivo = true
     leerStockDePrenda(marca, prenda.producto, prenda.talle)
@@ -66,15 +60,6 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
   const local = s?.depositos.find((d) => d.deposito === 'local')?.libro ?? f?.deps.local ?? 0
   const negativo = (disponible ?? 0) < 0 || !!s?.depositos.some((d) => d.libro < 0)
 
-  const hechos: HechoHistorial[] = (s?.historial ?? []).map((m) => {
-    const [icono, tono] = HECHO[m.tipo] ?? ['historial', 'neutral']
-    return {
-      cuando: m.ocurrido_en, icono, tono,
-      titulo: `${nombreDe(NOMBRE_TIPO, m.tipo)} · ${conSigno(m.cantidad)}`,
-      // La referencia es la clave técnica del libro («uuid:producto:talle:depósito»): ⛔ se muestra.
-      detalle: `${nombreDe(NOMBRE_DEPOSITO, m.deposito)} · quedan ${m.saldo} · ${m.origen === 'recepcion' ? documentoDe(m) : nombreDe(NOMBRE_ORIGEN, m.origen)}`,
-    }
-  })
 
   const menu: AccionMenu[] = [
     { key: 'repo', label: 'Transferir en el monitor ↗', icono: 'abrir', onClick: () => window.open('/reposicion', '_blank', 'noopener'), hint: 'Las transferencias se preparan y se reciben escaneando en Reposición.' },
@@ -125,7 +110,7 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
         {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : (
           <div role="table" aria-label="Stock por depósito" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 64px 64px 92px', columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
             {['Depósito', 'Areben Gestión', 'Gestión Nube', ''].map((t, i) => <span key={i} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: i ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>)}
-            {s.depositos.map((d) => (
+            {s.depositos.filter((d) => d.deposito !== 'deposito_mayorista' || d.libro !== 0).map((d) => (
               <div key={d.deposito} role="row" style={{ display: 'contents' }}>
                 <span role="cell" style={{ padding: '8px 0', borderBottom: `1px solid ${color.bg2}` }}>{nombreDe(NOMBRE_DEPOSITO, d.deposito)}</span>
                 <span role="cell" style={{ padding: '8px 0', borderBottom: `1px solid ${color.bg2}`, textAlign: 'right', fontWeight: weight.semibold, color: d.libro < 0 ? 'var(--mo-danger-ink)' : color.ink }}>{d.libro}</span>
@@ -139,12 +124,12 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
       </section>
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
-        <div>
-          <h3 style={h3}>Historial</h3>
-          <div style={{ fontSize: font.sm, color: color.mut }}>cada movimiento, con lo que quedó · nada se borra: una corrección es otro movimiento</div>
-        </div>
-        {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : !hechos.length ? <span style={{ color: color.mut }}>Areben Gestión todavía no tiene movimientos de este producto.</span> : <Historial hechos={hechos} cuandoTexto={cuandoCorto} />}
+        <h3 style={h3}>Movimientos</h3>
+        {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : !s.historial.length ? <span style={{ color: color.mut }}>Areben Gestión todavía no tiene movimientos de este producto.</span> : (
+          <Button variant="soft" tone="brand" onClick={() => setVerMovimientos(true)} style={{ alignSelf: 'flex-start' }}>Ver movimientos</Button>
+        )}
       </section>
+      {verMovimientos && <HistorialPrenda marca={marca} producto={prenda.producto} talle={prenda.talle} nombre={nombre} variante={talle} codigo={sku} onCerrar={() => setVerMovimientos(false)} />}
     </FichaCostado>
   )
 }

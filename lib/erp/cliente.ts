@@ -176,6 +176,14 @@ export const buscarPrendas = (marca: MarcaErp, q: string) =>
 export const leerStockDePrenda = (marca: MarcaErp, producto: string, talle: string) =>
   pedir<StockDePrenda>(null, `&vista=stock&marca=${marca}&producto=${producto}&talle=${talle}&nc=${Date.now()}`, 'No se pudo leer el stock del producto.')
 
+export type FilaHistorial = {
+  id: string; cuando: string; horaExacta: boolean; deposito: string; depositoNombre: string
+  tipo: string; tipoNombre: string; grupo: string; ref: string; cantidad: number; saldo: number; saldoTotal: number; desc: string; quien: string | null
+}
+export type HistorialDePrenda = { filas: FilaHistorial[]; depositos: Array<{ deposito: string; nombre: string; saldo: number; movimientos: number }>; total: number }
+export const leerHistorialDePrenda = (marca: MarcaErp, producto: string, talle: string) =>
+  pedir<HistorialDePrenda>(null, `&vista=historial-prenda&marca=${marca}&producto=${producto}&talle=${talle}&nc=${Date.now()}`, 'No se pudieron leer los movimientos del producto.')
+
 export type FilaDiferencia = {
   producto: string; talle: string; nombre: string | null; talleNombre: string | null; linea: string; deposito: string
   clase: string; explicacion: string | null; deltaGN: number; deltaLibro: number; nivelGN: number; nivelLibro: number; diferencia: number

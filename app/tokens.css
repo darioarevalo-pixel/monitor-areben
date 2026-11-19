@@ -103,6 +103,20 @@
      un golpe de vista, que es lo único que estos tres colores tienen que lograr. */
   --mo-marca-stunned-fg: #0f766e;
   --mo-marca-stunned-bg: #ccfbf1;
+  /* Movimientos de stock (ficha del producto › «Movimientos», Darío 18-nov): una etiqueta por TIPO de movimiento,
+     para leer la tabla de un golpe de vista. Compra verde (entra mercadería nueva), Venta azul (lo de todos los días),
+     Transferencia violeta (entre depósitos propios), Ajuste ámbar (alguien corrigió a mano), Anulación/cancelado rosa
+     (deshacen una venta). Son de identidad, ⛔ de estado. */
+  --mo-mov-compra-fg: var(--mo-success-ink);
+  --mo-mov-compra-bg: #dcfce7;
+  --mo-mov-venta-fg: #075985;
+  --mo-mov-venta-bg: #e0f2fe;
+  --mo-mov-transf-fg: #6b21a8;
+  --mo-mov-transf-bg: #f3e8ff;
+  --mo-mov-ajuste-fg: #92400e;
+  --mo-mov-ajuste-bg: #fef3c7;
+  --mo-mov-deshace-fg: #9d174d;
+  --mo-mov-deshace-bg: #fce7f3;
   /* Mayorista (CRM): mismo criterio, es una etiqueta de identidad y tiene que
      distinguirse del acento de la app para leerse como categoría de cliente. */
   --mo-mayorista-fg: #6d28d9;

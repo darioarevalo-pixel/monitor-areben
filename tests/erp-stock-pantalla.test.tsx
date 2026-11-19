@@ -86,15 +86,15 @@ describe('la lista de stock', () => {
     expect(host.querySelector('[role="table"]')!.textContent).toContain('BUZO ROMA')
   })
 
-  it('la fila abre la ficha al costado: disponible, por depósito contra Gestión Nube e historial con lo que quedó', async () => {
+  it('la fila abre la ficha al costado: disponible, por depósito contra Gestión Nube y el botón de los movimientos', async () => {
     await montar()
     await clic(filaDe('TOP SAHARA').querySelector('[role="cell"]:last-child')!)
     const f = fichaAbierta()!
     expect(f).toBeTruthy()
     expect(f.textContent).toContain('Disponible6')
     expect(f.textContent).toContain('Gestión Nube +1')
-    expect(f.textContent).toContain('Venta · -1')
-    expect(f.textContent).toContain('Local · quedan 2 · Caja')
+    // El historial vive en la ventana «Movimientos» (Darío 18-nov, `tests/erp-historial-prenda.test.ts`).
+    expect(f.textContent).toContain('Ver movimientos')
     expect(f.textContent).not.toContain('venta:296')
   })
 

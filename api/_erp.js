@@ -46,6 +46,7 @@
  *   GET  ?recurso=erp&vista=proveedores&marca=…&q=…                  los proveedores del ERP (sql/013) para elegir en el costo
  *   POST {recurso:'erp', accion:'guardar-proveedor', marca, nombre, cuit?}   alta a mano de un proveedor
  *   GET  ?recurso=erp&vista=stock&marca=…&producto=ID&talle=ID       el libro y GN de esa prenda, con historial
+ *   GET  ?recurso=erp&vista=historial-prenda&marca=…&producto=ID&talle=ID   «Movimientos» de la prenda, como tabla (`lib/erp/historial-prenda.core.js`)
  *   GET  ?recurso=erp&vista=ventas&marca=…&q=nº|cliente&desde&hasta    busca ventas propias (las del motor)
  *   GET  ?recurso=erp&vista=venta&marca=…&id=UUID                      la ficha: prendas, pagos, factura, estado
  *   POST {recurso:'erp', accion:'anular', marca, ventaId, motivo, devolucion:{forma}, cliente?}  anula una venta propia (por el motor, §17)
@@ -97,6 +98,7 @@ import { cortesDe } from './_erp-corte.js'
 import { SQL_CTE_LINEA_GN, lineasDeVenta } from '../lib/erp/linea-gn.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
+import { armarHistorial } from '../lib/erp/historial-prenda.core.js'
 import { SIN_ARCA, arcaConectado, baseFacturacion, clienteArcaDelEntorno, repoFacturas } from './_facturacion.js'
 import { CBTE, COND_IVA, DOC, ambienteDeEntorno, ptoVtaDe } from '../motor/arca/arca.core.js'
 import { techoDelMes } from '../motor/arca/techo.core.js'
@@ -657,6 +659,54 @@ export async function stockDePrenda({ marca, q, producto, talle }) {
     prenda: { producto: String(producto), talle: String(talle), nombre: f.product_name ?? null, talleNombre: f.size_name ?? null, sku: f.sku ?? null, barcode: f.barcode ?? null },
     ...stockDeVariante({ marca, movimientos: movs, gn: gn.data }),
   }
+}
+
+/**
+ * ERP › Stock › ficha › «Movimientos» (Darío 18-nov): el historial de una prenda como tabla, con el número de la venta, el
+ * cliente y el ajuste (`lib/erp/historial-prenda.core.js` arma los renglones). Sólo lectura, con la clave de la marca.
+ *   GET ?recurso=erp&vista=historial-prenda&marca=bdi|zattia&producto=ID&talle=ID
+ */
+export async function historialDePrenda({ marca, producto, talle }) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!/^\d+$/.test(String(producto)) || !/^\d+$/.test(String(talle))) return { status: 400, error: 'Falta un dato del producto' }
+  const { url, key } = cfgDeMarca(marca)
+  const b = createClient(url, key)
+  const movimientos = await leerTodo(b, 'stock_movimiento', (x) => x.select('id, deposito, cantidad, tipo, origen, origen_ref, ocurrido_en, hora_exacta, linea, detalle')
+    .eq('product_id', producto).eq('size_id', talle).order('id'))
+  const uuid = /^[0-9a-f-]{36}$/i
+  const primero = (r) => String(r ?? '').split(':')[0]
+  const gnIds = [...new Set(movimientos.filter((m) => m.origen === 'gn').map((m) => primero(m.origen_ref)).filter((x) => /^\d+$/.test(x)))]
+  const ventaIds = [...new Set(movimientos.filter((m) => m.origen === 'motor').map((m) => primero(m.origen_ref)).filter((x) => uuid.test(x)))]
+  const cajas = [...new Set(movimientos.filter((m) => m.origen === 'caja' && m.detalle?.caja).map((m) => String(m.detalle.caja)))]
+  const tns = [...new Set(movimientos.filter((m) => m.detalle?.tn?.tn_id != null).map((m) => `${m.linea === 'stunned' ? 'stunned' : marca}:${m.detalle.tn.tn_id}`))]
+  const ajusteIds = [...new Set(movimientos.filter((m) => m.origen === 'ajuste').map((m) => primero(m.origen_ref)).filter((x) => uuid.test(x)))]
+  const deA200 = async (ids, leer) => {
+    const out = []
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data, error } = await leer(ids.slice(i, i + 200))
+      if (error) throw new Error(error.message)
+      out.push(...(data || []))
+    }
+    return out
+  }
+  const COLS_VENTA = 'id, numero, origen, origen_ref, canal, usuario, cliente:cliente_id (nombre)'
+  const [gn, porId, porCaja, porTn, ajustes] = await Promise.all([
+    deA200(gnIds, (x) => b.from('ventas').select('id, number, client_name, channel').in('id', x)),
+    deA200(ventaIds, (x) => b.from('venta').select(COLS_VENTA).in('id', x)),
+    deA200(cajas, (x) => b.from('venta').select(COLS_VENTA).eq('origen', 'caja').in('origen_ref', x)),
+    deA200(tns, (x) => b.from('venta').select(COLS_VENTA).eq('origen', 'tn').in('origen_ref', x)),
+    deA200(ajusteIds, (x) => b.from('stock_ajuste').select('id, numero, motivo, detalle, creado_por').in('id', x)),
+  ])
+  const venta = (v) => ({ numero: v.numero, origen: v.origen, origen_ref: v.origen_ref, canal: v.canal, usuario: v.usuario ?? null, cliente: v.cliente?.nombre ?? null })
+  const r = armarHistorial({
+    movimientos,
+    ventasGn: new Map(gn.map((g) => [String(g.id), { number: g.number, client_name: g.client_name ? String(g.client_name).trim() : null, channel: g.channel }])),
+    ventas: new Map(porId.map((v) => [String(v.id), venta(v)])),
+    ventasCaja: new Map(porCaja.map((v) => [String(v.origen_ref), venta(v)])),
+    ventasTn: new Map(porTn.map((v) => [String(v.origen_ref).split(':')[1], venta(v)])),
+    ajustes: new Map(ajustes.map((a) => [String(a.id), a])),
+  })
+  return r
 }
 
 /**
@@ -2008,6 +2058,11 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET' && req.query.vista === 'stock') {
       const r = await stockDePrenda({ marca: String(req.query.marca || ''), q: req.query.q, producto: req.query.producto, talle: req.query.talle })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'GET' && req.query.vista === 'historial-prenda') {
+      const r = await historialDePrenda({ marca: String(req.query.marca || ''), producto: req.query.producto, talle: req.query.talle })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

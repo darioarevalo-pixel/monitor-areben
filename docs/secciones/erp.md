@@ -46,7 +46,12 @@ porque el test de registro lo exige: el shell ya ⛔ lo monta.
 **Stock** (14-oct, sólo lectura; 🎨 **19-oct, Diseño: rehecha con el molde de Ventas**): UNA lista con cada prenda
 (variante) y lo que hay por depósito, vistas con número (Con stock · Sin stock en el Local · Negativos · Con pedidos ·
 Todo), resumen ARRIBA, buscador (nombre, SKU, código entero), columnas por usuario (`erp-stock-<marca>`) y la ficha AL
-COSTADO (por depósito ERP contra GN + historial con lo que quedó). 🔑 Palabras del diseño: **en estantería** = el
+COSTADO (por depósito ERP contra GN + «Ver movimientos»). 🆕 18-nov (Darío): «Ver movimientos» abre la VENTANA grande
+(`HistorialPrenda`, vista `historial-prenda`, núcleo `lib/erp/historial-prenda.core.js`): tabla Fecha · Movimiento · Entrada ·
+Salida · Saldo · Descripción, por depósito o Todos, filtro por tipo (con filtro ⛔ Saldo). 🔑 Regla de Darío: UN renglón por
+cada vez que entra o sale de verdad — el pedido de TN (venta + preparado + desarme «sin armar» del 16-nov) es una «Venta»;
+el desarme real es «Pedido cancelado/devuelto»; las correcciones de una venta que dan 0 ⛔ se ven (si no, «Ajuste de venta»).
+Colores por tipo: tokens `--mo-mov-*`. ⏭️ Transferir y Ajustar dentro de la ventana (propuesta ya aprobada). 🔑 Palabras del diseño: **en estantería** = el
 **libro de stock** (`stock_movimiento`, la SUMA: es inmutable) · **en pedidos** = lo que apartan los pedidos de TN SIN
 PAGAR (cruce por SKU con `inventario`; el libro ⛔ los descontó) · **disponible** = estantería − pedidos, el número que
 manda. 🔴 La reserva del motor (`reservasTN`) además VENCE a las 72 h; mientras GN viva eso es seco ⇒ acá cuentan todos
