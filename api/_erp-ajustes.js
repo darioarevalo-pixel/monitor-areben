@@ -7,15 +7,17 @@
  *   POST {recurso:'erp', accion:'crear-ajuste', linea, deposito, motivo, detalle?, fuente?, renglones}
  *   POST {recurso:'erp', accion:'aprobar-ajuste', linea, ajusteId}
  *   POST {recurso:'erp', accion:'descartar-ajuste', linea, ajusteId, motivo}
+ *   POST {recurso:'erp', accion:'eliminar-ajuste', linea, ajusteId}     sólo Admin (`configurar`): el aplicado vuelve atrás (Bruno 18-nov)
  *
  * 🔑 EN SOMBRA (Bruno, 18-oct: todo en paralelo con GN): el ajuste mueve SÓLO el libro del ERP. ⛔ GN ni Tienda Nube: el
  * equipo sigue ajustando en GN como hoy. Sirve para cerrar «El ERP dice otro stock» de la conciliación contando la prenda.
  */
 import { LINEAS, armarAContar, baseDe, filaDeAjuste, leerCrearAjuste, textoDeAviso } from '../lib/erp/ajuste.core.js'
 import { textoDelMotor } from '../lib/erp/venta.core.js'
+import { NOMBRE_DEPOSITO } from '../lib/erp/stock.core.js'
 
 const SIN_TABLA = 'Los ajustes todavía no están disponibles: falta actualizar la base (026).'
-const STATUS = { ENTRADA_INVALIDA: 400, QUEDA_NEGATIVO: 409, SIN_DIFERENCIAS: 409, YA_RESUELTO: 409, NO_ENCONTRADO: 404 }
+const STATUS = { ENTRADA_INVALIDA: 400, QUEDA_NEGATIVO: 409, SIN_DIFERENCIAS: 409, YA_RESUELTO: 409, NO_ENCONTRADO: 404, NO_APLICADO: 409, DE_OTRO_FLUJO: 409, ANTES_DEL_CORTE: 409 }
 const motor = () => import('../motor/stock/ajuste.mjs')
 /** Lo que el motor dice en palabras del motor («libro», «aplicado», `local`), dicho como en la pantalla. */
 const MENSAJE = {
@@ -25,6 +27,16 @@ const MENSAJE = {
   NO_ENCONTRADO: 'No está ese ajuste.',
 }
 const errorDe = (r) => ({ status: STATUS[r.error.codigo] ?? 409, error: MENSAJE[r.error.codigo] ?? textoDelMotor(r.error) })
+/** Eliminar un aplicado: el porqué en palabras de la pantalla. QUEDA_NEGATIVO trae del motor el producto y los números. */
+const AL_ELIMINAR = {
+  YA_RESUELTO: 'Ese ajuste ya está eliminado: volvé a leer.',
+  NO_APLICADO: 'Ese ajuste no cambió el stock: si está pendiente, se descarta.',
+  DE_OTRO_FLUJO: 'Ese ajuste lo hizo otro trámite (un canje, un reclamo, un pedido o una salida): se deshace desde ese trámite.',
+  ANTES_DEL_CORTE: 'Ese ajuste es de antes de pasar la marca a Areben Gestión: el stock ya se igualó con Gestión Nube ese día.',
+}
+const errorAlEliminar = (r) => (r.error.codigo === 'QUEDA_NEGATIVO'
+  ? { status: 409, error: `No se puede eliminar: lo que sumó ese ajuste ya salió. ${textoDelMotor(r.error).replace(/ en ([a-z_]+) y /, (_, d) => ` en ${NOMBRE_DEPOSITO[d] ?? d} y `)}.` }
+  : AL_ELIMINAR[r.error.codigo] ? { status: STATUS[r.error.codigo] ?? 409, error: AL_ELIMINAR[r.error.codigo] } : errorDe(r))
 const conAvisos = (r) => (r.avisos || []).map((a) => ({ ...a, texto: textoDeAviso(a) }))
 
 /** Las ventas del motor que entraron con el PIN de la encargada y piden contar (`detalle.contar`, motor 2/3). */
@@ -41,6 +53,9 @@ export async function ajustesDeLinea({ linea }, deps) {
   const r = await deps.conMotor(baseDe(linea), 'Los ajustes', async (pg) => {
     const { sinTablas, ajustes } = await m.ajustesDe(pg, { linea, limite: 200 })
     if (sinTablas) return { status: 409, error: SIN_TABLA }
+    // ¿Se puede «Eliminar»? La misma regla que frena en el motor (sin la 063 ⇒ sin corte ⇒ ninguno).
+    const [corte] = (await pg.query('select instante from erp_corte where linea = $1', [linea]).catch(() => ({ rows: [] }))).rows
+    for (const a of ajustes) a.eliminable = !m.porQueNoSeElimina(a, corte?.instante ?? null)
     return { ajustes, contar: await ventasAContar(pg, linea) }
   })
   if (r.status) return r
@@ -78,5 +93,20 @@ export async function resolverAjusteErp({ body, usuario, aprobar }, deps) {
       : await m.rechazarAjuste(pg, { ajuste_id: body.ajusteId, usuario, motivo: body.motivo })
     if (!r.ok) return errorDe(r)
     return { ok: true, numero: r.ajuste.numero, estado: r.ajuste.estado, movimientos: r.movimientos ?? 0, avisos: conAvisos(r) }
+  })
+}
+
+/** «Eliminar» un ajuste aplicado (sólo Admin, lo frena `api/_erp.js`): el motor escribe el movimiento contrario y lo marca eliminado. */
+export async function eliminarAjusteErp({ body, usuario }, deps) {
+  const linea = String(body?.linea || '')
+  if (!LINEAS.includes(linea)) return { status: 400, error: 'Línea inválida' }
+  const m = await motor()
+  return deps.conMotor(baseDe(linea), 'Los ajustes', async (pg) => {
+    // El ajuste tiene que ser de ESTA línea: el id viaja del navegador.
+    const [a] = (await pg.query('select linea from stock_ajuste where id = $1', [String(body?.ajusteId || '')]).catch(() => ({ rows: [] }))).rows
+    if (!a || a.linea !== linea) return { status: 404, error: 'No está ese ajuste' }
+    const r = await m.eliminarAjuste(pg, { ajuste_id: body.ajusteId, usuario })
+    if (!r.ok) return errorAlEliminar(r)
+    return { ok: true, numero: r.ajuste.numero, estado: r.ajuste.estado, movimientos: r.movimientos }
   })
 }

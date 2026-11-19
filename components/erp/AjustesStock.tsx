@@ -30,7 +30,7 @@ import { BOTON_PIE, PieFijo } from '@/components/ui/FichaCostado'
 import { BuscadorLista, ChipEstado, VistasLista, cuandoCorto as cuando } from '@/components/ui/PiezasLista'
 import { color, font, toneTokens } from '@/components/ui/tokens'
 import {
-  aprobarAjuste, crearAjuste, descartarAjuste, leerAjustes, leerListaDeStock, leerStockDePrenda,
+  aprobarAjuste, crearAjuste, descartarAjuste, eliminarAjuste, leerAjustes, leerListaDeStock, leerStockDePrenda,
   type AjusteStock, type AjustesDeLinea, type AvisoAjuste, type LineaErp, type MarcaErp, type PrendaEncontrada,
 } from '@/lib/erp/cliente'
 import { MOTIVOS, baseDe } from '@/lib/erp/ajuste.core.js'
@@ -49,7 +49,8 @@ export const MOTIVOS_A_MANO = MOTIVOS.filter((m) => m.key !== 'conteo')
 /** El mismo porqué que da el servidor (`api/_erp-ajustes.js`), antes de guardar. */
 export const QUEDA_NEGATIVO = 'En ese depósito Areben Gestión tiene menos de las que salen. Si el producto está, contalo primero en Conteo de depósito (o de fundas): el conteo entra solo a Areben Gestión.'
 // «Para aprobar» ⛔ (la aprobación está apagada): es un ajuste guardado que todavía no cambió el stock.
-const ESTADO = { para_aprobar: ['warning', 'Pendiente'], aplicado: ['success', 'Aplicado'], rechazado: ['neutral', 'Descartado'] } as const
+// «Eliminado» (Bruno 18-nov): el aplicado que Admin volvió atrás; queda en la lista y el stock vuelve a como estaba.
+const ESTADO = { para_aprobar: ['warning', 'Pendiente'], aplicado: ['success', 'Aplicado'], rechazado: ['neutral', 'Descartado'], eliminado: ['neutral', 'Eliminado'] } as const
 const VISTAS = [['todos', 'Todos'], ['sinaplicar', 'Pendientes']] as const
 const COLUMNAS: ColumnaLista[] = [
   { key: 'n', titulo: 'Nº', ancho: '70px', movil: 'oculta' },
@@ -85,7 +86,10 @@ export function AjustesStock({ pedida = null, alContar, enErp: _enErp = false }:
   const linea: LineaErp = useTiendaErp()
   const base = baseDe(linea) as MarcaErp
   // 10-nov: cargar un ajuste es `ajustar` (Depósito): el rol que ⛔ puede ⛔ ve «Nuevo ajuste».
-  const ajusta = usePuedeErp(base)('ajustar')
+  const puede = usePuedeErp(base)
+  const ajusta = puede('ajustar')
+  // «Eliminar» un aplicado: sólo Admin (`configurar`; el servidor frena igual).
+  const admin = puede('configurar')
   const [datos, setDatos] = useState<AjustesDeLinea | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hecho, setHecho] = useState<{ texto: string; avisos: AvisoAjuste[] } | null>(null)
@@ -188,7 +192,7 @@ export function AjustesStock({ pedida = null, alContar, enErp: _enErp = false }:
   /** Guardar = crear + aplicar (la aprobación está apagada). */
   async function guardar() {
     if (!borrador) return
-    // Un ajuste ⛔ se borra (se arregla con otro): antes de tocar el stock, el resumen producto por producto (Darío, 19-nov).
+    // Antes de tocar el stock, el resumen producto por producto (Darío, 19-nov).
     const ok = await confirmar({
       titulo: `¿${textoGuardar} ${borrador.sentido === 'ingreso' ? 'en' : 'de'} ${deposito(borrador.deposito)}?`,
       mensaje: <ResumenAjuste motivo={borrador.sentido === 'ingreso' ? 'Ingreso' : motivo.label} detalle={borrador.detalle.trim()}
@@ -216,6 +220,28 @@ export function AjustesStock({ pedida = null, alContar, enErp: _enErp = false }:
     } finally {
       setTrabajando(false)
       setVuelta((n) => n + 1)
+    }
+  }
+
+  /** «Eliminar» un aplicado (Bruno 18-nov): el stock vuelve a como estaba y el ajuste queda «Eliminado» en la lista. */
+  async function eliminar(a: AjusteStock) {
+    const ok = await confirmar({
+      titulo: `¿Eliminar el ajuste A-${a.numero}?`,
+      mensaje: <ResumenAjuste motivo={`${a.motivoNombre} · vuelve a como estaba`} detalle="" filas={a.renglones.map((r) => ({ nombre: prendaDe(r), sku: r.sku, antes: null, cambio: -r.diferencia }))} />,
+      ok: `Eliminar A-${a.numero}`, cancelar: 'Volver', tono: 'danger',
+    })
+    if (!ok) return
+    setTrabajando(true)
+    try {
+      const r = await eliminarAjuste(linea, a.id)
+      setHecho({ texto: `Ajuste A-${r.numero} eliminado · el stock volvió a como estaba.`, avisos: [] })
+      setFicha(null)
+      setError(null)
+      setVuelta((n) => n + 1)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo eliminar el ajuste.')
+    } finally {
+      setTrabajando(false)
     }
   }
 
@@ -429,7 +455,7 @@ export function AjustesStock({ pedida = null, alContar, enErp: _enErp = false }:
         )}
       </>}
 
-      {abierta && <VentanaAjuste a={abierta} trabajando={trabajando} puede={ajusta} descartando={descartando?.id === abierta.id ? descartando.motivo : null}
+      {abierta && <VentanaAjuste a={abierta} trabajando={trabajando} puede={ajusta} onEliminar={admin && abierta.eliminable ? () => eliminar(abierta) : null} descartando={descartando?.id === abierta.id ? descartando.motivo : null}
         onCerrar={() => { setFicha(null); setDescartando(null) }} onAplicar={() => resolver(abierta, true)}
         onDescartar={(m) => (m == null ? setDescartando({ id: abierta.id, motivo: '' }) : setDescartando({ id: abierta.id, motivo: m }))} onConfirmarDescarte={() => resolver(abierta, false)} />}
     </div>
@@ -440,8 +466,8 @@ export function AjustesStock({ pedida = null, alContar, enErp: _enErp = false }:
  * El detalle de un ajuste en VENTANA (como Transferencias): arriba qué es, dónde y cuántas unidades; la tabla con lo que cambió
  * cada producto; abajo, si quedó pendiente, Descartar (rojo, a la izquierda) y Confirmar (índigo, a la derecha).
  */
-function VentanaAjuste({ a, trabajando, puede, descartando, onCerrar, onAplicar, onDescartar, onConfirmarDescarte }: {
-  a: AjusteStock; trabajando: boolean; puede: boolean; descartando: string | null
+function VentanaAjuste({ a, trabajando, puede, onEliminar, descartando, onCerrar, onAplicar, onDescartar, onConfirmarDescarte }: {
+  a: AjusteStock; trabajando: boolean; puede: boolean; onEliminar: (() => void) | null; descartando: string | null
   onCerrar: () => void; onAplicar: () => void; onDescartar: (motivo: string | null) => void; onConfirmarDescarte: () => void
 }) {
   const th: React.CSSProperties = { textAlign: 'right', padding: '10px 12px', fontWeight: weight.semibold, color: color.mut, fontSize: font.sm, whiteSpace: 'nowrap', background: color.bg2 }
@@ -475,6 +501,10 @@ function VentanaAjuste({ a, trabajando, puede, descartando, onCerrar, onAplicar,
       <span style={{ flex: 1 }} />
       {descartando == null && <Button variant="solid" tone="brand" disabled={trabajando} onClick={onAplicar}>Confirmar ajuste</Button>}
     </div>
+  ) : a.estado === 'aplicado' && onEliminar ? (
+    <div style={{ display: 'flex', width: '100%' }}>
+      <Button variant="outline" tone="danger" disabled={trabajando} onClick={onEliminar}>Eliminar ajuste</Button>
+    </div>
   ) : undefined
   return (
     <Modal abierto onCerrar={onCerrar} variante="pos" ancho="xl" titulo={titulo} pie={pie}>
@@ -482,6 +512,7 @@ function VentanaAjuste({ a, trabajando, puede, descartando, onCerrar, onAplicar,
         <div style={{ display: 'flex', gap: space[6], flexWrap: 'wrap', fontSize: font.base }}>
           <Dato titulo="Creado por">{a.creadoPor} · {cuando(a.creadoEn)}</Dato>
           {a.resueltoPor && a.resueltoEn && <Dato titulo={a.estado === 'rechazado' ? 'Descartado por' : 'Aplicado por'}>{a.resueltoPor} · {cuando(a.resueltoEn)}</Dato>}
+          {a.eliminadoPor && a.eliminadoEn && <Dato titulo="Eliminado por">{a.eliminadoPor} · {cuando(a.eliminadoEn)}</Dato>}
           {a.detalle && <Dato titulo="Nota">{a.detalle}</Dato>}
           {a.rechazo && <Dato titulo="Motivo del descarte">{a.rechazo}</Dato>}
         </div>

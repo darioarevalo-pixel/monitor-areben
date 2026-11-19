@@ -232,8 +232,10 @@ export type RenglonAjuste = {
 }
 export type AjusteStock = {
   id: string; numero: number; linea: string; deposito: string; motivo: string; motivoNombre: string; detalle: string | null
-  fuente: string; estado: 'para_aprobar' | 'aplicado' | 'rechazado'; creadoPor: string; creadoEn: string
+  fuente: string; estado: 'para_aprobar' | 'aplicado' | 'rechazado' | 'eliminado'; creadoPor: string; creadoEn: string
   resueltoPor: string | null; resueltoEn: string | null; rechazo: string | null; neto: number; renglones: RenglonAjuste[]; seMovio: number
+  /** Aplicado y hecho a mano (o por Conteo de depósito) después del corte: Admin lo puede «Eliminar» (motor `porQueNoSeElimina`). */
+  eliminable: boolean; eliminadoPor: string | null; eliminadoEn: string | null
 }
 export type AjustesDeLinea = { fecha: string | null; sinConciliacion: boolean; pendientes: FilaAContar[]; enAjuste: FilaAContar[]; ajustes: AjusteStock[] }
 export type RenglonNuevo = { producto: string; talle: string; sku?: string | null; barcode?: string | null; contado?: number; cantidad?: number }
@@ -246,6 +248,8 @@ export const aprobarAjuste = (linea: LineaErp, ajusteId: string) =>
   pedir<{ ok: true; numero: number; movimientos: number; avisos: AvisoAjuste[] }>(post({ accion: 'aprobar-ajuste', linea, ajusteId }), '', 'No se pudo aprobar el ajuste.')
 export const descartarAjuste = (linea: LineaErp, ajusteId: string, motivo: string) =>
   pedir<{ ok: true; numero: number }>(post({ accion: 'descartar-ajuste', linea, ajusteId, motivo }), '', 'No se pudo descartar el ajuste.')
+export const eliminarAjuste = (linea: LineaErp, ajusteId: string) =>
+  pedir<{ ok: true; numero: number; movimientos: number }>(post({ accion: 'eliminar-ajuste', linea, ajusteId }), '', 'No se pudo eliminar el ajuste.')
 
 
 export type VentaPropia = {

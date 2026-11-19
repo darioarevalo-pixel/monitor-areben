@@ -28,10 +28,11 @@ const leerStockDePrenda = vi.fn(async (..._a: unknown[]) => ({ prenda: { product
 const crearAjuste = vi.fn(async (..._a: unknown[]) => ({ ok: true, numero: 8, id: 'nuevo-8', renglones: 1, avisos: [{ codigo: 'CONTEO_DE_DEPOSITO_RECIENTE', texto: 'Este producto tiene un conteo de Depósito (C-31)' }] }))
 const aprobarAjuste = vi.fn(async (..._a: unknown[]) => ({ ok: true, numero: 7, movimientos: 1, avisos: [] }))
 const descartarAjuste = vi.fn(async (..._a: unknown[]) => ({ ok: true, numero: 7 }))
+const eliminarAjuste = vi.fn(async (..._a: unknown[]) => ({ ok: true, numero: 5, movimientos: 1 }))
 vi.mock('@/lib/erp/cliente', () => ({
   leerAjustes: (...a: unknown[]) => leerAjustes(...a), leerStockDePrenda: (...a: unknown[]) => leerStockDePrenda(...a),
   crearAjuste: (...a: unknown[]) => crearAjuste(...a), aprobarAjuste: (...a: unknown[]) => aprobarAjuste(...a),
-  descartarAjuste: (...a: unknown[]) => descartarAjuste(...a), buscarPrendas: vi.fn(async () => ({ variantes: [prenda], cortado: false })),
+  descartarAjuste: (...a: unknown[]) => descartarAjuste(...a), eliminarAjuste: (...a: unknown[]) => eliminarAjuste(...a), buscarPrendas: vi.fn(async () => ({ variantes: [prenda], cortado: false })),
   // La lista de stock de la línea (la misma de Transferencias): el código se resuelve acá, sin ir al servidor.
   leerListaDeStock: vi.fn(async () => ({ filas: [{ ...prenda, deps: { local: 5, deposito: 3 } }] })),
 }))
@@ -190,5 +191,33 @@ describe('Ingresos y ajustes', () => {
     await abrir('A-5')
     expect(document.body.textContent).toContain('Ajuste A-5')
     expect(document.body.textContent).toContain('+12')
+  })
+
+  it('«Eliminar» un aplicado (Bruno 18-nov): sólo si el motor lo deja; pregunta nombrándolo y queda «Eliminado» con quién', async () => {
+    const abrir = async (n: string) => { const fila = [...host.querySelectorAll('[role="row"]')].find((r) => r.textContent?.includes(n)) as HTMLElement; await act(async () => { fila.click() }) }
+    // Sin `eliminable` (de antes del corte, de otro trámite): ⛔ hay botón.
+    await montar()
+    await abrir('A-5')
+    expect(boton('Eliminar ajuste')).toBeUndefined()
+    act(() => root?.unmount()); root = null; host.remove()
+    const eliminado = { ...igualado, id: '0d6c3f0e-0000-4000-8000-000000000003', numero: 4, estado: 'eliminado', eliminado_por: 'Bruno Arevalo', eliminado_en: '2026-11-19T15:10:00Z' }
+    leerAjustes.mockImplementation(async () => ({ ...datos(), ajustes: [filaDeAjuste(pendiente), filaDeAjuste({ ...igualado, eliminable: true }), filaDeAjuste(eliminado)] }) as AjustesDeLinea)
+    await montar()
+    await abrir('A-5')
+    // Sin proveedor, la confirmación cae en `window.confirm` con el texto plano: la pregunta nombra el ajuste. «Volver» ⛔ elimina.
+    const pregunta = vi.fn(() => false)
+    window.confirm = pregunta
+    await click(boton('Eliminar ajuste'))
+    expect(String((pregunta.mock.calls[0] as unknown[])[0])).toContain('¿Eliminar el ajuste A-5?')
+    expect(eliminarAjuste).not.toHaveBeenCalled()
+    window.confirm = () => true
+    await click(boton('Eliminar ajuste'))
+    expect(eliminarAjuste).toHaveBeenCalledWith('zattia', igualado.id)
+    expect(texto()).toContain('Ajuste A-5 eliminado')
+    await abrir('A-4')
+    expect(document.body.textContent).toContain('Eliminado por')
+    expect(document.body.textContent).toContain('Bruno Arevalo')
+    expect(boton('Eliminar ajuste')).toBeUndefined()
+    leerAjustes.mockImplementation(async () => datos())
   })
 })

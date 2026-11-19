@@ -150,7 +150,9 @@ cierra, con los días seguidos); núcleo de la pantalla en `lib/erp/conciliacion
 **Ajustes** (19-oct, paso 7; ESCRIBE en el libro): el ajuste de stock con motivo — Conteo (lo contado) · Fallado ·
 Influencer / canje · Regalo / sorteo / donación (sacan) · Otro (con porqué). Se arma `para_aprobar` con lo que decía el
 libro (`antes`) y al aprobarlo el motor (`motor/stock/ajuste.mjs`, sql/026, por pg en UNA transacción) escribe un
-movimiento `ajuste` por renglón; descartar ⛔ mueve nada; ⛔ se edita ni se borra (otro ajuste). Handler
+movimiento `ajuste` por renglón; descartar ⛔ mueve nada; ⛔ se edita. **«Eliminar» (Bruno 18-nov, sólo Admin, sql/091)**: el APLICADO
+vuelve atrás —el libro guarda el movimiento contrario, el ajuste queda «Eliminado» en la lista, ⛔ nace otro—; sólo los hechos a mano
+o por Conteo de depósito, después del corte, y si el stock de hoy ⛔ queda negativo (`porQueNoSeElimina` del motor). Handler
 `api/_erp-ajustes.js`, núcleo `lib/erp/ajuste.core.js` (`tests/erp-ajuste*.test.ts*`).
 🔴 **Salida que deja el depósito en NEGATIVO (11-nov):** el motor la rechaza (`QUEDA_NEGATIVO`) ⇒ la pantalla la frena ANTES: «Queda» en rojo y el porqué al lado del botón —también en el celular, donde el pie fijo dejaba «Guardar» gris sin explicar—, y manda a Conteo de depósito / de fundas (⛔ al motivo «Conteo», que ⛔ está en el menú). Los motivos que llegan de otros flujos (`uso_interno`, `consumible`…) se muestran con nombre.
 🔴 EN SOMBRA: mueve SÓLO el libro, ⛔ GN ni TN (el diff lo explica como `ajuste_erp`). La lista «A contar» es

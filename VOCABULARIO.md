@@ -380,6 +380,7 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 | `(opcional)` en el rótulo del campo que se puede dejar vacío (y la ayuda, en `hint`) | `(si lo tenés)` · `(si la tenés)` | monitor | `components` | Bruno, 15-nov-2026: «campo opcional», como el resto de las pantallas |
 | `Nota de crédito` · `Notas de crédito` (A o B) | `NC` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Bruno, 26-oct-2026: sin siglas en pantalla (fila del 15-nov: «NC» seguía en Facturación) |
 | (nada: el estado se dice en palabras: «todavía no disponible», «modo de prueba de ARCA») | `motor` · `sesión A` · `espejo` · `homologación` · `ambiente de prueba` · `este ambiente` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Bruno, 26-oct: jerga de la construcción, ⛔ en pantalla |
+| `Eliminar ajuste` · `Eliminado` (el ajuste APLICADO que Admin vuelve atrás: queda en la lista y el stock vuelve a como estaba; excepción a §1.1, donde «Eliminar» = deja de existir) | `Deshecho` · `Deshacer ajuste` | monitor | `components/erp` | Bruno, 18-nov-2026: «estaría bueno otro nombre» que «Deshecho» ⇒ «Eliminar / Eliminado» (PR «Eliminar un ajuste aplicado») |
 
 🔑 **15-nov-2026 · raíces y prefijos** (Bruno: *«lo creo y no lo cuido»*). La frase exacta dejaba pasar las
 flexiones («Armándose», «fallados», «el medio») y las carpetas angostas dejaban vivos los errores de `api/`, el

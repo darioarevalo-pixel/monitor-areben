@@ -71,7 +71,7 @@
  *   GET  ?recurso=erp&vista=ingresos-productos|ingresos-excepcional&marca=bdi|zattia          y POST accion:'importar-ingresos'|'importar-ingresos-excepcional'   `api/_erp-ingresos-productos.js`
  *   GET  ?recurso=erp&vista=estructura&marca=…   Configuración › Cuentas y Marcas, depósitos y puntos de venta (`api/_erp-estructura.js`, sólo lee)
  *   GET  ?recurso=erp&vista=ajustes&linea=bdi|zattia|stunned           los ajustes de stock (motor sql/026) + la lista «A contar»
- *   POST {recurso:'erp', accion:'crear-ajuste'|'aprobar-ajuste'|'descartar-ajuste', linea, …}   `api/_erp-ajustes.js`
+ *   POST {recurso:'erp', accion:'crear-ajuste'|'aprobar-ajuste'|'descartar-ajuste'|'eliminar-ajuste', linea, …}   `api/_erp-ajustes.js`
  *   GET  ?recurso=erp&vista=corte&marca=…   ¿la línea ya cortó? (`erp_corte`)
  *   GET  ?recurso=erp&vista=transferencias-doc&marca=…   las transferencias como DOCUMENTO del motor (sql/034) + lo en tránsito
  *   POST {recurso:'erp', accion:'transferencia-crear'|'-armar'|'-enviar'|'-recibir'|'-cancelar', linea, …}   `api/_erp-transferencia.js`
@@ -135,7 +135,7 @@ import { configuracionDeMarcas, interruptoresDeMarcas, ponerInterruptorErp } fro
 import { autorizarConPin, encargadasErp, pinesErp, ponerPinErp, quitarPinErp, verificarPinErp } from './_erp-pin.js'
 import { actividadTokenErp, crearTokenErp, editarTokenErp, probarTokenErp, regenerarTokenErp, revocarTokenErp, tokensErp } from './_erp-tokens.js'
 import { ponerRolesErp, restablecerRolesErp, rolesGuardadosDeMarcas, vistaRoles } from './_erp-permisos-rol.js'
-import { ajustesDeLinea, crearAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
+import { ajustesDeLinea, crearAjusteErp, eliminarAjusteErp, resolverAjusteErp } from './_erp-ajustes.js'
 import { accionDeTransferencia, documentosDeLinea } from './_erp-transferencia.js'
 import { transferenciaEnErp } from './_repo-documento.js'
 import { ACCIONES as ACCIONES_TRANSFERENCIA } from '../lib/erp/transferencia-doc.core.js'
@@ -1950,6 +1950,11 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST' && body.accion === 'crear-ajuste') {
       const r = await crearAjusteErp({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
+      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
+    }
+
+    if (req.method === 'POST' && body.accion === 'eliminar-ajuste') {
+      const r = await eliminarAjusteErp({ body, usuario: perfil.name || perfil.user || null }, { conMotor })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
