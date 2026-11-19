@@ -231,3 +231,24 @@ describe('El pedido mayorista en el panel (paso 3 del plan)', () => {
     }
   })
 })
+
+describe('después de guardar, el número para que Logística relea el pedido (Ger 19-nov)', () => {
+  const dep = (fila: unknown[]) => ({ conMotor: conMotor(base({ 'a_preparar_en is not null as mandado': fila })), prendido: true, escribir: true, puedeAnular: true })
+  it('anulado un pedido YA mandado a preparar ⇒ vuelve su número', async () => {
+    pv.anularPedidoDelErp.mockResolvedValueOnce({ ok: true })
+    const r = await accionDePedido({ accion: 'pedido-anular', body: { pedidoId: P, motivo: 'pidió otra cosa' }, usuario: 'dario' }, dep([{ numero: '120', mandado: true }]))
+    expect(r).toMatchObject({ ok: true, logistica: 120 })
+  })
+  it('sin mandar a preparar, sin cambios o si la consulta tropieza ⇒ ⛔ número, y lo guardado igual vale', async () => {
+    pv.anularPedidoDelErp.mockResolvedValueOnce({ ok: true })
+    const sinMandar = await accionDePedido({ accion: 'pedido-anular', body: { pedidoId: P, motivo: 'x' }, usuario: 'dario' }, dep([{ numero: '121', mandado: false }]))
+    expect(sinMandar).toMatchObject({ ok: true }); expect(sinMandar).not.toHaveProperty('logistica')
+    pv.anularPedidoDelErp.mockResolvedValueOnce({ ok: true, sin_cambios: true })
+    const igual = await accionDePedido({ accion: 'pedido-anular', body: { pedidoId: P, motivo: 'x' }, usuario: 'dario' }, dep([{ numero: '122', mandado: true }]))
+    expect(igual).not.toHaveProperty('logistica')
+    pv.anularPedidoDelErp.mockResolvedValueOnce({ ok: true })
+    const roto = { query: async (sql: string) => { if (sql.includes('as mandado')) throw new Error('se cortó'); return { rows: [] } } }
+    const r = await accionDePedido({ accion: 'pedido-anular', body: { pedidoId: P, motivo: 'x' }, usuario: 'dario' }, { conMotor: conMotor(roto), prendido: true, escribir: true, puedeAnular: true })
+    expect(r).toMatchObject({ ok: true }); expect(r).not.toHaveProperty('logistica')
+  })
+})

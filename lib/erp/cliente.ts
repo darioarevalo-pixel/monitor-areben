@@ -935,18 +935,27 @@ export const leerEstadoPedidos = (numeros: number[]) =>
   pedir<{ prendido: false } | { prendido: true; estados: Record<string, EstadoPedidoPanel>; falta064?: boolean }>(null, `&vista=estado-pedidos-panel&marca=bdi&numeros=${numeros.slice(0, 200).join(',')}&nc=${Date.now()}`, 'No se pudo leer el estado de los pedidos.')
 export const leerPreparadosSinPagar = () =>
   pedir<{ prendido: false } | { prendido: true; pedidos: PreparadoSinPagar[]; falta064?: boolean }>(null, `&vista=preparados-sin-pagar&marca=bdi&nc=${Date.now()}`, 'No se pudo leer «Preparados sin pagar».')
-type RespuestaPedido = { ok: true; ya: boolean; sinCambios: boolean; avisarDeposito: boolean; ventaId: string | null; avisos?: string[]; /** Cambio y envío: la hoja ya actualizada (⛔ volver a pedirla). */ ficha?: FichaPedido }
+type RespuestaPedido = { ok: true; ya: boolean; sinCambios: boolean; avisarDeposito: boolean; ventaId: string | null; avisos?: string[]; /** Cambio y envío: la hoja ya actualizada (⛔ volver a pedirla). */ ficha?: FichaPedido; /** El número del pedido si YA estaba mandado a preparar: Logística lo tiene que releer. */ logistica?: number }
+/**
+ * Guardado un pedido que Logística ya tiene, se le avisa que lo relea (Ger 19-nov): SIN esperar, así ⛔ frena la pantalla. El
+ * M-0120 del 18-nov no se avisó porque el aviso dependía de tener abierta la lista de Logística: ahora sale de cada guardado.
+ */
+async function conAvisoALogistica(r: Promise<RespuestaPedido>): Promise<RespuestaPedido> {
+  const x = await r
+  if (x.logistica && !x.sinCambios) void import('@/lib/crm/logistica').then((m) => m.avisarALogistica(x.logistica as number)).catch(() => {})
+  return x
+}
 export const entrarPedidoPanel = (p: { pedidoId: string; clienteId: string; personaId?: string | null }) =>
   pedir<RespuestaPedido>(post({ accion: 'pedido-entrar', marca: 'bdi', ...p }), '', 'No se pudo entrar el pedido.')
 export const cambiarPedidoPanel = (pedidoId: string, lineas: Array<{ productId: number; sizeId: number; cantidad: number; /** A mano (sólo Darío, sólo lo nuevo). */ precio?: number }>, packs: Array<{ productId: number; packs: number }> = []) =>
-  pedir<RespuestaPedido>(post({ accion: 'pedido-cambiar', marca: 'bdi', pedidoId, lineas, packs }), '', 'No se pudo guardar el cambio.')
+  conAvisoALogistica(pedir<RespuestaPedido>(post({ accion: 'pedido-cambiar', marca: 'bdi', pedidoId, lineas, packs }), '', 'No se pudo guardar el cambio.'))
 export const mandarAPrepararPanel = (pedidoId: string) =>
-  pedir<RespuestaPedido>(post({ accion: 'pedido-a-preparar', marca: 'bdi', pedidoId }), '', 'No se pudo mandar a preparar.')
+  conAvisoALogistica(pedir<RespuestaPedido>(post({ accion: 'pedido-a-preparar', marca: 'bdi', pedidoId }), '', 'No se pudo mandar a preparar.'))
 /** El envío del pedido (Darío 15-nov): lo que paga el cliente en origen (EM) se suma al total. `envio` null o 0 lo saca. */
 export const ponerEnvioPedidoPanel = (pedidoId: string, envio: number | null, transporte?: string | null) =>
-  pedir<RespuestaPedido>(post({ accion: 'pedido-envio', marca: 'bdi', pedidoId, envio, transporte: transporte ?? null }), '', 'No se pudo guardar el envío.')
+  conAvisoALogistica(pedir<RespuestaPedido>(post({ accion: 'pedido-envio', marca: 'bdi', pedidoId, envio, transporte: transporte ?? null }), '', 'No se pudo guardar el envío.'))
 export const anularPedidoPanel = (pedidoId: string, motivo: string) =>
-  pedir<RespuestaPedido>(post({ accion: 'pedido-anular', marca: 'bdi', pedidoId, motivo }), '', 'No se pudo anular el pedido.')
+  conAvisoALogistica(pedir<RespuestaPedido>(post({ accion: 'pedido-anular', marca: 'bdi', pedidoId, motivo }), '', 'No se pudo anular el pedido.'))
 /** Cargar o corregir el WhatsApp / mail de un cliente (sólo admin). El motor valida el número; ⛔ borra un dato que no mandás. */
 export const ponerContactoCliente = (marca: MarcaErp, p: { clienteId: string; whatsapp?: string; email?: string }) =>
   pedir<{ ok: true; contacto: { whatsapp: string | null; email: string | null } }>(post({ accion: 'poner-contacto', marca, ...p }), '', 'No se pudo guardar el contacto.')

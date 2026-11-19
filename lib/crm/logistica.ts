@@ -253,6 +253,25 @@ export async function traerPedido(numero: number): Promise<Traido> {
   return r.d.pedido ? { t: 'llego', pedido: r.d.pedido } : { t: 'todavia' }
 }
 
+/** Las esperas entre intentos de `avisarALogistica` (Ger 19-nov: a los 1, 2 y 4 s, y después dejarlo). */
+export const ESPERAS_AVISO_MS = [1000, 2000, 4000]
+
+/**
+ * Avisarle a Logística que un pedido YA MANDADO A PREPARAR cambió (Ger 19-nov): lo relee del ERP en ~2 s en vez de esperar su
+ * consulta (~14 s). Se llama DESPUÉS de guardar y sin esperarlo: ⛔ frena a quien guardó. Si Logística no contesta o todavía no lo
+ * ve, reintenta a los 1, 2 y 4 s y después lo deja: si falla todo, ⛔ se pierde nada, llega igual con su consulta. Un error que no
+ * se arregla reintentando (token, límite) corta en el acto. Repetirlo es seguro: Logística lo relee y da lo mismo.
+ */
+export async function avisarALogistica(numero: number, esperar: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<Traido> {
+  let r: Traido = await traerPedido(numero)
+  for (const ms of ESPERAS_AVISO_MS) {
+    if (r.t !== 'todavia') return r
+    await esperar(ms)
+    r = await traerPedido(numero)
+  }
+  return r
+}
+
 /** Lee el mensaje del cliente con la IA de Logística. No guarda nada. */
 export async function leerMensaje(text: string): Promise<{ t: 'ok'; carrier: string | null; shipping: Envio } | { t: 'error'; motivo: string }> {
   const r = await cargar<{ carrier?: string | null; shipping?: Envio }>({ action: 'interpretar', text })
