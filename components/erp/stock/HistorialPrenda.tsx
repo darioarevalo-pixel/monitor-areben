@@ -107,6 +107,8 @@ export function HistorialPrenda({ marca, producto, talle, nombre, variante, codi
   return (
     <Modal abierto onCerrar={onCerrar} titulo={titulo} ancho="xl" variante="pos"
       pie={<span style={{ marginRight: 'auto', fontSize: font.sm, color: color.mut }}>{h ? `${filas.length} ${filas.length === 1 ? 'movimiento' : 'movimientos'}` : ''}</span>}>
+      {/* Mismo alto siempre: con pocos renglones la ventana se achicaba y saltaba al cambiar de filtro. */}
+      <div style={{ minHeight: angosta ? undefined : 'calc(100vh - 250px)' }}>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {!h ? (!error && <div style={{ padding: space[6], color: color.mut }}>Leyendo los movimientos…</div>)
         : !filas.length ? <div style={{ padding: space[6], color: color.mut }}>No hay movimientos con ese filtro.</div>
@@ -157,6 +159,7 @@ export function HistorialPrenda({ marca, producto, talle, nombre, variante, codi
             </tbody>
           </table>
         )}
+      </div>
     </Modal>
   )
 }
