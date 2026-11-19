@@ -77,7 +77,7 @@ export function pedidoExterno(p, { sensibles = false } = {}) {
     is_test: p.prueba === true,
     warehouse: DEPOSITO_A_WAREHOUSE[p.deposito] ?? 'other',
     customer_name: p.cliente,
-    customer: cli && { id: cli.id ?? null, gn_id: cli.gn_id == null ? null : Number(cli.gn_id), phone: cli.telefono ?? null, email: cli.email ?? null },
+    customer: cli && { id: cli.id ?? null, gn_id: cli.gn_id == null ? null : Number(cli.gn_id), number: cli.numero == null ? null : Number(cli.numero), phone: cli.telefono ?? null, email: cli.email ?? null },
     contact_name: p.persona,
     delivery_method: metodoDeEntrega(p.entrega),
     notes: p.notas,
@@ -231,9 +231,10 @@ export const ESQUEMAS = Object.freeze({
   }),
   ExtWholesaleOrderCustomer: cerrado('El cliente. Solo con `wholesale_orders:sensitive`.', {
     id: n('string', 'Id del cliente en el ERP.'),
-    gn_id: n('integer', 'Id del cliente en Gestión Nube, si viene de ahí. Los clientes nuevos no lo tienen.'),
-    phone: n('string', 'WhatsApp de quien pidió o, si no está, el del cliente.'),
-    email: n('string', 'Mail del cliente.'),
+    gn_id: n('integer', 'Id del cliente en Gestión Nube, si viene de ahí. Los clientes nuevos no lo tienen: para buscarlos, `number`.'),
+    number: n('integer', 'El número del cliente, el que se ve en el ERP y en el panel. Si viene de Gestión Nube es su `gn_id`; un cliente nacido en el ERP tiene uno propio (en BDI, desde 704001) que no existe en Gestión Nube.'),
+    phone: n('string', 'WhatsApp de quien pidió; si no está, el de la ficha del cliente; y si tampoco, el que escribió en el catálogo.'),
+    email: n('string', 'Mail del cliente; si la ficha no lo tiene, el que escribió en el catálogo.'),
   }),
   ExtWholesaleOrder: cerrado('Un pedido mayorista mandado a preparar. Los que todavía no se mandaron no se publican.', {
     id: s('integer', 'Numérico y estable.'),

@@ -532,6 +532,10 @@ export async function colaDeLogistica(db, { marca }) {
 }
 
 /** Las filas de `pedido_mayorista`, con lo que el depósito necesita: variante, ubicación, pago y zona. */
+// Lo que el cliente escribió en el catálogo (`contacto`): respaldo del teléfono y el mail cuando la ficha no los tiene
+// (Ger 19-nov: M-0112 salía sin teléfono aunque lo había escrito).
+const limpioContacto = (x) => (typeof x === 'string' && x.trim() ? x.trim() : null)
+
 async function armarParaLogistica(db, crudas, marca, { sensibles = false } = {}) {
   const filas = crudas.map((p) => ({ ...p, lineas: p.lineas ?? [], numero: Number(p.numero), total: Number(p.total) }))
   const lineas = filas.flatMap((p) => p.lineas.filter((l) => l.size_id != null).map((l) => ({ ...l, deposito: p.deposito ?? DEPOSITO_MAYORISTA[marca] })))
@@ -548,7 +552,7 @@ async function armarParaLogistica(db, crudas, marca, { sensibles = false } = {})
       numero: p.numero, venta_numero: p.venta_numero == null ? null : Number(p.venta_numero), etapa: etapaDe(p), prueba: p.venta_prueba === true, deposito, cliente: p.cliente ?? null, persona: p.persona ?? null, entrega: p.contacto?.entrega ?? null, notas: p.contacto?.obs ?? null,
       a_preparar_en: p.a_preparar_en, preparacion_en: p.preparacion_en, preparado_en: p.preparado_en, anulado_en: p.anulado_en, actualizado_en: p.actualizado_en,
       cambio_en: p.editado_en && new Date(p.editado_en) > new Date(p.a_preparar_en) ? p.editado_en : null,
-      ...(sensibles ? { cliente_datos: { id: p.cliente_id ?? null, gn_id: p.cliente_gn_id ?? null, telefono: p.persona_whatsapp ?? p.cliente_whatsapp ?? null, email: p.cliente_email ?? null } } : {}),
+      ...(sensibles ? { cliente_datos: { id: p.cliente_id ?? null, gn_id: p.cliente_gn_id ?? null, numero: p.cliente_gn_id ?? p.cliente_numero ?? null, telefono: p.persona_whatsapp ?? p.cliente_whatsapp ?? limpioContacto(p.contacto?.telefono), email: p.cliente_email ?? limpioContacto(p.contacto?.email) } } : {}),
       total: p.total, pagado: pago?.pago.estado === 'pagado', falta: pago?.pago.falta ?? p.total, cuenta_corriente: pago?.cuenta_habilitada ?? false, zona: pago?.zona ?? 'pendiente_pago',
       renglones: p.lineas.map((l) => {
         const v = variante.get(claveVar(l))
@@ -572,7 +576,7 @@ export async function pedidosDeLogistica(db, { marca, numero = null, etapa = nul
   const where = `p.marca = $1 and p.a_preparar_en is not null and ($2::bigint is null or p.numero = $2) and ($3::text is null or (${ETAPA_SQL}) = $3) and ($4::timestamptz is null or p.actualizado_en >= $4)`
   const filtros = [marca, numero, etapa, desde]
   const [{ total }] = await q(db, `select count(*)::int as total from pedido_mayorista p where ${where}`, filtros)
-  const filas = await q(db, `select p.*, c.nombre as cliente, w.nombre as persona, vta.prueba as venta_prueba, vta.numero as venta_numero, c.gn_client_id as cliente_gn_id, c.whatsapp as cliente_whatsapp, c.email as cliente_email, w.whatsapp as persona_whatsapp from pedido_mayorista p
+  const filas = await q(db, `select p.*, c.nombre as cliente, w.nombre as persona, vta.prueba as venta_prueba, vta.numero as venta_numero, c.gn_client_id as cliente_gn_id, c.id_espejo as cliente_numero, c.whatsapp as cliente_whatsapp, c.email as cliente_email, w.whatsapp as persona_whatsapp from pedido_mayorista p
       left join cliente c on c.id = p.cliente_id left join cliente_whatsapp w on w.id = p.persona_id left join venta vta on vta.id = p.venta_id
     where ${where} order by p.numero desc limit $5 offset $6`, [...filtros, limit, offset])
   return { total, pedidos: await armarParaLogistica(db, filas, marca, { sensibles }) }
