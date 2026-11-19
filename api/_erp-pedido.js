@@ -396,6 +396,18 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
       r = await pv.anularPedidoDelErp(pg, { pedido_id, motivo: String(body.motivo ?? ''), usuario })
     }
     if (!r.ok) return { status: statusDe(r.error?.codigo), error: r.error?.mensaje ?? 'No se pudo.' }
+    // 🔑 Logística (Ger 19-nov): si el pedido YA estaba mandado a preparar, vuelve su número y el panel le pide a Logística que lo
+    // relea al instante (`traer`, ~2 s) en vez de esperar su consulta (~14 s). Lo llama el panel DESPUÉS de esta respuesta: ⛔ frena el
+    // guardado. Un tropiezo acá ⛔ tumba lo guardado: el pedido igual llega con la consulta.
+    let logistica = null
+    if (accion !== 'pedido-entrar' && !r.sin_cambios) {
+      try {
+        const [f] = (await pg.query('select numero, a_preparar_en is not null as mandado from pedido_mayorista where id = $1', [pedido_id])).rows
+        if (f?.mandado && f.numero != null && Number.isSafeInteger(Number(f.numero))) logistica = Number(f.numero)
+      } catch (e) {
+        console.warn('[erp-pedido] el número para Logística:', e?.message)
+      }
+    }
     const reglas = (accion === 'pedido-cambiar' || accion === 'pedido-envio') ? leerReglas(deps) : null
     if (accion === 'pedido-entrar' || accion === 'pedido-a-preparar') await whatsappDesdeElPedido(pg, pedido_id)
     // Cambio y envío: la hoja nueva viaja en la misma respuesta, así la pantalla ⛔ la vuelve a pedir (Darío 18-nov, ~5 s).
@@ -410,7 +422,7 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
     }
     // El faltante (A-n con lo que faltó) para que el panel lo diga.
     const faltante = r.faltante ? { ajuste: r.faltante.ajuste, renglones: r.faltante.renglones } : null
-    return { ok: true, ya: !!r.ya, sinCambios: !!r.sin_cambios, avisarDeposito: !!r.avisar_deposito, ventaId: r.venta_id ?? null, ...(faltante ? { faltante } : {}), ...(avisos.length ? { avisos } : {}), ...(ficha ? { ficha } : {}) }
+    return { ok: true, ya: !!r.ya, sinCambios: !!r.sin_cambios, avisarDeposito: !!r.avisar_deposito, ventaId: r.venta_id ?? null, ...(faltante ? { faltante } : {}), ...(avisos.length ? { avisos } : {}), ...(ficha ? { ficha } : {}), ...(logistica ? { logistica } : {}) }
   })
 }
 
