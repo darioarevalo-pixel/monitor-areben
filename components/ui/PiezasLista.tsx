@@ -60,9 +60,11 @@ export function TileResumen({ titulo, valor, oscuro, tono, nota }: { titulo: str
 /** Las vistas que son un PROBLEMA a revisar (§9 color): en rojo cuando tienen algo. */
 const VISTAS_PROBLEMA = new Set(['neg', 'sincosto', 'atrasadas', 'dif', 'sinpagar', 'sinfactura', 'debe', 'faltantes', 'sinaplicar'])
 
-export function VistasLista({ vistas, valor, conteo, onCambio, todasRojas }: {
+export function VistasLista({ vistas, valor, conteo, onCambio, todasRojas, sinRojo }: {
   /** Todas las vistas son problemas (Diferencias, Conciliación). */
   todasRojas?: boolean
+  /** Las que en ESTA pantalla ⛔ son un problema aunque lo sean en otra (Ventas › «Sin factura»). */
+  sinRojo?: readonly string[]
   /** `[clave, nombre, …]`, en el orden en que se muestran (lo que venga después del nombre, ⛔ se mira). */
   vistas: ReadonlyArray<readonly [string, string, ...unknown[]]>
   valor: string
@@ -75,7 +77,7 @@ export function VistasLista({ vistas, valor, conteo, onCambio, todasRojas }: {
     <div role="tablist" aria-label="Vistas" className="mo-vistas" style={{ display: 'flex', gap: 20, flexWrap: 'wrap', padding: '0 16px', borderBottom: `1px solid ${color.line}` }}>
       {vistas.map(([k, nombre]) => {
         const on = valor === k
-        const rojo = !on && (todasRojas || VISTAS_PROBLEMA.has(k)) && (conteo[k] ?? 0) > 0
+        const rojo = !on && !sinRojo?.includes(k) && (todasRojas || VISTAS_PROBLEMA.has(k)) && (conteo[k] ?? 0) > 0
         return (
           <button
             key={k} type="button" role="tab" aria-selected={on} onClick={() => onCambio(k)}
@@ -162,4 +164,19 @@ export function ChipEstado({ mapa, k }: { mapa: Record<string, readonly [Tone, s
   const [tono, texto] = mapa[k] || ['neutral', k]
   // Con la columna angosta (monitor de 1333 px) el chip largo («Compra pendiente en GN») termina en «…» y lo dice entero al pasar el mouse.
   return <span title={texto} style={{ display: 'inline-flex', maxWidth: '100%', verticalAlign: 'middle' }}><StatusPill tone={tono} style={{ maxWidth: '100%', minWidth: 0 }} label={<span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{texto}</span>} /></span>
+}
+
+/**
+ * «Actualizar» como ícono solo (Darío 19-nov, Ventas): la flecha en círculo, que GIRA mientras lee. El nombre va en el
+ * `title` y en `aria-label`. `.shell-content button` fija la altura: acá va explícita (36, la de Columnas).
+ */
+export function BotonActualizar({ cargando, onClick }: { cargando: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button" onClick={onClick} disabled={cargando} title={cargando ? 'Leyendo…' : 'Actualizar'} aria-label={cargando ? 'Leyendo…' : 'Actualizar'}
+      style={{ height: 36, width: 36, flex: '0 0 36px', padding: 0, display: 'grid', placeItems: 'center', borderRadius: 10, border: `1px solid ${color.line}`, background: color.surface, color: color.ink2, cursor: cargando ? 'default' : 'pointer' }}
+    >
+      <span style={{ display: 'grid', animation: cargando ? 'mo-girar 0.9s linear infinite' : undefined }}><Icono nombre="actualizar" size={18} /></span>
+    </button>
+  )
 }

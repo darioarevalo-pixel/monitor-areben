@@ -19,7 +19,7 @@ import {
 } from '@/lib/erp/cliente'
 import { COBRO, ESTADO, historialDeVenta, plata } from '@/lib/erp/ventas-lista.core.js'
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
-import { MOTIVO_MINIMO, NOMBRE_CANAL } from '@/lib/erp/venta.core.js'
+import { MOTIVO_MINIMO } from '@/lib/erp/venta.core.js'
 import { textoDeVuelta } from '@/lib/erp/desarme.core.js'
 import { rutaVigente } from '@/motor/cuentas/cuentas.mjs'
 import { DesarmeVenta } from './DesarmeVenta'
@@ -174,14 +174,19 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     : {
         principal: debe && puedeErp('cobrar') ? { label: 'Registrar cobro', onClick: () => abrirVentana('cobro') } : undefined,
         otra: puedeErp('editar-venta') ? { label: 'Editar', disabled: fila.anulada, onClick: () => abrirVentana('editar') } : undefined,
-        mas: [...verEnTn, ...(puedeErp('cambiar') ? [{ key: 'cambio', label: 'Hacer cambio', icono: 'cambios' as const, disabled: fila.anulada, onClick: () => irACaja('cambio') }] : []), ...menu],
+        mas: [...verEnTn, ...(puedeErp('cambiar') ? [{ key: 'cambio', label: 'Cambiar producto', icono: 'cambios' as const, disabled: fila.anulada, onClick: () => irACaja('cambio') }] : []), ...menu],
       }
   const hechos: HechoHistorial[] = ficha ? (historialDeVenta(ficha, { ...extra, tn: extra?.tn ?? undefined }) as HechoHistorial[]) : []
   const h3: React.CSSProperties = { margin: 0, fontSize: font.lg, fontWeight: weight.bold }
   const nota = extra?.nota ?? fila.nota
+  // El importe de cada producto YA tiene restado su descuento (`nueva-venta.core.js`); el del pago (efectivo, transferencia…)
+  // es aparte: base − monto de cada pago. Se detallan los dos.
+  const descProductos = (ficha?.lineas ?? []).filter((l) => !l.devuelta).reduce((a, l) => a + l.descuento + l.rebaja, 0)
+  const descPagos = (ficha?.pagos ?? []).filter((p) => p.base != null && p.base > p.monto).map((p) => ({ texto: `Descuento ${p.cuenta ?? p.medio ?? 'del pago'}${p.porcentaje ? ` ${p.porcentaje}%` : ''}`, monto: p.base! - p.monto }))
+  const descuentos = descProductos + descPagos.reduce((a, d) => a + d.monto, 0)
 
   return (
-    <FichaCostado abierta onCerrar={onCerrar} titulo={titulo} etiqueta={`Ficha de la venta ${fila.ref}`} pie={pie}>
+    <FichaCostado abierta ventana onCerrar={onCerrar} titulo={titulo} etiqueta={`Ficha de la venta ${fila.ref}`} pie={pie}>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], alignItems: 'flex-start' }}>
@@ -203,7 +208,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         {esPedido && <Button onClick={() => window.open('/cobranzas', '_blank', 'noopener')}>Cobrar en Cobros del monitor ↗</Button>}
         {fila.link && <Button variant="outline" onClick={() => window.open(fila.link!, '_blank', 'noopener')}>Ver el pedido en Tienda Nube ↗</Button>}
         {!esPedido && puedeErp('editar-venta') && <Button variant="outline" disabled={fila.anulada} onClick={() => abrirVentana('editar')}>Editar</Button>}
-        {!esPedido && puedeErp('cambiar') && <Button variant="outline" disabled={fila.anulada} onClick={() => irACaja('cambio')}>Hacer cambio</Button>}
+        {!esPedido && puedeErp('cambiar') && <Button variant="outline" disabled={fila.anulada} onClick={() => irACaja('cambio')}>Cambiar producto</Button>}
         {menu.length > 0 && <MenuAcciones acciones={menu} etiqueta={`Más acciones de la venta ${fila.ref}`} vertical />}
       </div>}
 
@@ -245,18 +250,29 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           )}
 
           {extra?.cobroEnEntrega?.porVerificar && <Notice tone="warning">Lo cobró Logística al entregar con <b>transferencia</b>: falta validar que entró. Se cruza en el monitor, en Pagos recibidos.</Notice>}
-          <DatosFicha>
-            <DatoFicha titulo="Origen">{fila.origenTexto}</DatoFicha>
-            <DatoFicha titulo="Factura">{fila.factura ? `${fila.factura.numero}${fila.factura.de === 'gn' ? ' (GN)' : ''}` : 'Sin factura'}</DatoFicha>
-            <DatoFicha titulo="Vendió">{extra?.vendedor || fila.vendio}</DatoFicha>
-            <DatoFicha titulo="Sale de">{NOMBRE_DEPOSITO[v!.deposito as keyof typeof NOMBRE_DEPOSITO] ?? v!.deposito}</DatoFicha>
-            <DatoFicha titulo="Canal">{NOMBRE_CANAL[v!.canal as keyof typeof NOMBRE_CANAL] ?? v!.canal}</DatoFicha>
-            <DatoFicha titulo="Línea">{LINEA[v!.marca] ?? v!.marca}</DatoFicha>
-            {extra?.entrega && <DatoFicha titulo="Entrega">{[ENTREGA[extra.entrega.tipo], extra.entrega.direccion].filter(Boolean).join(' · ')}</DatoFicha>}
-            {extra?.cobroEnEntrega && <DatoFicha titulo="Contraentrega">{[extra.cobroEnEntrega.formaPago ? COBRO_EN_ENTREGA[extra.cobroEnEntrega.formaPago] : null, extra.cobroEnEntrega.entrego, extra.cobroEnEntrega.fecha ? cuandoCorto(extra.cobroEnEntrega.fecha) : null].filter(Boolean).join(' · ')}</DatoFicha>}
-            {extra?.gnNumero && <DatoFicha titulo="En Gestión Nube">{`venta ${extra.gnNumero}`}</DatoFicha>}
-          </DatosFicha>
-
+          {/* Darío 19-nov: en la ventana, dos columnas. Izquierda lo que se vendió y cómo se pagó; derecha los datos y el historial. */}
+          <div style={{ display: 'grid', gridTemplateColumns: angosta ? '1fr' : 'minmax(0, 1.25fr) minmax(0, 1fr)', gap: angosta ? space[5] : 32, alignItems: 'start' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: space[5], minWidth: 0 }}>
+          <section>
+            <h3 style={h3}>Productos</h3>
+            {ficha.lineas.map((l) => (
+              <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], padding: '10px 0', borderBottom: `1px solid ${color.bg2}` }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: weight.semibold }}>{l.nombre ?? `Producto ${l.producto}`}{l.devuelta && <span style={{ marginLeft: 6, color: 'var(--mo-warning-ink)', fontSize: font.sm }}>devuelta</span>}{l.agregada && <span style={{ marginLeft: 6, color: 'var(--mo-warning-ink)', fontSize: font.sm }}>agregada al corregir</span>}</div>
+                  <div style={{ fontSize: font.sm, color: color.mut }}>{l.talleNombre ?? l.talle} · {l.cantidad} u.{l.cantidadOriginal != null ? ` (eran ${l.cantidadOriginal})` : ''}{l.descuento || l.rebaja ? ` · descuento ${plata(l.descuento + l.rebaja)}` : ''}</div>
+                </div>
+                <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{plata(l.importe)}</span>
+              </div>
+            ))}
+            {/* Darío 19-nov: el pago ⛔ se resta acá (va en «Forma de pago»); lo que se detalla es el DESCUENTO, si hubo. */}
+            {descuentos > 0 && <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', color: color.mut }}><span>Subtotal</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{plata(v!.total + descuentos)}</span></div>
+              {descProductos > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', color: 'var(--mo-success-ink)' }}><span>Descuento en productos</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>− {plata(descProductos)}</span></div>}
+              {descPagos.map((d, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', color: 'var(--mo-success-ink)' }}><span>{d.texto}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>− {plata(d.monto)}</span></div>)}
+            </>}
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', fontWeight: weight.bold }}><span>Total</span><span>{plata(v!.total)}</span></div>
+            {debe && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', fontWeight: weight.bold, color: 'var(--mo-warning-ink)' }}><span>Saldo</span><span>{plata(fila.saldo)}</span></div>}
+          </section>
           {nota ? (
             <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start', padding: '12px 14px', borderRadius: 10, background: 'var(--mo-warning-bg)', border: '1px solid var(--mo-warning-border)' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -265,27 +281,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
               </div>
               {!fila.anulada && <Button size="sm" variant="ghost" onClick={() => abrirVentana('editar')}>Editar</Button>}
             </div>
-          ) : !fila.anulada && <div><Button size="sm" variant="outline" onClick={() => abrirVentana('editar')}>Agregar nota</Button></div>}
-
-          <section>
-            <h3 style={h3}>Productos</h3>
-            {ficha.lineas.map((l) => (
-              <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], padding: '10px 0', borderBottom: `1px solid ${color.bg2}` }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: weight.semibold }}>{l.nombre ?? `Producto ${l.producto}`}{l.devuelta && <span style={{ marginLeft: 6, color: 'var(--mo-warning-ink)', fontSize: font.sm }}>devuelta</span>}{l.agregada && <span style={{ marginLeft: 6, color: 'var(--mo-warning-ink)', fontSize: font.sm }}>agregada al corregir</span>}</div>
-                  <div style={{ fontSize: font.sm, color: color.mut }}>Variante {l.talleNombre ?? l.talle} · {l.cantidad} u.{l.cantidadOriginal != null ? ` (eran ${l.cantidadOriginal})` : ''}{l.sku ? ` · ${l.sku}` : ''}{l.descuento || l.rebaja ? ` · desc. ${plata(l.descuento + l.rebaja)}` : ''}</div>
-                </div>
-                <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{plata(l.importe)}</span>
-              </div>
-            ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', fontWeight: weight.bold }}><span>Total</span><span>{plata(v!.total)}</span></div>
-            {ficha.pagos.map((p, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', color: color.mut }}>
-                <span>{p.medio === 'cuenta' ? 'Quedó a cuenta' : p.cuenta ?? p.medio ?? 'Pago'}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{p.medio === 'cuenta' ? '' : '− '}{plata(p.monto)}</span>
-              </div>
-            ))}
-            {debe && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', fontWeight: weight.bold, color: 'var(--mo-warning-ink)' }}><span>Saldo</span><span>{plata(fila.saldo)}</span></div>}
-          </section>
+          ) : null /* Darío 19-nov: «Agregar nota» no se entendía; la nota se carga en Editar. */}
 
           {!!corr?.correcciones.length && (
             <Notice tone={corr.diferencia === 0 ? 'neutral' : 'warning'}>
@@ -295,12 +291,32 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             </Notice>
           )}
 
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: space[5], minWidth: 0 }}>
+          <DatosFicha>
+            {/* Darío 19-nov: Canal (era «Origen», que ya decía el canal y la línea) · Vendedor · Ubicación · Forma de pago. */}
+            <DatoFicha titulo="Canal">{fila.origenTexto}</DatoFicha>
+            <DatoFicha titulo="Vendedor">{extra?.vendedor || fila.vendio}</DatoFicha>
+            <DatoFicha titulo="Ubicación">{NOMBRE_DEPOSITO[v!.deposito as keyof typeof NOMBRE_DEPOSITO] ?? v!.deposito}</DatoFicha>
+            <DatoFicha titulo="Factura">{fila.factura ? `${fila.factura.numero}${fila.factura.de === 'gn' ? ' (GN)' : ''}` : 'Sin factura'}</DatoFicha>
+            <DatoFicha titulo={ficha.pagos.length > 1 ? 'Formas de pago' : 'Forma de pago'}>
+              {ficha.pagos.length ? ficha.pagos.map((p, i) => (
+                <div key={i}>{p.medio === 'cuenta' ? 'A cuenta' : p.cuenta ?? p.medio ?? 'Pago'}{ficha.pagos.length > 1 && <span style={{ color: color.mut }}> · {plata(p.monto)}</span>}</div>
+              )) : '—'}
+            </DatoFicha>
+            {extra?.entrega && <DatoFicha titulo="Entrega">{[ENTREGA[extra.entrega.tipo], extra.entrega.direccion].filter(Boolean).join(' · ')}</DatoFicha>}
+            {extra?.cobroEnEntrega && <DatoFicha titulo="Contraentrega">{[extra.cobroEnEntrega.formaPago ? COBRO_EN_ENTREGA[extra.cobroEnEntrega.formaPago] : null, extra.cobroEnEntrega.entrego, extra.cobroEnEntrega.fecha ? cuandoCorto(extra.cobroEnEntrega.fecha) : null].filter(Boolean).join(' · ')}</DatoFicha>}
+            {extra?.gnNumero && <DatoFicha titulo="En Gestión Nube">{`venta ${extra.gnNumero}`}</DatoFicha>}
+          </DatosFicha>
+
           <section style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-            <div><h3 style={h3}>Historial de la venta</h3><span style={{ fontSize: font.sm, color: color.mut }}>todo lo que le pasó, con quién y cuándo</span></div>
+            <h3 style={h3}>Historial</h3>
             <Historial hechos={hechos} cuandoTexto={cuandoCorto} />
             {extra?.motor && <span style={{ fontSize: font.sm, color: color.mut2 }}>Las ediciones y las notas todavía no se leen: {extra.motor}</span>}
             {!puede.editar && !extra?.motor && <span style={{ fontSize: font.sm, color: color.mut2 }}>Editar todavía no está disponible.</span>}
           </section>
+          </div>
+          </div>
         </>
       )}
 

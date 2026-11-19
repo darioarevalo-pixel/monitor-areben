@@ -20,13 +20,15 @@ import {
 import { ListaTrabajo, IconoFila, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
-import { BuscadorLista, ChipEstado, FiltroOpciones, TileResumen, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { BotonActualizar, BuscadorLista, ChipEstado, FiltroOpciones, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { usePantallaAngosta } from '@/lib/movil'
 import { leerListaDeVentas, type FilaVentaLista, type MarcaErp, type QueSabeElMotor } from '@/lib/erp/cliente'
 import {
-  COBRO, COLUMNAS, ESTADO, ORIGEN, PERIODOS, VISTAS, accionesDeFila, alternarColumna, contarVistas, filtrar, moverColumna,
-  PEDIDO_VIEJO_DIAS, normalizarPrefs, ordenar, plata, rangoDePeriodo, resumen,
+  COBRO, COLUMNAS, ESTADO, PERIODOS, VISTAS, accionesDeFila, alternarColumna, contarVistas, filtrar, moverColumna,
+  PEDIDO_VIEJO_DIAS, mismoTramoDelMesPasado, normalizarPrefs, ordenar, plata, rangoDePeriodo, resumen, variacion, vendidoPorDia,
 } from '@/lib/erp/ventas-lista.core.js'
+import { useRolVisto } from '@/lib/erp/ver-como'
+import { ResumenVentas, type Comparacion } from './ResumenVentas'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { FichaVenta } from './FichaVenta'
@@ -51,6 +53,9 @@ type Ventana = { tipo: 'cobro' | 'editar'; fila: FilaVentaLista; desdeFicha: boo
  * «Caja · Zattia» con su sigla se comía el cobro en 390 px (medido en prod, 29-oct), y el cobro es lo que se mira.
  */
 const MOVIL: Record<string, MovilColumna> = { c: 'titulo', total: 'dato', n: 'chico', h: 'chico', p: 'chico' }
+
+/** «Sin factura» son casi todas (se factura en Gestión Nube): en rojo ⛔ alarmaba nada (Darío 19-nov). */
+const SIN_ROJO = ['sinfactura']
 
 const ORIGENES: Array<[string, string]> = [['', 'Todos los orígenes'], ['caja', 'Caja'], ['tn', 'Tienda Nube'], ['mayorista', 'Mayorista'], ['ml', 'Mercado Libre']]
 
@@ -139,6 +144,21 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
     return () => { vivo = false }
   }, [marca, linea, periodo, clave, periodos, vuelta])
   const cargar = () => setVuelta((n) => n + 1)
+
+  // 🎯 Darío 19-nov: lo vendido es de Admin (vos y Bruno); el resto entra a trabajar sus pestañas. «Ver como» lo respeta.
+  const rolVisto = useRolVisto()
+  const esAdmin = !!perfil?.admin && !rolVisto
+  // «Este mes» contra el mes pasado al MISMO día: la misma lista, leída una vez por marca y línea.
+  const [hoy] = useState(() => diaArgentino(Date.now()))
+  const [mesPasado, setMesPasado] = useState<{ filas: FilaVentaLista[]; clave: string } | null>(null)
+  const claveAntes = `${marca}|${linea}|${hoy}`
+  useEffect(() => {
+    if (!esAdmin || periodo !== 'mes' || mesPasado?.clave === claveAntes) return
+    let vivo = true
+    const r = mismoTramoDelMesPasado(hoy)
+    leerListaDeVentas(marca, r.desde, r.hasta, linea).then((d) => { if (vivo) setMesPasado({ filas: d.filas, clave: claveAntes }) }).catch(() => {})
+    return () => { vivo = false }
+  }, [esAdmin, periodo, marca, linea, hoy, claveAntes, mesPasado?.clave])
   const cargando = datos?.clave !== clave
 
   const puede = datos?.puede ?? { editar: false, notas: false, cobrar: false }
@@ -149,7 +169,22 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
   const base = useMemo(() => filtrar(datos?.filas ?? [], { q, origenes: origen ? [origen] : [] }).filter((f: FilaVentaLista) => !linea || f.linea === linea), [datos, q, origen, linea])
   const conteo = useMemo(() => contarVistas(base), [base])
   const filas: FilaVentaLista[] = useMemo(() => ordenar(filtrar(base, { vista }), orden), [base, vista, orden])
-  const res = useMemo(() => resumen(filtrar(base, { vista })), [base, vista])
+  // Lo vendido mira el período entero (con el origen y la línea elegidos): ⛔ cambia con la pestaña ni con lo que se busca.
+  const delPeriodo = useMemo(() => filtrar(datos?.filas ?? [], { origenes: origen ? [origen] : [] }).filter((f: FilaVentaLista) => !linea || f.linea === linea), [datos, origen, linea])
+  const res = useMemo(() => resumen(delPeriodo), [delPeriodo])
+  const dias = useMemo(() => {
+    const r = rangoDePeriodo(periodo, hoy)
+    // «Este mes» se dibuja entero: los días que faltan quedan como una raya.
+    const fin = periodo === 'mes' ? new Date(Date.UTC(+hoy.slice(0, 4), +hoy.slice(5, 7), 0)).toISOString().slice(0, 10) : r.hasta
+    return vendidoPorDia(delPeriodo, r.desde, fin, (iso: string) => diaArgentino(Date.parse(iso)))
+  }, [delPeriodo, periodo, hoy])
+  const comparacion = useMemo((): Comparacion | null => {
+    if (periodo !== 'mes' || mesPasado?.clave !== claveAntes) return null
+    const antes = resumen(filtrar(mesPasado.filas, { origenes: origen ? [origen] : [] }).filter((f: FilaVentaLista) => !linea || f.linea === linea)).vendido
+    const r = mismoTramoDelMesPasado(hoy)
+    const mes = new Date(`${r.desde}T12:00:00Z`).toLocaleString('es-AR', { month: 'long', timeZone: 'UTC' })
+    return { pct: variacion(res.vendido, antes), antes, mes, dia: +r.hasta.slice(8, 10) }
+  }, [periodo, mesPasado, claveAntes, origen, linea, res.vendido, hoy])
   // La hoja vuelve a la 1 con cada filtro, orden o lectura nueva (el resumen y las vistas siguen contando TODAS).
   const filtro = `${clave}|${q}|${origen}|${vista}|${JSON.stringify(orden)}`
   const [hojaDe, setHojaDe] = useState({ filtro, n: 1 })
@@ -186,13 +221,8 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
       )
     }
     if (k === 'o') {
-      const o = ORIGEN[f.origen]
-      return (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <span aria-hidden style={{ flex: '0 0 26px', height: 20, borderRadius: 5, display: 'inline-grid', placeItems: 'center', fontSize: 10.5, fontWeight: weight.bold, background: color.bg2, color: color.ink2 }}>{o?.sigla ?? '··'}</span>
-          <span style={{ color: color.ink2 }} title={f.origenTexto}>{f.origenTexto}</span>
-        </span>
-      )
+      // Darío 19-nov: la sigla repetía lo que dice el texto («CJ Caja · BDI»). Queda el texto solo.
+      return <span style={{ color: color.ink2 }} title={f.origenTexto}>{f.origenTexto}</span>
     }
     if (k === 'e') {
       // Un pedido colgado hace días: a cobrar o a cancelar ya (lo que marcaba la pestaña «Pedidos sin pagar»).
@@ -236,7 +266,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
           ...(cobra ? [{ key: 'cobro', label: 'Registrar cobro', icono: 'pesos' as const, onClick: () => abrirVentana('cobro', f, false), disabled: !(f.saldo > 0), hint: f.saldo > 0 ? undefined : 'No tiene saldo.' }] : []),
           ...(edita ? [{ key: 'editar', label: 'Editar', icono: 'lapiz' as const, onClick: () => abrirVentana('editar', f, false), disabled: f.anulada }] : []),
           { key: 'imprimir', label: 'Imprimir el ticket', icono: 'impresora', onClick: () => imprimir(f) },
-          ...(rol('cambiar') ? [{ key: 'cambio', label: 'Hacer cambio', icono: 'cambios' as const, onClick: () => irACaja('cambio'), disabled: f.anulada, hint: 'Abre la Caja de Areben Gestión en Cambio.' }] : []),
+          ...(rol('cambiar') ? [{ key: 'cambio', label: 'Cambiar producto', icono: 'cambios' as const, onClick: () => irACaja('cambio'), disabled: f.anulada, hint: 'Abre la Caja de Areben Gestión en Cambio.' }] : []),
           ...(f.link ? [{ key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir' as const, onClick: () => window.open(f.link!, '_blank', 'noopener') }] : []),
           ...(rol('anular') ? [{ key: 'anular', label: 'Anular…', icono: 'anular' as const, tone: 'danger' as const, onClick: () => abrirFicha(f, 'anular'), disabled: f.anulada }] : []),
         ]
@@ -260,24 +290,21 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      {/* El título «Ventas» lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
-      <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
-        <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Caja, Tienda Nube, mayoristas y cambios, en una sola lista.</p>
-        {rol('nueva-venta') && <Button onClick={() => setNuevaAbierta(true)}>Nueva venta</Button>}
-      </div>
+      {/* El título «Ventas» lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. Sin subtítulo (Darío 19-nov: decía lo obvio). */}
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {aviso && <Notice tone="success" onClose={() => setAviso(null)}>{aviso}</Notice>}
 
-      <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-        <TileResumen titulo={`Vendido · ${nombrePeriodo.toLowerCase()}`} valor={plata(res.vendido)} oscuro />
-        <TileResumen titulo="Ventas" valor={res.ventas.toLocaleString('es-AR')} />
-        <TileResumen titulo="Ticket promedio" valor={plata(res.ticket)} />
-        <TileResumen titulo="Por cobrar" valor={plata(res.porCobrar)} nota={res.sinPagar ? `y ${plata(res.sinPagar)} reservado sin pagar` : undefined} />
-      </div>
+      {esAdmin && (
+        <ResumenVentas
+          titulo={`Vendido · ${nombrePeriodo.toLowerCase()}`} vendido={res.vendido} comparacion={comparacion} dias={dias} hoy={hoy}
+          datos={[{ valor: res.ventas.toLocaleString('es-AR'), despues: res.ventas === 1 ? 'venta' : 'ventas' }, { antes: 'Ticket promedio', valor: plata(res.ticket) }]}
+          lateral={{ titulo: 'Por cobrar', valor: res.porCobrar, tono: 'aviso', nota: res.sinPagar ? `y ${plata(res.sinPagar)} reservado sin pagar` : undefined }}
+        />
+      )}
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
-        <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
+        <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} sinRojo={SIN_ROJO} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista
             valor={q} onCambio={setQ} etiqueta="Buscar en las ventas" placeholder="Número, pedido de Tienda Nube, cliente o nota"
@@ -295,7 +322,9 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
             onRestablecer={() => setPrefs({ ...normalizarPrefs(null) })}
           />}
-          {!angosta && <Button variant="outline" disabled={cargando} onClick={() => cargar()}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>}
+          {/* Darío 19-nov: «Actualizar» es un ícono solo (gira mientras lee) y la acción principal, «+ Venta» en índigo. */}
+          {!angosta && <BotonActualizar cargando={cargando} onClick={() => cargar()} />}
+          {rol('nueva-venta') && <Button variant="solid" tone="brand" onClick={() => setNuevaAbierta(true)} style={{ marginLeft: angosta ? undefined : 'auto', gap: 6, height: 36 }}><Icono nombre="mas" size={16} />Venta</Button>}
         </div>
         <ListaTrabajo
           columnas={columnas} filas={deLaHoja} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={120}

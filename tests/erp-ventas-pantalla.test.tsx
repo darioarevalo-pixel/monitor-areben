@@ -38,7 +38,7 @@ vi.mock('@/lib/erp/cliente', () => ({
   leerExtraDeVenta: async () => extra,
   anularVenta: vi.fn(), notaDeCreditoDeVenta: vi.fn(), editarVentaErp: vi.fn(), guardarNotaDeVenta: vi.fn(), cobrarVentaErp: vi.fn(),
 }))
-vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'bdi', perfil: { name: 'bruno' } }) }))
+vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'bdi', perfil: { name: 'bruno', admin: true } }) }))
 
 // El `localStorage` de Node 25 le gana al de jsdom y viene sin métodos: uno en memoria (como `caja-calculadora`).
 const guardado = new Map<string, string>()
@@ -143,7 +143,7 @@ describe('la ficha y las ventanas', () => {
     expect(todo()).toContain('Editar la venta #301')
     expect(todo()).toContain('No se editan acá: mueven stock, plata o la factura.')
     expect((boton('Guardar cambios') as HTMLButtonElement).disabled).toBe(true)
-    await clic(boton('Hacer cambio'))
+    await clic(boton('Cambiar producto'))
     expect(irACaja).toHaveBeenCalledWith('cambio')
   })
 

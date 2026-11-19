@@ -42,9 +42,9 @@ describe('el núcleo', () => {
 
 const leer = vi.fn(async () => ({ renglones: R, desde: '2026-10-01', hasta: '2026-10-20', costos: true, gnHasta: '2026-10-20T03:00:00Z' }))
 const corte = { en_erp: false }
-vi.mock('@/lib/erp/cliente', () => ({ leerVentasPorProducto: () => leer(), leerCorteDeLinea: async () => corte }))
+vi.mock('@/lib/erp/cliente', () => ({ leerVentasPorProducto: () => leer(), leerCorteDeLinea: async () => corte, leerListaDeProductos: async () => ({ filas: [] }) }))
 vi.mock('@/components/erp/productos/FichaProducto', () => ({ FichaProducto: ({ producto }: { producto: string }) => <aside aria-label="ficha">Ficha del producto {producto}</aside> }))
-vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', perfil: { name: 'bruno' } }) }))
+vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', perfil: { name: 'bruno', admin: true } }) }))
 const guardado = new Map<string, string>()
 vi.stubGlobal('localStorage', { getItem: (k: string) => guardado.get(k) ?? null, setItem: (k: string, v: string) => { guardado.set(k, String(v)) }, removeItem: (k: string) => { guardado.delete(k) }, clear: () => guardado.clear() })
 
@@ -55,34 +55,46 @@ const clic = async (el: Element) => { await act(async () => { (el as HTMLElement
 const filas = () => [...document.querySelectorAll('[role="row"]')].slice(1)
 
 describe('la pantalla', () => {
-  it('arranca agrupada, cambia a cada renglón y abre la ficha del producto', async () => {
+  it('arranca en Resumen, abre las VENTAS del producto en una ventana y en Detalle la ficha del producto', async () => {
     const { PorProductoErp } = await import('@/components/erp/ventas/PorProductoErp')
     const host = document.createElement('div'); document.body.appendChild(host)
     await act(async () => { root = createRoot(host); root.render(<PorProductoErp />) })
     await act(async () => {})
     const vistas = [...document.querySelectorAll('[role="tab"]')].map((t) => t.textContent)
-    expect(vistas).toEqual(['Agrupado por producto2', 'Cada renglón4'])
+    expect(vistas).toEqual(['Resumen2', 'Detalle4'])
     expect(filas()[0].textContent).toContain('CORSET FRANK') // el más vendido primero
     expect(document.body.textContent).toContain('$ 49.990')
-    expect(document.body.textContent).toContain('1 productos sin costo')
+    expect(document.body.textContent).toContain('1 sin costo no entran')
     expect(document.body.textContent).toContain('llega hasta el 20/10')
+    // Darío 19-nov: el clic en Resumen abre las ventas del producto (por variante), ⛔ la ficha del catálogo.
+    await clic(filas()[0].querySelectorAll('[role="cell"]')[0])
+    const ventana = document.querySelector('[role="dialog"]')
+    expect(ventana?.textContent).toContain('CORSET FRANK')
+    expect(ventana?.textContent).toContain('Ver ficha del producto')
+    expect(document.querySelector('aside[aria-label="ficha"]')).toBeNull()
+    await clic([...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === 'Ver ficha del producto')!)
+    expect(document.querySelector('aside[aria-label="ficha"]')?.textContent).toContain('Ficha del producto')
+  })
+
+  it('en Detalle, un renglón por producto de cada venta; el clic abre la ficha del producto', async () => {
+    const { PorProductoErp } = await import('@/components/erp/ventas/PorProductoErp')
+    const host = document.createElement('div'); document.body.appendChild(host)
+    await act(async () => { root = createRoot(host); root.render(<PorProductoErp />) })
+    await act(async () => {})
     await clic([...document.querySelectorAll('[role="tab"]')][1])
     expect(filas()).toHaveLength(4)
     expect(filas()[0].textContent).toContain('18/10')
     await clic(filas()[0].querySelectorAll('[role="cell"]')[2])
     expect(document.querySelector('aside[aria-label="ficha"]')?.textContent).toContain('Ficha del producto')
-    expect(document.body.textContent).toContain('que es el que vende hoy')
   })
 
-  it('🔑 con la línea ya en Areben Gestión (BDI desde su corte) ⛔ dice que «GN es el que vende hoy»', async () => {
-    corte.en_erp = true
-    try {
-      const { PorProductoErp } = await import('@/components/erp/ventas/PorProductoErp')
-      const host = document.createElement('div'); document.body.appendChild(host)
-      await act(async () => { root = createRoot(host); root.render(<PorProductoErp />) })
-      await act(async () => {})
-      expect(document.body.textContent).not.toContain('que es el que vende hoy')
-      expect(document.body.textContent).toContain('las de después, de Areben Gestión')
-    } finally { corte.en_erp = false }
+  it('sin subtítulo ni cartel (Darío 19-nov): de dónde sale el margen, chico al pie', async () => {
+    const { PorProductoErp } = await import('@/components/erp/ventas/PorProductoErp')
+    const host = document.createElement('div'); document.body.appendChild(host)
+    await act(async () => { root = createRoot(host); root.render(<PorProductoErp />) })
+    await act(async () => {})
+    expect(document.body.textContent).not.toContain('que es el que vende hoy')
+    expect(document.body.textContent).not.toContain('Hacé clic en uno')
+    expect(document.body.textContent).toContain('el margen usa el costo de hoy')
   })
 })

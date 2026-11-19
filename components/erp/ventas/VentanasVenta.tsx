@@ -233,7 +233,7 @@ function FormEditar({ marca, fila, puede, vendedores, onCerrar, onHecho, irACaja
           <span style={{ fontWeight: weight.semibold }}>Productos, precios y cobros</span>
           <span style={{ fontSize: font.base, color: color.mut }}>No se editan acá: mueven stock, plata o la factura. Para cambiarlos:</span>
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-            {rol('cambiar') && <Button size="sm" variant="outline" onClick={() => irACaja('cambio')}>Hacer cambio</Button>}
+            {rol('cambiar') && <Button size="sm" variant="outline" onClick={() => irACaja('cambio')}>Cambiar producto</Button>}
             {rol('cobrar') && <Button size="sm" variant="outline" disabled={!(fila.saldo > 0)} onClick={abrirCobro}>Registrar cobro</Button>}
             {rol('anular') && <Button size="sm" variant="outline" tone="danger" onClick={anular}>Anular…</Button>}
           </div>

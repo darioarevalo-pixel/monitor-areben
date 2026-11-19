@@ -180,7 +180,7 @@ describe('el historial', () => {
   }
   it('del más viejo al más nuevo, con la edición antes → después', () => {
     const h = historialDeVenta(ficha, { ediciones: [{ cuando: '2026-10-17T12:40:00Z', campo: 'cliente', antes: 'Consumidor final', despues: 'Sofía R.', usuario: 'camila' }], notas: [{ cuando: '2026-10-17T13:00:00Z', texto: 'Pedir DNI', de: 'camila', reemplaza: 'Retira la hermana' }] })
-    expect(h.map((x: { titulo: string }) => x.titulo)).toEqual(['Se vendió', 'Quedó a cuenta · $ 93.200', 'Editó cliente', 'Cambió la nota', 'Hizo un cambio · #310', 'Anulada'])
+    expect(h.map((x: { titulo: string }) => x.titulo)).toEqual(['Venta realizada', 'Quedó a cuenta · $ 93.200', 'Editó cliente', 'Cambió la nota', 'Hizo un cambio · #310', 'Anulada'])
     expect(h[2]).toMatchObject({ antes: 'Consumidor final', despues: 'Sofía R.' })
     expect(h[3]).toMatchObject({ antes: 'Retira la hermana', despues: 'Pedir DNI' })
     expect(h[5].detalle).toBe('Bruno · «Se cargó dos veces»')

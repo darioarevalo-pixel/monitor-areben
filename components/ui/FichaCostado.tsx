@@ -26,8 +26,10 @@ export type BotonPie = { label: string; onClick: () => void; disabled?: boolean 
 /** Lo que va al pie en el celular: la principal (llena, a la derecha), una segunda (de borde) y el resto en «⋯». */
 export type PieFicha = { principal?: BotonPie; otra?: BotonPie; mas?: AccionMenu[] }
 
-export function FichaCostado({ abierta, onCerrar, titulo, etiqueta, pie, children }: {
+export function FichaCostado({ abierta, onCerrar, titulo, etiqueta, pie, ventana, children }: {
   abierta: boolean
+  /** VENTANA al centro en vez de al costado (Darío 19-nov, Ventas: «de forma ordenada»). En el celular es igual: pantalla entera. */
+  ventana?: boolean
   onCerrar: () => void
   /** La línea de arriba («Venta #301 · 18/10 10:40»). */
   titulo: React.ReactNode
@@ -47,16 +49,16 @@ export function FichaCostado({ abierta, onCerrar, titulo, etiqueta, pie, childre
   }, [abierta, onCerrar])
   if (!abierta || typeof document === 'undefined') return null
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', justifyContent: 'flex-end' }}>
-      <button type="button" aria-label="Cerrar la ficha" onClick={onCerrar} style={{ position: 'absolute', inset: 0, height: 'auto', border: 0, padding: 0, background: 'rgba(15, 23, 41, 0.18)', cursor: 'default' }} />
-      <aside aria-label={etiqueta} style={{ position: 'relative', width: 'min(560px, 100vw)', height: '100%', overflowY: 'auto', background: color.surface, boxShadow: shadow.modal, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', justifyContent: ventana && !angosta ? 'center' : 'flex-end', alignItems: ventana && !angosta ? 'center' : undefined, padding: ventana && !angosta ? 24 : 0 }}>
+      <button type="button" aria-label="Cerrar la ficha" onClick={onCerrar} style={{ position: 'absolute', inset: 0, height: 'auto', border: 0, padding: 0, background: ventana ? 'rgba(15, 23, 41, 0.42)' : 'rgba(15, 23, 41, 0.18)', cursor: 'default' }} />
+      <aside aria-label={etiqueta} style={{ position: 'relative', width: ventana && !angosta ? 'min(960px, 100%)' : 'min(560px, 100vw)', height: ventana && !angosta ? 'auto' : '100%', maxHeight: ventana && !angosta ? 'calc(100vh - 48px)' : undefined, borderRadius: ventana && !angosta ? 16 : 0, overflowY: 'auto', background: color.surface, boxShadow: shadow.modal, display: 'flex', flexDirection: 'column' }}>
         <div style={{ position: 'sticky', top: 0, zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[2], padding: '12px 16px', background: color.surface, borderBottom: `1px solid ${color.line}` }}>
           <span style={{ fontSize: font.base, color: color.mut, fontWeight: weight.medium }}>{titulo}</span>
           <button type="button" aria-label="Cerrar" onClick={onCerrar} style={{ height: 32, width: 32, padding: 0, display: 'grid', placeItems: 'center', border: 0, borderRadius: 8, background: 'transparent', color: color.mut, cursor: 'pointer' }}>
             <Icono nombre="cruz" size={18} />
           </button>
         </div>
-        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: space[5] }}>{children}</div>
+        <div style={{ padding: ventana && !angosta ? 24 : 20, display: 'flex', flexDirection: 'column', gap: space[5] }}>{children}</div>
         {angosta && pie && <PieDeFicha pie={pie} etiqueta={etiqueta} />}
       </aside>
     </div>,

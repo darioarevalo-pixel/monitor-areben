@@ -781,6 +781,13 @@ const TRAZOS = {
       <path d="M4.5 16.5V19a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2.5" />
     </>
   ),
+  /** Volver a leer — la flecha en círculo (Darío 19-nov: «Actualizar» pasó a ícono solo). */
+  actualizar: (
+    <>
+      <path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" />
+      <path d="M19.8 4.5v4.2h-4.2" />
+    </>
+  ),
   /** Listo — tilde. */
   check: (
     <>

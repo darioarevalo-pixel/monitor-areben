@@ -80,7 +80,7 @@ describe('Ventas: el «⋯» de la fila y la ficha, según el rol', () => {
     await clic(boton(/^Más acciones de la venta #301$/)!)
     expect(todo()).toContain('Abrir la ficha')
     expect(todo()).toContain('Imprimir el ticket')
-    for (const t of ['Registrar cobro', 'Hacer cambio', 'Anular…']) expect(todo()).not.toContain(t)
+    for (const t of ['Registrar cobro', 'Cambiar producto', 'Anular…']) expect(todo()).not.toContain(t)
     expect(boton(/^Editar$/)).toBeUndefined()
   })
 
@@ -88,14 +88,14 @@ describe('Ventas: el «⋯» de la fila y la ficha, según el rol', () => {
     permisos = { ...SOLO_VER, cobrar: true, 'editar-venta': true, cambiar: true, anular: true }
     await montarVentas()
     await clic(boton(/^Más acciones de la venta #301$/)!)
-    for (const t of ['Registrar cobro', 'Editar', 'Hacer cambio', 'Anular…']) expect(todo()).toContain(t)
+    for (const t of ['Registrar cobro', 'Editar', 'Cambiar producto', 'Anular…']) expect(todo()).toContain(t)
   })
 
   it('sin respuesta del servidor el botón SE VE (falla abierto: el 403 lo frena igual)', async () => {
     permisos = {}
     await montarVentas()
     await clic(boton(/^Más acciones de la venta #301$/)!)
-    for (const t of ['Editar', 'Hacer cambio', 'Anular…']) expect(todo()).toContain(t)
+    for (const t of ['Editar', 'Cambiar producto', 'Anular…']) expect(todo()).toContain(t)
   })
 })
 

@@ -51,6 +51,7 @@ import { Redondeo } from './Redondeo'
 import { RutasCobro } from './RutasCobro'
 import { CuentasErp, EstructuraErp } from './CuentasYEstructura'
 import { TokensApi } from './TokensApi'
+import { Interruptor } from '@/components/ui/Interruptor'
 import { VentasErp } from './ventas/VentasErp'
 import { PorProductoErp } from './ventas/PorProductoErp'
 import { CajasErp } from './ventas/CajasErp'
@@ -94,7 +95,7 @@ export const SECCIONES_ERP: Seccion[] = [
   {
     key: 'ventas', titulo: 'Ventas', icono: 'M6 2l-2 4v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6l-2-4z M4 6h16 M16 10a4 4 0 0 1-8 0',
     pestanias: [
-      { key: 'ventas', label: 'Ventas', vistas: [{ key: 'ventas', label: 'Ventas' }, { key: 'por-producto', label: 'Por producto' }] },
+      { key: 'ventas', label: 'Ventas', vistas: [{ key: 'ventas', label: 'Por venta' }, { key: 'por-producto', label: 'Por producto' }] },
       // Los cheques recibidos (motor sql/079): sólo Admin («los cargan los admin, administración no usa cheques», Bruno 10-nov).
       { key: 'cobros', label: 'Cobros', vistas: [{ key: 'cobros', label: 'Cobros' }, { key: 'cheques', label: 'Cheques', permiso: 'configurar' }] }, { key: 'cajas', label: 'Cajas' },
       // Facturación: la lista del mes es de la oficina; «Facturar una venta» (alguien pide factura en el local), de quien vende (Bruno 30-oct).
@@ -294,6 +295,9 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
   const transferenciaEnErp = lineaEnErp
   const corteLeido = leida === lineaDelCartel
   // Las vistas ocultas (Facturar una venta) ⛔ son pestaña; «Mover y recibir» ⛔ va aparte de la línea cortada (`MoverYRecibir unificada`); Con Gestión Nube ⛔ para la línea cortada (ya ⛔ tiene GN).
+  // Darío 19-nov: en Ventas las dos vistas son la MISMA información de dos formas ⇒ interruptor al lado del título
+  // («Por venta | Por producto»), ⛔ la fila de pestañas. Por ahora sólo acá.
+  const comoInterruptor = seccion.key === 'ventas' && pestania === 'ventas'
   const vistasDeAca = paraVer(itemActual?.vistas).filter((v) => !((transferenciaEnErp || !corteLeido) && v.key === 'mover') && !((lineaEnErp || lineaVista === 'stunned') && v.key === 'diferencias'))
   // Contadores rojos del menú y de las pestañas: los mismos números de «Para hacer» de Inicio (la marca como Inicio: BDI o Zattia).
   const contadores = useContadoresErp(marca === 'bdi' ? 'bdi' : 'zattia', lineaVista)
@@ -438,7 +442,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
               </p>
             )}
             {seccion.key !== 'inicio' && (
-              <header style={{ display: 'flex', flexDirection: 'column', gap: space[2], borderBottom: vistasDeAca.length > 1 && !itemActual?.junta ? `1px solid ${color.line}` : undefined }}>
+              <header style={{ display: 'flex', flexDirection: 'column', gap: space[2], borderBottom: vistasDeAca.length > 1 && !itemActual?.junta && !comoInterruptor ? `1px solid ${color.line}` : undefined }}>
                 {/* 📱 En el celular los ítems del grupo van como pestañas (el menú de costado ⛔ se ve): en la compu se esconden (globals.css). */}
                 {paraVer(seccion.pestanias).length > 1 && (
                   <div className="erp-pestanias erp-pestanias-movil">
@@ -452,8 +456,9 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
                   {vista === 'facturacion' && puede('facturar-venta') && <Button size="sm" onClick={() => { setAFacturar(null); ir('ventas', 'facturacion', 'factura') }}>Facturar una venta</Button>}
                   {vista === 'factura' && puede('facturacion') && <Button size="sm" variant="outline" onClick={() => ir('ventas', 'facturacion')}>Volver a Facturas</Button>}
                   {pestania === 'cambio' && <Button size="sm" variant="outline" onClick={() => ir('ventas', 'ventas')}>Volver a Ventas</Button>}
+                  {comoInterruptor && <Interruptor etiqueta="Ver las ventas" valor={vista ?? ''} onCambio={(k) => ir(seccion.key, pestania, k)} opciones={vistasDeAca} />}
                 </div>
-                {vistasDeAca.length > 1 && !itemActual?.junta && (
+                {vistasDeAca.length > 1 && !itemActual?.junta && !comoInterruptor && (
                   // 📱 En el celular las vistas se deslizan de costado (`erp-vistas`, globals.css).
                   <div className="erp-vistas" style={{ marginBottom: -1 }}><Tabs variant="underline" items={vistasDeAca} value={vista ?? ''} onChange={(k) => ir(seccion.key, pestania, k)} style={{ borderBottom: 'none' }} /></div>
                 )}
