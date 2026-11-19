@@ -2,7 +2,8 @@
 
 /**
  * «Editar el producto» en la ficha de Productos (Bruno, 20-oct: «se tiene que poder hacer»): nombre y categoría del producto;
- * talle, SKU y código de barras de cada variante; agregar una variante. ⛔ Sin «desactivar» ni «archivar»: no hay vuelta desde la pantalla y el v8 no lo dibuja. Habla con `api/_erp-catalogo.js`
+ * talle, SKU y código de barras de cada variante; agregar una variante; desactivar / activar el producto (Darío 19-nov:
+ * las fundas agotadas que no vuelven). Desactivar sólo sin stock; la vuelta es la vista «Inactivos» › Activar. Habla con `api/_erp-catalogo.js`
  * (motor `catalogo-edicion.mjs`, sql/037). Cada cambio guarda quién, antes y después, y queda en «Cambios de la ficha».
  *
  * 🔴 Editar una fila que vino de GN la pasa a «cargada»: la copia de GN ⛔ la actualiza más. Por eso se avisa ANTES de guardar.
@@ -10,7 +11,8 @@
  */
 
 import { useState } from 'react'
-import { Button, ConfirmDetalle, Field, Input, space, useConfirmar } from '@/components/ui'
+import { Button, ConfirmDetalle, Field, Input, color, font, space, useConfirmar } from '@/components/ui'
+import { tieneStock } from '@/lib/erp/productos-lista.core.js'
 import { agregarVarianteErp, editarProductoErp, editarVarianteErp, type FilaProducto, type MarcaErp, type ResultadoEdicion } from '@/lib/erp/cliente'
 
 const vacioANull = (t: string) => (t.trim() === '' ? null : t.trim())
@@ -90,6 +92,20 @@ export function EditarProducto({ marca, fila, onError, onListo }: {
     onListo(`Variante ${nueva.talle.trim()} agregada.`, aviso(r))
   }, 'No se pudo agregar la variante.')
 
+  /** Desactivar (sólo sin stock) o volver a activar: deja de aparecer en la lista y queda en «Inactivos». */
+  const conStock = tieneStock(fila)
+  const cambiarActivo = (activo: boolean) => correr(async () => {
+    const ok = await confirmar({
+      titulo: `${activo ? 'Activar' : 'Desactivar'} ${fila.nombre}`,
+      mensaje: activo ? 'Vuelve a aparecer en la lista de Productos.' : 'Deja de aparecer en la lista de Productos. Queda en «Inactivos», donde se puede volver a activar.',
+      ok: activo ? 'Activar' : 'Desactivar',
+      tono: activo ? 'brand' : 'danger',
+    })
+    if (!ok) return
+    await editarProductoErp(marca, fila.producto, { activo })
+    onListo(activo ? 'Producto activado.' : 'Producto desactivado.')
+  }, activo ? 'No se pudo activar el producto.' : 'No se pudo desactivar el producto.')
+
   const fila3: React.CSSProperties = { display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'flex-end' }
   const poner = (talle: string, k: 'talle' | 'sku' | 'barcode', t: string) => setVars((m) => ({ ...m, [talle]: { ...m[talle], [k]: t } }))
 
@@ -123,6 +139,13 @@ export function EditarProducto({ marca, fila, onError, onListo }: {
           <Button variant="outline" disabled={trabajando} onClick={() => setNueva({ talle: '', sku: '', barcode: '' })}>Agregar una variante</Button>
         </div>
       )}
+
+      <div style={{ ...fila3, alignItems: 'center' }}>
+        {fila.inactivo
+          ? <Button variant="solid" tone="brand" disabled={trabajando} onClick={() => void cambiarActivo(true)}>Activar producto</Button>
+          : <Button variant="outline" tone="danger" disabled={trabajando || conStock} onClick={() => void cambiarActivo(false)}>Desactivar producto</Button>}
+        {!fila.inactivo && conStock && <span style={{ fontSize: font.sm, color: color.mut }}>Con stock no se puede desactivar.</span>}
+      </div>
     </div>
   )
 }

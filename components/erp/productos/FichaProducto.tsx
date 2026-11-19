@@ -144,6 +144,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: weight.bold, overflowWrap: 'anywhere' }}>{nombre}</h2>
           <div style={{ color: color.mut }}>{[fila?.categoria, linea && (LINEA[linea] ?? linea)].filter(Boolean).join(' · ') || ' '}</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+            {fila?.inactivo && <ChipEstado mapa={{ i: ['danger', 'Inactivo'] }} k="i" />}
             {fila && <ChipEstado mapa={EN_TN} k={fila.tn} />}
             {f?.feria != null && <ChipEstado mapa={{ o: ['brand', 'En oferta (Liquidación)'] }} k="o" />}
             {f?.costos && fila?.costo == null && !f.costo && <ChipEstado mapa={{ c: ['warning', 'Sin costo'] }} k="c" />}
@@ -168,7 +169,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
         <section style={{ display: 'flex', flexDirection: 'column', gap: space[2], padding: space[3], border: `1px solid ${color.line}`, borderRadius: 12 }}>
           <div>
             <h3 style={h3}>Corregir datos</h3>
-            <div style={{ fontSize: font.sm, color: color.mut }}>nombre, categoría y, de cada variante, variante, código y código de barras · el alta del producto es en Ingresos · queda quién y el antes y el después</div>
+            <div style={{ fontSize: font.sm, color: color.mut }}>nombre, categoría, activo y, de cada variante, variante, código y código de barras · el alta del producto es en Ingresos · queda quién y el antes y el después</div>
           </div>
           <EditarProducto key={`${producto}-${vuelta}`} marca={marca} fila={fila} onError={setError} onListo={(h, aviso) => { setHecho(h); if (aviso) setError(aviso); releer() }} />
         </section>

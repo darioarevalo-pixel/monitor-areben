@@ -16,10 +16,11 @@ import { armarFilasProductos } from '../lib/erp/productos-lista.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 
-/** Lo del motor para la lista: los activos con su proveedor, los precios y el costo vigentes, y si está en TN. */
+/** Lo del motor para la lista: los productos (activos e inactivos) con su proveedor, los precios y el costo vigentes, y si está en TN. */
 async function delMotor(pg, { costos }) {
-  const productos = (await pg.query(`select p.id, p.nombre, p.marca, p.categoria, pr.nombre as proveedor
-    from producto p left join proveedor pr on pr.id = p.proveedor_id where p.activo`)).rows
+  // 🔑 Los inactivos también viajan (Darío 19-nov): la lista los esconde si están en 0 y los muestra en la vista «Inactivos».
+  const productos = (await pg.query(`select p.id, p.nombre, p.marca, p.categoria, p.activo, pr.nombre as proveedor
+    from producto p left join proveedor pr on pr.id = p.proveedor_id`)).rows
   const precios = (await pg.query('select product_id, marca, lista, precio from precio_lista')).rows
   const sinEspejo = (await pg.query(`select product_id, size_id, talle, sku, barcode from variante where fuente = 'carga' and activa`)).rows
   // 🔴 Sin el permiso `costos` (Admin y Administración) el costo ⛔ se lee: ⛔ viaja (Bruno 30-oct, el local lo veía en Productos).

@@ -659,6 +659,8 @@ export type FilaProducto = {
   cambiosMes: number
   /** La liquidación EN CURSO del monitor que lo tiene, con su precio. */
   liquidacion: { nombre: string; hasta: string | null; precio: number | null } | null
+  /** Desactivado en Areben Gestión (`producto.activo = false`): sin stock ⛔ aparece salvo en la vista «Inactivos». */
+  inactivo: boolean
 }
 export type ListaDeProductos = {
   filas: FilaProducto[]; libroHasta: string | null; pedidosLeidosEn: string | null; tnLeidaEn: string | null

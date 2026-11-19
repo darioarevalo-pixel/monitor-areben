@@ -95,3 +95,33 @@ describe('lo importado de Ingresos sin stock (prueba de Bruno, 3-nov)', () => {
     expect(armarFilasProductos({ ...base, productos: [], stock: [], sinEspejo })).toHaveLength(0)
   })
 })
+
+describe('inactivos (Darío 19-nov: las fundas agotadas dejan de aparecer)', () => {
+  const base = { precios: [], costos: [], tn: [], cambios: [], liquidaciones: [], sinEspejo: [] }
+  const s = (producto: string, n: number) => ({ producto, talle: 'U', nombre: `P${producto}`, talleNombre: 'U', sku: null, barcode: null, linea: 'bdi', deps: { local: n }, estanteria: n, enPedidos: 0, disponible: n })
+  const lista = armarFilasProductos({
+    ...base,
+    productos: [
+      { id: 1, nombre: 'ACTIVA', marca: 'bdi', categoria: null, proveedor: null, activo: true },
+      { id: 2, nombre: 'AGOTADA', marca: 'bdi', categoria: null, proveedor: null, activo: false },
+      { id: 3, nombre: 'INACTIVA CON STOCK', marca: 'bdi', categoria: null, proveedor: null, activo: false },
+      { id: 4, nombre: 'SIN MOVIMIENTOS', marca: 'bdi', categoria: null, proveedor: null, activo: false },
+    ],
+    stock: [s('1', 0), s('2', 0), s('3', 2)],
+  })
+  const ids = (fs: { producto: string }[]) => fs.map((f) => f.producto).sort()
+
+  it('el inactivo en 0 ⛔ aparece en las vistas de trabajo; con stock sigue a la vista', () => {
+    expect(ids(filtrar(lista, { vista: 'todos' }))).toEqual(['1', '3'])
+    expect(ids(filtrar(lista, { vista: 'sinstock' }))).toEqual(['1'])
+  })
+
+  it('«Inactivos» los trae a todos, para volver a activarlos', () => {
+    expect(ids(filtrar(lista, { vista: 'inactivos' }))).toEqual(['2', '3', '4'])
+    expect(contarVistas(filtrar(lista, {}))).toMatchObject({ todos: 2, inactivos: 3 })
+  })
+
+  it('el buscador sin vista ve todo (la base de los conteos)', () => {
+    expect(ids(filtrar(lista, { q: 'agotada' }))).toEqual(['2'])
+  })
+})
