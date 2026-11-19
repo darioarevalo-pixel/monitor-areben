@@ -195,7 +195,7 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
       {ficha && (
         <HistorialPrenda
           key={`${ficha.producto}/${ficha.talle}`} marca={marca} producto={ficha.producto} talle={ficha.talle}
-          datos={{ nombre: ficha.nombre, talleNombre: ficha.talleNombre, sku: ficha.sku, barcode: ficha.barcode, linea: ficha.linea }} onCerrar={() => setFicha(null)} ajustar={ajustar}
+          datos={{ nombre: ficha.nombre, talleNombre: ficha.talleNombre, sku: ficha.sku, barcode: ficha.barcode, linea: ficha.linea }} onCerrar={() => setFicha(null)}
         />
       )}
     </div>

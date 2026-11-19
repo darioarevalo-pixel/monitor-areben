@@ -545,7 +545,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
       </Modal>
       {panel === 'buscar' && <BusquedaGlobal marca={marca} marcas={marcas} secciones={SECCIONES_BUSCABLES} onElegir={elegirDeLaBusqueda} onCerrar={() => setPanel(null)} />}
       {panel === 'atajos' && <HojaDeAtajos onCerrar={() => setPanel(null)} />}
-      {prendaGlobal && <HistorialPrenda key={`${prendaGlobal.marca}/${prendaGlobal.producto}/${prendaGlobal.talle}`} marca={prendaGlobal.marca} producto={prendaGlobal.producto} talle={prendaGlobal.talle} onCerrar={() => setPrendaGlobal(null)} ajustar={ajustarPrenda} />}
+      {prendaGlobal && <HistorialPrenda key={`${prendaGlobal.marca}/${prendaGlobal.producto}/${prendaGlobal.talle}`} marca={prendaGlobal.marca} producto={prendaGlobal.producto} talle={prendaGlobal.talle} onCerrar={() => setPrendaGlobal(null)} />}
     </div>
   )
 }

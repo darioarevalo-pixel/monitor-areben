@@ -228,7 +228,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
         // 18-nov (Darío): tocar un producto abre DIRECTO sus movimientos (la ficha del costado repetía la lista).
         <HistorialPrenda
           key={`${ficha.marca}/${ficha.prenda.producto}/${ficha.prenda.talle}`} marca={ficha.marca} producto={ficha.prenda.producto} talle={ficha.prenda.talle}
-          datos={filaDeFicha} onCerrar={() => setFicha(null)} ajustar={ajustar}
+          datos={filaDeFicha} onCerrar={() => setFicha(null)}
         />
       )}
     </div>

@@ -9,16 +9,23 @@
  * 🆕 18-nov (Darío): es LO que se abre al tocar un producto en Stock, Movimientos y la búsqueda — la ficha del costado repetía
  * la lista —; trae el código de barras, «Ajustar» (lleva a «Nuevo ajuste») y «Etiquetas ↗». Diferencias y Conciliación
  * siguen con la ficha del costado: ahí lo que importa es la comparación con Gestión Nube y Tienda Nube.
- * Transferir y Ajustar DENTRO de la ventana vienen en un segundo paso.
+ * 🆕 Paso 2 (Darío 18-nov): «Transferir» y «Ajustar» se hacen DENTRO de la ventana — un recuadro abajo, en lugar de los botones —
+ * con las mismas acciones que sus pantallas: la transferencia libre del motor (crear → armar → enviar; el destino la recibe
+ * escaneando, como siempre) y el ajuste (crear + aprobar, la aprobación está apagada). Lo imposible ⛔ se ofrece: ⛔ sale más de
+ * lo que hay en el depósito. Al guardar, la tabla se vuelve a leer y el nuevo renglón aparece arriba.
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Modal, Notice, color, font, space, weight } from '@/components/ui'
+import { Button, Field, Input, Modal, Notice, NumberField, Select, color, font, space, weight } from '@/components/ui'
 import { usePantallaAngosta } from '@/lib/movil'
 import { lineaDe } from '@/lib/lineas'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
-import type { PrendaAAjustar } from './StockErp'
-import { leerHistorialDePrenda, type FilaHistorial, type HistorialDePrenda, type MarcaErp } from '@/lib/erp/cliente'
+import {
+  aprobarAjuste, armarTransferenciaDoc, crearAjuste, crearTransferenciaDoc, enviarTransferenciaDoc, leerHistorialDePrenda,
+  type FilaHistorial, type HistorialDePrenda, type MarcaErp, type TiendaErp,
+} from '@/lib/erp/cliente'
+import { MOTIVOS } from '@/lib/erp/ajuste.core.js'
+import { DEPOSITOS_DE_LINEA } from '@/lib/erp/transferencia-escaneo.core.js'
 import { FILTROS, depositoInicial, filtrarHistorial } from '@/lib/erp/historial-prenda.core.js'
 
 /** El color de la etiqueta de cada tipo (tokens `--mo-mov-*` de `app/tokens.css`). */
@@ -42,19 +49,29 @@ function Etiqueta({ f }: { f: FilaHistorial }) {
   return <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: font.sm, fontWeight: weight.semibold, background: bg, color: fg, whiteSpace: 'nowrap' }}>{f.tipoNombre}</span>
 }
 
+/** Los motivos de una salida a mano (el conteo entra solo, ⛔ va). */
+const MOTIVOS_SALIDA = MOTIVOS.filter((m) => m.key !== 'conteo')
+const unid = (n: number) => `${n} ${n === 1 ? 'unidad' : 'unidades'}`
+
+type Panel =
+  | { tipo: 'transf'; desde: string; hacia: string; cantidad: number | ''; nota: string }
+  | { tipo: 'ajuste'; sentido: 'ingreso' | 'salida'; deposito: string; motivo: string; cantidad: number | ''; porque: string }
+
 /** Lo que ya se sabe del producto (la fila de la lista); sin eso, lo trae el servidor. */
 export type DatosDelProducto = { nombre?: string | null; talleNombre?: string | null; sku?: string | null; barcode?: string | null; linea?: string | null }
 
-export function HistorialPrenda({ marca, producto, talle, datos, ajustar, onCerrar }: {
+export function HistorialPrenda({ marca, producto, talle, datos, onCerrar }: {
   marca: MarcaErp; producto: string; talle: string; datos?: DatosDelProducto | null
-  /** «Ajustar» lleva a «Nuevo ajuste» con el producto cargado; sin esto, ⛔ se muestra. */
-  ajustar?: (p: PrendaAAjustar) => void
   onCerrar: () => void
 }) {
   const [h, setH] = useState<HistorialDePrenda | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [deposito, setDeposito] = useState<string | null>(null)
   const [filtro, setFiltro] = useState('todo')
+  const [panel, setPanel] = useState<Panel | null>(null)
+  const [trabajando, setTrabajando] = useState(false)
+  const [hecho, setHecho] = useState<string | null>(null)
+  const [vuelta, setVuelta] = useState(0)
   const angosta = usePantallaAngosta()
 
   useEffect(() => {
@@ -63,7 +80,7 @@ export function HistorialPrenda({ marca, producto, talle, datos, ajustar, onCerr
       .then((x) => { if (vivo) { setH(x); setDeposito((d) => d ?? depositoInicial(x.depositos)) } })
       .catch((e) => vivo && setError(e instanceof Error ? e.message : 'No se pudieron leer los movimientos del producto.'))
     return () => { vivo = false }
-  }, [marca, producto, talle])
+  }, [marca, producto, talle, vuelta])
 
   const ajusta = usePuedeErp(marca)('ajustar')
   const nombre = datos?.nombre ?? h?.prenda?.nombre ?? 'Producto'
@@ -71,13 +88,72 @@ export function HistorialPrenda({ marca, producto, talle, datos, ajustar, onCerr
   const codigo = datos?.sku ?? h?.prenda?.sku ?? null
   const barcode = datos?.barcode ?? h?.prenda?.barcode ?? null
   const linea = datos?.linea ?? (codigo || h ? lineaDe(marca, codigo) : null)
-  const aAjustar = () => { if (ajustar && linea) { onCerrar(); ajustar({ linea, producto, talle, sku: codigo, barcode, nombre, talleNombre: variante }) } }
+  // Los depósitos donde se transfiere y ajusta (el mayorista está apagado, Darío 18-nov).
+  const deps: string[] = linea ? (DEPOSITOS_DE_LINEA as Record<string, string[]>)[linea] ?? [] : []
+  const nombreDep = (d: string) => h?.depositos.find((x) => x.deposito === d)?.nombre ?? d
+  const hay = (d: string) => Math.max(0, h?.depositos.find((x) => x.deposito === d)?.saldo ?? 0)
 
   const dep = deposito ?? 'todos'
   const filas = useMemo(() => (h ? filtrarHistorial(h.filas, { deposito: dep, filtro }) : []), [h, dep, filtro])
   const conSaldo = filtro === 'todo'
   const todos = dep === 'todos'
   const saldo = !h ? null : todos ? h.total : h.depositos.find((d) => d.deposito === dep)?.saldo ?? 0
+  // Arranca en el depósito que se está mirando (si es uno de los dos); para transferir, en el que tiene stock.
+  const enVista = deps.includes(dep) ? dep : null
+  function abrirTransferir() {
+    const desde = enVista && hay(enVista) > 0 ? enVista : deps.find((d) => hay(d) > 0) ?? deps[0]
+    setPanel({ tipo: 'transf', desde, hacia: deps.find((d) => d !== desde) ?? deps[0], cantidad: '', nota: '' }); setHecho(null); setError(null)
+  }
+  function abrirAjustar() {
+    setPanel({ tipo: 'ajuste', sentido: 'ingreso', deposito: enVista ?? deps[0], motivo: 'otro', cantidad: '', porque: '' }); setHecho(null); setError(null)
+  }
+
+  /** Lo que frena el botón principal (se muestra en el botón apagado). */
+  const frena = !panel ? null
+    : !panel.cantidad ? 'Cantidad'
+    : panel.tipo === 'transf' ? (panel.desde === panel.hacia ? 'Depósitos distintos' : panel.cantidad > hay(panel.desde) ? `Hay ${hay(panel.desde)} en ${nombreDep(panel.desde)}` : null)
+    : panel.sentido === 'salida' && panel.cantidad > hay(panel.deposito) ? `Hay ${hay(panel.deposito)} en ${nombreDep(panel.deposito)}`
+    : panel.motivo === 'otro' && panel.porque.trim().length < 3 ? 'Por qué'
+    : null
+
+  async function guardar() {
+    if (!panel || frena || !linea || !panel.cantidad) return
+    const n = panel.cantidad
+    setTrabajando(true); setError(null)
+    if (panel.tipo === 'transf') {
+      // crear → armar → enviar, como «Transferir» de Transferencias.
+      const renglones = [{ product_id: producto, size_id: talle, sku: codigo, barcode, cantidad: n }]
+      let numero: number | null = null
+      try {
+        const nota = panel.nota.trim()
+        const c = nota ? await crearTransferenciaDoc(linea as TiendaErp, panel.desde, panel.hacia, renglones, nota) : await crearTransferenciaDoc(linea as TiendaErp, panel.desde, panel.hacia, renglones)
+        numero = c.transferencia.numero
+        await armarTransferenciaDoc(linea as TiendaErp, c.transferencia.id, renglones)
+        const e = await enviarTransferenciaDoc(linea as TiendaErp, c.transferencia.id)
+        setHecho(`T-${e.transferencia.numero} en tránsito hacia ${nombreDep(panel.hacia)}: se recibe escaneando.`)
+        setPanel(null); setVuelta((v) => v + 1)
+      } catch (err) {
+        const m = err instanceof Error ? err.message : 'No se pudo transferir.'
+        setError(numero ? `${m} T-${numero} quedó sin enviar: no salió nada del stock. Cancelala en Transferencias.` : m)
+        if (numero) setPanel(null)
+      } finally { setTrabajando(false) }
+      return
+    }
+    let creado: { numero: number; id: string } | null = null
+    try {
+      const motivo = panel.sentido === 'ingreso' ? 'otro' : panel.motivo
+      // «Otro» va con signo; Con falla / Canje / Regalo, lo que sale en positivo (como en Ajustes).
+      const cantidad = motivo === 'otro' ? (panel.sentido === 'ingreso' ? n : -n) : n
+      creado = await crearAjuste({ linea: linea as TiendaErp, deposito: panel.deposito, motivo, detalle: panel.porque.trim(), fuente: 'mano', renglones: [{ producto, talle, sku: codigo, barcode, cantidad }] })
+      const r = await aprobarAjuste(linea as TiendaErp, creado.id)
+      setHecho(`A-${r.numero} guardado.`)
+      setPanel(null); setVuelta((v) => v + 1)
+    } catch (err) {
+      const m = err instanceof Error ? err.message : 'No se pudo guardar el ajuste.'
+      if (creado) { setPanel(null); setError(`A-${creado.numero} quedó guardado sin aplicar (${m}). Confirmalo en Ajustes.`) } else setError(m)
+    } finally { setTrabajando(false) }
+  }
+
   const opciones = h ? [...h.depositos.map((d) => ({ k: d.deposito, n: d.nombre, s: d.saldo })), { k: 'todos', n: 'Todos', s: h.total }] : []
 
   const boton = (activo: boolean): React.CSSProperties => ({
@@ -124,16 +200,73 @@ export function HistorialPrenda({ marca, producto, talle, datos, ajustar, onCerr
   const td: React.CSSProperties = { padding: '8px 10px', borderTop: `1px solid ${color.bg2}`, verticalAlign: 'middle' }
   const th: React.CSSProperties = { padding: '8px 10px', fontWeight: weight.semibold, fontSize: font.sm, color: color.mut, textAlign: 'left', position: 'sticky', top: 0, background: color.surface, borderBottom: `1px solid ${color.line}`, whiteSpace: 'nowrap' }
 
+  // El recuadro de Transferir / Ajustar (en el pie, en lugar de los botones). Un elemento, ⛔ componente: así ⛔ pierde el foco al tipear.
+  const recuadro = !panel ? null : (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: space[3], flexWrap: 'wrap', width: '100%' }}>
+      <div style={{ width: '100%', fontSize: font.base, fontWeight: weight.bold, color: color.ink }}>{panel.tipo === 'transf' ? 'Transferir' : 'Ajustar'}</div>
+      {panel.tipo === 'transf' ? <>
+        <Field label="Origen">
+          <Select value={panel.desde} onChange={(e) => { const d = e.target.value; setPanel({ ...panel, desde: d, hacia: d === panel.hacia ? deps.find((x) => x !== d) ?? panel.hacia : panel.hacia }) }}>
+            {deps.map((d) => <option key={d} value={d}>{nombreDep(d)} · {hay(d)}</option>)}
+          </Select>
+        </Field>
+        <Field label="Destino">
+          <Select value={panel.hacia} onChange={(e) => setPanel({ ...panel, hacia: e.target.value })}>
+            {deps.filter((d) => d !== panel.desde).map((d) => <option key={d} value={d}>{nombreDep(d)}</option>)}
+          </Select>
+        </Field>
+        <Field label="Cantidad"><NumberField value={panel.cantidad} min={1} max={hay(panel.desde) || undefined} onChange={(c) => setPanel({ ...panel, cantidad: c })} /></Field>
+        <div style={{ flex: '1 1 160px', minWidth: 160 }}><Field label="Nota"><Input value={panel.nota} onChange={(e) => setPanel({ ...panel, nota: e.target.value })} placeholder="Opcional" /></Field></div>
+      </> : <>
+        <Field label="Tipo">
+          <div role="group" aria-label="Ingreso o salida" style={{ display: 'flex', gap: space[1] }}>
+            {(['ingreso', 'salida'] as const).map((t) => (
+              <Button key={t} variant={panel.sentido === t ? 'solid' : 'outline'} aria-pressed={panel.sentido === t}
+                onClick={() => setPanel({ ...panel, sentido: t, motivo: 'otro' })}>{t === 'ingreso' ? 'Ingreso' : 'Salida'}</Button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Depósito">
+          <Select value={panel.deposito} onChange={(e) => setPanel({ ...panel, deposito: e.target.value })}>
+            {deps.map((d) => <option key={d} value={d}>{nombreDep(d)} · {hay(d)}</option>)}
+          </Select>
+        </Field>
+        {panel.sentido === 'salida' && (
+          <Field label="Motivo">
+            <Select value={panel.motivo} onChange={(e) => setPanel({ ...panel, motivo: e.target.value })}>
+              {MOTIVOS_SALIDA.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+            </Select>
+          </Field>
+        )}
+        <Field label="Cantidad"><NumberField value={panel.cantidad} min={1} max={panel.sentido === 'salida' ? hay(panel.deposito) || undefined : undefined} onChange={(c) => setPanel({ ...panel, cantidad: c })} /></Field>
+        <div style={{ flex: '1 1 160px', minWidth: 160 }}>
+          <Field label={panel.motivo === 'otro' ? 'Por qué' : 'Detalle'}>
+            <Input value={panel.porque} onChange={(e) => setPanel({ ...panel, porque: e.target.value })} placeholder={panel.motivo === 'otro' ? 'Ej.: apareció en el conteo' : 'Opcional'} />
+          </Field>
+        </div>
+      </>}
+      <div style={{ display: 'flex', gap: space[2], marginLeft: 'auto' }}>
+        <Button variant="outline" tone="danger" disabled={trabajando} onClick={() => setPanel(null)}>Cancelar</Button>
+        <Button variant="solid" tone="brand" disabled={trabajando || !!frena} title={frena ?? undefined} onClick={guardar}>
+          {trabajando ? 'Guardando…' : !panel.cantidad ? (panel.tipo === 'transf' ? 'Transferir' : panel.sentido === 'ingreso' ? 'Ingresar' : 'Sacar')
+            : panel.tipo === 'transf' ? `Transferir ${unid(panel.cantidad)}` : `${panel.sentido === 'ingreso' ? 'Ingresar' : 'Sacar'} ${unid(panel.cantidad)}`}
+        </Button>
+      </div>
+    </div>
+  )
+
   return (
     <Modal abierto onCerrar={onCerrar} titulo={titulo} ancho="xl" variante="pos"
-      pie={<>
+      pie={panel ? recuadro : <>
         <span style={{ marginRight: 'auto', fontSize: font.sm, color: color.mut }}>{h ? `${filas.length} ${filas.length === 1 ? 'movimiento' : 'movimientos'}` : ''}</span>
         <Button variant="outline" onClick={() => window.open('/etiquetas', '_blank', 'noopener')}>Etiquetas ↗</Button>
-        {ajustar && ajusta && <Button variant="soft" tone="brand" disabled={!linea} onClick={aAjustar}>Ajustar</Button>}
+        {ajusta && deps.length > 1 && <Button variant="outline" disabled={!h} onClick={abrirTransferir}>Transferir</Button>}
+        {ajusta && deps.length > 0 && <Button variant="outline" disabled={!h} onClick={abrirAjustar}>Ajustar</Button>}
       </>}>
       {/* Mismo alto siempre: con pocos renglones la ventana se achicaba y saltaba al cambiar de filtro. */}
       <div style={{ minHeight: angosta ? undefined : 'calc(100vh - 250px)' }}>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+      {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
       {!h ? (!error && <div style={{ padding: space[6], color: color.mut }}>Leyendo los movimientos…</div>)
         : !filas.length ? <div style={{ padding: space[6], color: color.mut }}>No hay movimientos con ese filtro.</div>
         : angosta ? (
