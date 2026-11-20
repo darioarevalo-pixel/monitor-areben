@@ -131,7 +131,7 @@ export function CorregirProductos({ marca, fila, ficha, abierto, onCerrar, onLis
         </section>
         <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
           <b>Agregar productos</b>
-          <Input value={q} onChange={(e) => escribir(e.target.value)} placeholder="Nombre, variante o código" aria-label="Buscar un producto para agregar" />
+          <Input value={q} onChange={(e) => escribir(e.target.value)} placeholder="Nombre, variante o SKU" aria-label="Buscar un producto para agregar" />
           {encontradas.slice(0, 20).map((p) => (
             <Button key={`${p.producto}/${p.talle}`} size="sm" variant="soft" onClick={() => void agregar(p)} style={{ justifyContent: 'flex-start', height: 'auto' }}>
               {p.nombre ?? p.sku}{p.talleNombre ? ` · ${p.talleNombre}` : ''}

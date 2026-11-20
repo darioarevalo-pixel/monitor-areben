@@ -100,8 +100,8 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
         <DatoFicha titulo="Físico">{estanteria ?? '…'}</DatoFicha>
         <DatoFicha titulo="Reservado">{enPedidos ? `${enPedidos} sin preparar` : '—'}</DatoFicha>
         {enBolsas > 0 && <DatoFicha titulo="En bolsas">{`${enBolsas} para desarmar`}</DatoFicha>}
-        <DatoFicha titulo="código">{sku ?? '—'}</DatoFicha>
-        <DatoFicha titulo="Código">{barcode ?? '—'}</DatoFicha>
+        <DatoFicha titulo="SKU">{sku ?? '—'}</DatoFicha>
+        <DatoFicha titulo="Código de barras">{barcode ?? '—'}</DatoFicha>
         {linea && <DatoFicha titulo="Línea">{LINEA[linea] ?? linea}</DatoFicha>}
       </DatosFicha>
 

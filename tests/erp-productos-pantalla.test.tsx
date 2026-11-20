@@ -93,20 +93,22 @@ describe('la lista de productos', () => {
     expect(f.textContent).not.toMatch(/Costo|Sin costo|7\.900/)
   })
 
-  it('vistas con su número, el resumen arriba y el estado en Tienda Nube', async () => {
+  it('5 pestañas (Darío 20-nov): lo que falta completar va junto en «Para revisar», con un desplegable de qué; sin cuadros de resumen', async () => {
     await montar()
+    const tabs = [...host.querySelectorAll('[role="tab"]')].map((t) => t.textContent?.replace(/\d+$/, '').trim())
+    expect(tabs).toEqual(['Todos', 'Con stock', 'Sin stock', 'Para revisar', 'Inactivos'])
     expect(boton(/^Con stock/).textContent).toContain('1')
-    expect(boton(/^Sin costo/).textContent).toContain('1')
-    expect(boton(/^No están en Tienda Nube/).textContent).toContain('1')
-    expect(todo()).toMatch(/Productos22 variantes/)
-    expect(todo()).toContain('4 u')
+    expect(todo()).not.toMatch(/Productos22 variantes/)
     expect(filaDe('TOP SAHARA').textContent).toContain('Publicado')
     expect(filaDe('CINTO CALYPSO').textContent).toContain('No está en Tienda Nube')
-    await clic(boton(/^Sin código de barras/))
+    await clic(boton(/^Para revisar/))
+    const que = host.querySelector<HTMLSelectElement>('select[aria-label="Qué revisar"]')!
+    expect([...que.options].map((o) => o.textContent)).toEqual(expect.arrayContaining(['Sin costo · 1', 'No están en Tienda Nube · 1']))
+    await act(async () => { que.value = 'sinbarra'; que.dispatchEvent(new Event('change', { bubbles: true })) })
     expect(host.querySelector('[role="table"]')!.textContent).not.toContain('TOP SAHARA')
   })
 
-  it('la fila abre la ficha al costado: listas con Gestión Nube y Tienda Nube, variantes con su stock y el historial', async () => {
+  it('la fila abre la ficha en ventana (Darío 20-nov): precios con Tienda Nube, variantes con su stock y un solo historial', async () => {
     await montar()
     await clic(filaDe('TOP SAHARA'))
     const f = ficha()!
@@ -114,45 +116,58 @@ describe('la lista de productos', () => {
     expect(f.textContent).toContain('Precio Local')
     expect(f.querySelector('[aria-label="Precio por lista"]')!.textContent).toMatch(/Mayorista/)
     expect(f.querySelector('[aria-label="Stock por variante"]')!.textContent).toMatch(/TOP-0110-S/)
-    expect(f.textContent).toContain('de Ingresos, OC 12 del 20/09')
+    expect(f.textContent).toContain('OC 12 · 20/09')
     expect(f.textContent).toContain('Precio Local · $ 22.990')
-    expect(f.textContent).not.toContain('Cargar en Areben Gestión')
+    expect(document.querySelector('[aria-label="Precio por lista"] input')).toBeNull()
   })
 
-  it('el $ de la fila abre «Cargar en Areben Gestión» y carga el costo con el monto bien leído', async () => {
+  it('el $ de la fila abre la ficha con el Local en edición; el lápiz del Costo carga el costo con el monto bien leído (Darío 20-nov)', async () => {
     await montar()
     await clic(boton('Cargar precio o costo', filaDe('TOP SAHARA')))
-    const f = ficha()!
-    expect(f.textContent).toContain('Cargar en Areben Gestión')
-    const monto = [...f.querySelectorAll('input')].find((i) => i.getAttribute('placeholder') === '$ 0')!
+    const tabla = document.querySelector('[aria-label="Precio por lista"]')!
+    expect(tabla.querySelector('input')).toBeTruthy()
+    await clic(boton('Editar costo', tabla))
+    const f = tabla
+    const monto = [...f.querySelectorAll('label')].find((l) => l.textContent?.includes('Nuevo monto'))!.querySelector('input')!
     await act(async () => {
       const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
       set.call(monto, '8.100'); monto.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    await clic(boton('Cargar', f))
+    await clic(boton('Guardar', f))
     expect(cargarPrecioCosto).toHaveBeenCalledWith('zattia', expect.objectContaining({ que: 'costo', producto: '1', monto: 8100, proveedorId: '40' }))
-    expect(todo()).toContain('Costo cargado.')
+    expect(todo()).toContain('Costo guardado.')
     expect(leerListaDeProductos).toHaveBeenCalledTimes(2)
   })
 
-  it('«Corregir datos» cambia el nombre y el código de una variante, y manda sólo lo que cambió', async () => {
+  it('«Corregir datos» (tabla, Darío 20-nov) cambia el nombre y el código de barras de una variante con UN guardar, y manda sólo lo que cambió', async () => {
     await montar()
     await clic(filaDe('TOP SAHARA'))
-    const f = ficha()!
-    await clic(boton('Corregir datos', f))
+    await clic(boton('Editar', ficha()!))
     const poner = async (input: HTMLInputElement, v: string) => act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, v); input.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    const ent = (etiqueta: string) => [...f.querySelectorAll('label')].find((l) => l.textContent?.trim() === etiqueta)!.querySelector('input')!
-    await poner(ent('Nombre'), 'TOP SAHARA NEGRO')
-    await clic(boton('Guardar producto', f))
-    await clic(boton('Guardar', document.body))
+    const nombre = [...document.querySelectorAll('label')].find((l) => l.textContent?.trim() === 'Nombre')!.querySelector('input')!
+    const f = nombre.closest('[role="dialog"]')!
+    expect(boton('Guardar cambios', f).disabled).toBe(true)
+    await poner(nombre, 'TOP SAHARA NEGRO')
+    await poner(f.querySelector<HTMLInputElement>('input[aria-label^="Código de barras de"]')!, '999')
+    // Sin ConfirmProvider, la confirmación es `window.confirm` (sí): guarda de una.
+    await clic(boton('Guardar 2 cambios', f))
     expect(editarProductoErp).toHaveBeenCalledWith('zattia', '1', { nombre: 'TOP SAHARA NEGRO' })
-    expect(todo()).toContain('Producto: nombre guardado.')
-    await poner(ent('Código de barras'), '999')
-    await clic([...f.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Guardar')[0])
-    await clic(boton('Guardar', document.body))
     expect(editarVarianteErp).toHaveBeenCalledWith('zattia', '1', '1', { barcode: '999' })
+    expect(editarVarianteErp).toHaveBeenCalledTimes(1)
+    expect(todo()).toContain('2 cambios guardados.')
+  })
+
+  it('Eliminar (Darío 20-nov) va al lado de Editar: con stock apagado; sin stock pregunta y desactiva (queda en Inactivos)', async () => {
+    await montar()
+    await clic(filaDe('TOP SAHARA'))
+    expect(boton('Eliminar', ficha()!).disabled).toBe(true)
+    await clic(boton('Cerrar', ficha()!))
+    await clic(filaDe('CINTO CALYPSO'))
+    await clic(boton('Eliminar', ficha()!))
+    expect(editarProductoErp).toHaveBeenCalledWith('zattia', '2', { activo: false })
+    expect(leerListaDeProductos).toHaveBeenCalledTimes(2)
   })
 
   it('Precios: el $ de la fila abre la ficha con «Cargar en Areben Gestión» a la vista', async () => {
@@ -161,18 +176,18 @@ describe('la lista de productos', () => {
     await act(async () => { root = createRoot(host); root.render(<PreciosErp />) })
     await act(async () => {})
     await clic(boton('Cargar precio o costo', filaDe('TOP SAHARA')))
-    expect(ficha()!.textContent).toContain('Cargar en Areben Gestión')
+    expect(document.querySelector('[aria-label="Precio por lista"] input')).toBeTruthy()
   })
 
-  it('🔴 Precios: el cartel sigue al CORTE (revisión 10-nov: decía «no cambia Tienda Nube» fijo, también ya cortada)', async () => {
+  it('🔴 Precios: el cartel sólo ANTES del corte (revisión 10-nov: decía «no cambia Tienda Nube» fijo; Darío 20-nov: ya cortada, sin cartel)', async () => {
     const { PreciosErp } = await import('@/components/erp/productos/PreciosErp')
-    for (const [corto, dice, noDice] of [[false, 'Mientras Gestión Nube funcione', 'ya vive en Areben Gestión'], [true, 'llega a Tienda Nube en las próximas 2 horas', 'Mientras Gestión Nube funcione']] as const) {
+    for (const [corto, conCartel] of [[false, true], [true, false]] as const) {
       enErp = corto
       host = document.createElement('div'); document.body.appendChild(host)
       await act(async () => { root = createRoot(host); root.render(<PreciosErp />) })
       await act(async () => {})
-      expect(todo()).toContain(dice)
-      expect(todo()).not.toContain(noDice)
+      expect(todo().includes('Mientras Gestión Nube funcione')).toBe(conCartel)
+      expect(todo()).not.toContain('Tienda Nube lo muestra en hasta 2 horas')
       act(() => root?.unmount()); root = null; host.remove()
     }
     enErp = false

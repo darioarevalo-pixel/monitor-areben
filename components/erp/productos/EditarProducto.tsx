@@ -12,139 +12,136 @@
 
 import { useState } from 'react'
 import { Button, ConfirmDetalle, Field, Input, color, font, space, useConfirmar } from '@/components/ui'
-import { tieneStock } from '@/lib/erp/productos-lista.core.js'
-import { agregarVarianteErp, editarProductoErp, editarVarianteErp, type FilaProducto, type MarcaErp, type ResultadoEdicion } from '@/lib/erp/cliente'
+import { agregarVarianteErp, editarProductoErp, editarVarianteErp, type FilaProducto, type MarcaErp } from '@/lib/erp/cliente'
 
 const vacioANull = (t: string) => (t.trim() === '' ? null : t.trim())
 
-export function EditarProducto({ marca, fila, onError, onListo }: {
+type Renglon = { talle: string; sku: string; barcode: string }
+const NUEVA: Renglon = { talle: '', sku: '', barcode: '' }
+
+export function EditarProducto({ marca, fila, onError, onListo, onCancelar }: {
   marca: MarcaErp
   fila: FilaProducto
   onError: (e: string) => void
   /** Se guardó (texto de lo hecho y el aviso del motor, si vino): la ficha y la lista se vuelven a leer. */
   onListo: (hecho: string, aviso?: string | null) => void
+  /** Cierra la ventana sin guardar. */
+  onCancelar?: () => void
 }) {
   const [nombre, setNombre] = useState(fila.nombre)
   const [categoria, setCategoria] = useState(fila.categoria ?? '')
-  const [vars, setVars] = useState(() => Object.fromEntries(fila.variantes.map((v) => [v.talle, { talle: v.talleNombre, sku: v.sku ?? '', barcode: v.barcode ?? '' }])))
-  const [nueva, setNueva] = useState<{ talle: string; sku: string; barcode: string } | null>(null)
+  const [vars, setVars] = useState<Record<string, Renglon>>(() => Object.fromEntries(fila.variantes.map((v) => [v.talle, { talle: v.talleNombre, sku: v.sku ?? '', barcode: v.barcode ?? '' }])))
+  // Darío 20-nov: las variantes nuevas son renglones más de la MISMA tabla, y todo se guarda con un solo botón.
+  const [nuevas, setNuevas] = useState<Renglon[]>([])
   const [trabajando, setTrabajando] = useState(false)
   const { confirmar } = useConfirmar()
 
-  async function correr(fn: () => Promise<void>, fallo: string) {
-    setTrabajando(true)
-    try { await fn() } catch (e) { onError(e instanceof Error ? e.message : fallo) } finally { setTrabajando(false) }
-  }
-  const dicho = (r: ResultadoEdicion, que: string) => (r.cambios.length ? `${que}: ${r.cambios.map((c) => c.campo).join(', ')} guardado.` : `${que}: no había nada distinto.`)
-  const aviso = (r: ResultadoEdicion) => r.avisos.map((a) => a.texto).join(' ') || null
-
-  /** Un aviso ANTES de guardar: una fila de GN editada pasa a «cargada». Sólo cuando hay algo para guardar. */
-  const confirmarCambio = (titulo: string, filas: [string, string][]) => confirmar({
-    titulo,
-    mensaje: (
-      <div>
-        {filas.map(([k, v]) => <ConfirmDetalle key={k} label={k} valor={v} />)}
-        <p style={{ marginTop: space[3] }}>Queda anotado quién lo cambió, con el antes y el después. Si el producto venía de Gestión Nube, desde ahora vale lo que cargues acá: la copia de Gestión Nube no lo vuelve a pisar.</p>
-      </div>
-    ),
-    ok: 'Guardar',
-    tono: 'warning',
+  // ── Qué cambió (se calcula en cada dibujo: el botón dice cuántos cambios hay) ──
+  const cambiosProducto: { nombre?: string; categoria?: string | null } = {}
+  if (nombre.trim() !== fila.nombre) cambiosProducto.nombre = nombre.trim()
+  if ((vacioANull(categoria) ?? null) !== (fila.categoria ?? null)) cambiosProducto.categoria = vacioANull(categoria)
+  const cambiosVariantes = fila.variantes.flatMap((v) => {
+    const e = vars[v.talle]
+    if (!e) return []
+    const c: { talle?: string; sku?: string | null; barcode?: string | null } = {}
+    if (e.talle.trim() !== v.talleNombre) c.talle = e.talle.trim()
+    if (vacioANull(e.sku) !== (v.sku ?? null)) c.sku = vacioANull(e.sku)
+    if (vacioANull(e.barcode) !== (v.barcode ?? null)) c.barcode = vacioANull(e.barcode)
+    return Object.keys(c).length ? [{ v, c }] : []
   })
-
-  const guardarProducto = () => correr(async () => {
-    const cambios: { nombre?: string; categoria?: string | null } = {}
-    if (nombre.trim() !== fila.nombre) cambios.nombre = nombre.trim()
-    if ((vacioANull(categoria) ?? null) !== (fila.categoria ?? null)) cambios.categoria = vacioANull(categoria)
-    if (!Object.keys(cambios).length) { onError('No cambiaste nada del producto.'); return }
-    if (cambios.nombre === '') { onError('El nombre no puede quedar vacío.'); return }
-    const filas: [string, string][] = []
-    if ('nombre' in cambios) filas.push(['Nombre', `${fila.nombre} → ${cambios.nombre}`])
-    if ('categoria' in cambios) filas.push(['Categoría', `${fila.categoria ?? 'Sin categoría'} → ${cambios.categoria ?? 'Sin categoría'}`])
-    if (!(await confirmarCambio(`Editar ${fila.nombre}`, filas))) return
-    const r = await editarProductoErp(marca, fila.producto, cambios)
-    onListo(dicho(r, 'Producto'), aviso(r))
-  }, 'No se pudo editar el producto.')
-
-  const guardarVariante = (talle: string, nombreActual: string) => correr(async () => {
+  const agregadas = nuevas.filter((n) => n.talle.trim() || n.sku.trim() || n.barcode.trim())
+  const total = Object.keys(cambiosProducto).length + cambiosVariantes.length + agregadas.length
+  const distinto = (talle: string, k: keyof Renglon) => {
     const v = fila.variantes.find((x) => x.talle === talle)
     const e = vars[talle]
-    if (!v || !e) return
-    const cambios: { talle?: string; sku?: string | null; barcode?: string | null } = {}
-    if (e.talle.trim() !== nombreActual) cambios.talle = e.talle.trim()
-    if (vacioANull(e.sku) !== (v.sku ?? null)) cambios.sku = vacioANull(e.sku)
-    if (vacioANull(e.barcode) !== (v.barcode ?? null)) cambios.barcode = vacioANull(e.barcode)
-    if (!Object.keys(cambios).length) { onError('No cambiaste nada de esa variante.'); return }
-    if (cambios.talle === '') { onError('La variante no puede quedar vacía.'); return }
+    if (!v || !e) return false
+    return k === 'talle' ? e.talle.trim() !== v.talleNombre : vacioANull(e[k]) !== ((k === 'sku' ? v.sku : v.barcode) ?? null)
+  }
+
+  async function guardar() {
+    if (cambiosProducto.nombre === '') return onError('El nombre no puede quedar vacío.')
+    if (cambiosVariantes.some(({ c }) => c.talle === '')) return onError('Una variante no puede quedar sin nombre.')
+    if (agregadas.some((n) => !n.talle.trim())) return onError('Falta el nombre de la variante nueva.')
     const filas: [string, string][] = []
-    if ('talle' in cambios) filas.push(['Variante', `${nombreActual} → ${cambios.talle}`])
-    if ('sku' in cambios) filas.push(['código', `${v.sku ?? 'sin código'} → ${cambios.sku ?? 'sin código'}`])
-    if ('barcode' in cambios) filas.push(['Código de barras', `${v.barcode ?? 'sin código'} → ${cambios.barcode ?? 'sin código'}`])
-    if (!(await confirmarCambio(`Editar la variante ${nombreActual}`, filas))) return
-    const r = await editarVarianteErp(marca, fila.producto, talle, cambios)
-    onListo(dicho(r, `Variante ${nombreActual}`), aviso(r))
-  }, 'No se pudo editar la variante.')
-
-  const agregar = () => correr(async () => {
-    if (!nueva || !nueva.talle.trim()) { onError('Falta la variante de la variante nueva.'); return }
-    if (!(await confirmarCambio(`Agregar una variante a ${fila.nombre}`, [['Variante', nueva.talle.trim()], ['código', nueva.sku.trim() || 'sin código'], ['Código de barras', nueva.barcode.trim() || 'sin código']]))) return
-    const r = await agregarVarianteErp(marca, fila.producto, { talle: nueva.talle.trim(), sku: nueva.sku.trim() || undefined, barcode: nueva.barcode.trim() || undefined })
-    setNueva(null)
-    onListo(`Variante ${nueva.talle.trim()} agregada.`, aviso(r))
-  }, 'No se pudo agregar la variante.')
-
-  /** Desactivar (sólo sin stock) o volver a activar: deja de aparecer en la lista y queda en «Inactivos». */
-  const conStock = tieneStock(fila)
-  const cambiarActivo = (activo: boolean) => correr(async () => {
+    if ('nombre' in cambiosProducto) filas.push(['Nombre', `${fila.nombre} → ${cambiosProducto.nombre}`])
+    if ('categoria' in cambiosProducto) filas.push(['Categoría', `${fila.categoria ?? 'Sin categoría'} → ${cambiosProducto.categoria ?? 'Sin categoría'}`])
+    for (const { v, c } of cambiosVariantes) {
+      if ('talle' in c) filas.push([v.talleNombre, `${v.talleNombre} → ${c.talle}`])
+      if ('sku' in c) filas.push([`${v.talleNombre} · SKU`, `${v.sku ?? 'sin SKU'} → ${c.sku ?? 'sin SKU'}`])
+      if ('barcode' in c) filas.push([`${v.talleNombre} · Código de barras`, `${v.barcode ?? 'sin código'} → ${c.barcode ?? 'sin código'}`])
+    }
+    for (const n of agregadas) filas.push(['Variante nueva', [n.talle.trim(), n.sku.trim(), n.barcode.trim()].filter(Boolean).join(' · ')])
     const ok = await confirmar({
-      titulo: `${activo ? 'Activar' : 'Desactivar'} ${fila.nombre}`,
-      mensaje: activo ? 'Vuelve a aparecer en la lista de Productos.' : 'Deja de aparecer en la lista de Productos. Queda en «Inactivos», donde se puede volver a activar.',
-      ok: activo ? 'Activar' : 'Desactivar',
-      tono: activo ? 'brand' : 'danger',
+      titulo: `Guardar ${total === 1 ? '1 cambio' : `${total} cambios`} en ${fila.nombre}`,
+      mensaje: <div>{filas.map(([k, v], i) => <ConfirmDetalle key={i} label={k} valor={v} />)}<p style={{ marginTop: space[3] }}>Queda anotado quién lo cambió, con el antes y el después.</p></div>,
+      ok: 'Guardar cambios',
+      tono: 'brand',
     })
     if (!ok) return
-    await editarProductoErp(marca, fila.producto, { activo })
-    onListo(activo ? 'Producto activado.' : 'Producto desactivado.')
-  }, activo ? 'No se pudo activar el producto.' : 'No se pudo desactivar el producto.')
+    setTrabajando(true)
+    const avisos: string[] = []
+    let hechos = 0
+    try {
+      if (Object.keys(cambiosProducto).length) { const r = await editarProductoErp(marca, fila.producto, cambiosProducto); avisos.push(...r.avisos.map((x) => x.texto)); hechos++ }
+      for (const { v, c } of cambiosVariantes) { const r = await editarVarianteErp(marca, fila.producto, v.talle, c); avisos.push(...r.avisos.map((x) => x.texto)); hechos++ }
+      for (const n of agregadas) { const r = await agregarVarianteErp(marca, fila.producto, { talle: n.talle.trim(), sku: n.sku.trim() || undefined, barcode: n.barcode.trim() || undefined }); avisos.push(...r.avisos.map((x) => x.texto)); hechos++ }
+      onListo(`${fila.nombre}: ${hechos === 1 ? '1 cambio guardado' : `${hechos} cambios guardados`}.`, avisos.join(' ') || null)
+    } catch (e) {
+      // Lo que ya se guardó, guardado queda: se dice cuánto llegó a guardarse.
+      onError(`${hechos ? `Se guardaron ${hechos} de ${total} cambios. ` : ''}${e instanceof Error ? e.message : 'No se pudo guardar.'}`)
+      if (hechos) onListo(`${fila.nombre}: ${hechos} de ${total} cambios guardados.`)
+    } finally {
+      setTrabajando(false)
+    }
+  }
 
-  const fila3: React.CSSProperties = { display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'flex-end' }
-  const poner = (talle: string, k: 'talle' | 'sku' | 'barcode', t: string) => setVars((m) => ({ ...m, [talle]: { ...m[talle], [k]: t } }))
+  const poner = (talle: string, k: keyof Renglon, t: string) => setVars((m) => ({ ...m, [talle]: { ...m[talle], [k]: t } }))
+  const ponerNueva = (i: number, k: keyof Renglon, t: string) => setNuevas((xs) => xs.map((x, j) => (j === i ? { ...x, [k]: t } : x)))
+  const COLS = 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr) 32px'
+  const tit: React.CSSProperties = { fontSize: font.sm, color: color.mut, paddingBottom: 6 }
+  // El campo cambiado se marca (borde índigo + fondo suave): se ve qué se va a guardar antes de apretar.
+  const marcado = (on: boolean): React.CSSProperties => (on ? { borderColor: 'var(--mo-brand-solid)', background: 'var(--mo-brand-bg)' } : {})
+  const quitar = (i: number) => setNuevas((xs) => xs.filter((_, j) => j !== i))
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-      <div style={fila3}>
-        <Field label="Nombre" style={{ flex: '2 1 220px' }}><Input value={nombre} onChange={(e) => setNombre(e.target.value)} /></Field>
-        <Field label="Categoría" style={{ flex: '1 1 140px' }}><Input value={categoria} onChange={(e) => setCategoria(e.target.value)} /></Field>
-        <Button disabled={trabajando} onClick={() => void guardarProducto()}>Guardar producto</Button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
+      <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
+        <Field label="Nombre" style={{ flex: '2 1 220px' }}><Input value={nombre} onChange={(e) => setNombre(e.target.value)} style={marcado('nombre' in cambiosProducto)} /></Field>
+        <Field label="Categoría" style={{ flex: '1 1 140px' }}><Input value={categoria} onChange={(e) => setCategoria(e.target.value)} style={marcado('categoria' in cambiosProducto)} /></Field>
       </div>
 
-      {fila.variantes.map((v) => (
-        <div key={v.talle} style={fila3}>
-          <Field label="Variante" style={{ flex: '1 1 130px' }}><Input value={vars[v.talle]?.talle ?? ''} onChange={(e) => poner(v.talle, 'talle', e.target.value)} /></Field>
-          <Field label="código" style={{ flex: '1 1 120px' }}><Input value={vars[v.talle]?.sku ?? ''} onChange={(e) => poner(v.talle, 'sku', e.target.value)} /></Field>
-          <Field label="Código de barras" style={{ flex: '1 1 140px' }}><Input value={vars[v.talle]?.barcode ?? ''} onChange={(e) => poner(v.talle, 'barcode', e.target.value)} inputMode="numeric" /></Field>
-          <Button variant="outline" disabled={trabajando} onClick={() => void guardarVariante(v.talle, v.talleNombre)}>Guardar</Button>
+      <section>
+        <div role="table" aria-label="Variantes" style={{ display: 'grid', gridTemplateColumns: COLS, columnGap: space[2], rowGap: 6, alignItems: 'center' }}>
+          <span role="columnheader" style={tit}>Variante</span>
+          <span role="columnheader" style={tit}>SKU</span>
+          <span role="columnheader" style={tit}>Código de barras</span>
+          <span />
+          {fila.variantes.map((v) => (
+            <div key={v.talle} role="row" style={{ display: 'contents' }}>
+              <Input aria-label={`Variante ${v.talleNombre}`} value={vars[v.talle]?.talle ?? ''} onChange={(e) => poner(v.talle, 'talle', e.target.value)} style={marcado(distinto(v.talle, 'talle'))} />
+              <Input aria-label={`SKU de ${v.talleNombre}`} value={vars[v.talle]?.sku ?? ''} onChange={(e) => poner(v.talle, 'sku', e.target.value)} placeholder="sin SKU" style={marcado(distinto(v.talle, 'sku'))} />
+              <Input aria-label={`Código de barras de ${v.talleNombre}`} value={vars[v.talle]?.barcode ?? ''} onChange={(e) => poner(v.talle, 'barcode', e.target.value)} placeholder="sin código de barras" inputMode="numeric" style={marcado(distinto(v.talle, 'barcode'))} />
+              <span />
+            </div>
+          ))}
+          {nuevas.map((n, i) => (
+            <div key={`n${i}`} role="row" style={{ display: 'contents' }}>
+              <Input aria-label="Variante nueva" value={n.talle} onChange={(e) => ponerNueva(i, 'talle', e.target.value)} placeholder="Variante nueva" autoFocus style={marcado(true)} />
+              <Input aria-label="SKU de la variante nueva" value={n.sku} onChange={(e) => ponerNueva(i, 'sku', e.target.value)} placeholder="sin SKU" style={marcado(true)} />
+              <Input aria-label="Código de barras de la variante nueva" value={n.barcode} onChange={(e) => ponerNueva(i, 'barcode', e.target.value)} placeholder="sin código de barras" inputMode="numeric" style={marcado(true)} />
+              <button type="button" aria-label="Sacar la variante nueva" onClick={() => quitar(i)} style={{ height: 32, width: 32, padding: 0, border: 0, borderRadius: 8, background: 'transparent', color: color.mut, cursor: 'pointer', fontSize: 18 }}>×</button>
+            </div>
+          ))}
         </div>
-      ))}
+        <Button variant="ghost" size="sm" disabled={trabajando} onClick={() => setNuevas((xs) => [...xs, NUEVA])} style={{ marginTop: space[2] }}>+ Agregar variante</Button>
+      </section>
 
-      {nueva ? (
-        <div style={fila3}>
-          <Field label="Variante nueva" style={{ flex: '1 1 130px' }}><Input value={nueva.talle} onChange={(e) => setNueva({ ...nueva, talle: e.target.value })} /></Field>
-          <Field label="código" style={{ flex: '1 1 120px' }}><Input value={nueva.sku} onChange={(e) => setNueva({ ...nueva, sku: e.target.value })} /></Field>
-          <Field label="Código de barras" style={{ flex: '1 1 140px' }}><Input value={nueva.barcode} onChange={(e) => setNueva({ ...nueva, barcode: e.target.value })} inputMode="numeric" /></Field>
-          <Button disabled={trabajando} onClick={() => void agregar()}>Agregar</Button>
-          <Button variant="outline" disabled={trabajando} onClick={() => setNueva(null)}>Cancelar</Button>
+      {/* Pie: guardar, índigo a la derecha. Eliminar/Activar está en la ficha, al lado de Editar (Darío 20-nov). */}
+      <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
+        <div style={{ display: 'flex', gap: space[2] }}>
+          {onCancelar && <Button variant="outline" disabled={trabajando} onClick={onCancelar}>Cancelar</Button>}
+          <Button variant="solid" tone="brand" disabled={trabajando || !total} onClick={() => void guardar()}>{total ? `Guardar ${total === 1 ? '1 cambio' : `${total} cambios`}` : 'Guardar cambios'}</Button>
         </div>
-      ) : (
-        <div style={fila3}>
-          <Button variant="outline" disabled={trabajando} onClick={() => setNueva({ talle: '', sku: '', barcode: '' })}>Agregar una variante</Button>
-        </div>
-      )}
-
-      <div style={{ ...fila3, alignItems: 'center' }}>
-        {fila.inactivo
-          ? <Button variant="solid" tone="brand" disabled={trabajando} onClick={() => void cambiarActivo(true)}>Activar producto</Button>
-          : <Button variant="outline" tone="danger" disabled={trabajando || conStock} onClick={() => void cambiarActivo(false)}>Desactivar producto</Button>}
-        {!fila.inactivo && conStock && <span style={{ fontSize: font.sm, color: color.mut }}>Con stock no se puede desactivar.</span>}
       </div>
     </div>
   )

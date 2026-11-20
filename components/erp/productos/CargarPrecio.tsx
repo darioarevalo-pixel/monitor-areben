@@ -20,9 +20,12 @@ import { useTiendaErp } from '@/lib/erp/linea-erp'
 /** En el selector de proveedor: escribir uno que ⛔ está en la lista (texto, como antes de la tabla). */
 const OTRO = 'otro'
 
-export function CargarPrecio({ marca, ficha, onListo, onError }: {
+export function CargarPrecio({ marca, ficha, onListo, onError, fijo, onCancelar }: {
   marca: MarcaErp
   ficha: PrecioDeProducto
+  /** Darío 20-nov: el lápiz de la fila ya dice QUÉ se edita (`costo` o `precio:<lista>`): sin el desplegable «Qué». */
+  fijo?: string
+  onCancelar?: () => void
   /** Se cargó (el texto de lo hecho y, si vino, el aviso del motor): la ficha y la lista se vuelven a leer. */
   onListo: (hecho: string, aviso?: string | null) => void
   onError: (e: string) => void
@@ -30,7 +33,7 @@ export function CargarPrecio({ marca, ficha, onListo, onError }: {
   // Los proveedores de la tienda del menú (Bruno, 30-oct): mirando Stunned, ⛔ los talleres de Zattia; y los sin productos.
   const tienda = useTiendaErp()
   const aviso = useAvisoPrecio()
-  const [que, setQue] = useState('costo')
+  const [que, setQue] = useState(fijo ?? 'costo')
   const [monto, setMonto] = useState('')
   const [desde, setDesde] = useState('')
   const [motivo, setMotivo] = useState('')
@@ -73,23 +76,23 @@ export function CargarPrecio({ marca, ficha, onListo, onError }: {
     const conFicha = esCosto && proveedorId !== '' && proveedorId !== OTRO
     const nombreProveedor = !esCosto ? null : conFicha ? proveedores?.find((p) => p.id === proveedorId)?.nombre ?? null : proveedorId === OTRO ? proveedor.trim() || null : null
     const ok = await confirmar({
-      titulo: `Cargar ${nombre.toLowerCase()} de ${ficha.nombre ?? `producto ${ficha.producto}`}`,
+      titulo: `${nombre} de ${ficha.nombre ?? `producto ${ficha.producto}`}`,
       mensaje: (
         <div>
           <ConfirmDetalle label={nombre} valor={<MoneyText value={n} />} />
           <ConfirmDetalle label="Desde" valor={desde || 'Ahora'} />
           {esCosto && <ConfirmDetalle label="Proveedor" valor={nombreProveedor ?? 'Sin proveedor'} />}
-          <p style={{ marginTop: space[3] }}>Queda en Areben Gestión y manda sobre la copia de Gestión Nube. {aviso.largo}</p>
+          <p style={{ marginTop: space[3] }}>Lo anterior queda en el historial. {aviso.largo}</p>
         </div>
       ),
-      ok: 'Cargar',
-      tono: 'warning',
+      ok: 'Guardar',
+      tono: 'brand',
     })
     if (!ok) return
     await correr(async () => {
       const r = await cargarPrecioCosto(marca, { que: esCosto ? 'costo' : 'precio', producto: ficha.producto, monto: n, lista, desde, motivo, ...(esCosto ? (conFicha ? { proveedorId } : { proveedor: proveedorId === OTRO ? proveedor : '' }) : {}) })
       setMonto(''); setDesde(''); setMotivo(''); setProveedor('')
-      onListo(r.futuro ? `${nombre} cargado: empieza a valer el ${desde}.` : `${nombre} cargado.`, r.aviso)
+      onListo(r.futuro ? `${nombre} guardado: empieza a valer el ${desde}.` : `${nombre} guardado.`, r.aviso)
     }, 'No se pudo cargar.')
   }
 
@@ -109,17 +112,18 @@ export function CargarPrecio({ marca, ficha, onListo, onError }: {
     setProveedorId(r.proveedor.id)
   }, 'No se pudo guardar el proveedor.')
 
+  const ahora = que === 'costo' ? ficha.costo?.costo : ficha.listas.find((l) => `precio:${l.lista}` === que)?.precio
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <Field label="Qué">
+        {!fijo && <Field label="Qué">
           <Select value={que} onChange={(e) => setQue(e.target.value)}>
             <option value="costo">Costo</option>
             {ficha.listas.map((l) => <option key={l.lista} value={`precio:${l.lista}`}>Precio {l.nombre}</option>)}
           </Select>
-        </Field>
-        <Field label="Monto" style={{ flex: '1 1 120px' }}>
-          <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="$ 0" />
+        </Field>}
+        <Field label={fijo ? 'Nuevo monto' : 'Monto'} style={{ flex: '1 1 120px' }}>
+          <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder={ahora != null ? `$ ${ahora.toLocaleString('es-AR')}` : '$ 0'} autoFocus={!!fijo} onKeyDown={(e) => { if (e.key === 'Enter' && monto.trim()) void cargar(); if (e.key === 'Escape' && onCancelar) { e.stopPropagation(); onCancelar() } }} />
         </Field>
         <Field label="Desde (opcional)">
           <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
@@ -163,7 +167,8 @@ export function CargarPrecio({ marca, ficha, onListo, onError }: {
         <Field label="Motivo (opcional)" style={{ flex: '1 1 220px' }}>
           <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Aumento del proveedor, liquidación…" />
         </Field>
-        <Button disabled={trabajando || !monto.trim()} onClick={() => void cargar()}>Cargar</Button>
+        {onCancelar && <Button variant="outline" disabled={trabajando} onClick={onCancelar}>Cancelar</Button>}
+        <Button variant="solid" tone="brand" disabled={trabajando || !monto.trim()} onClick={() => void cargar()}>Guardar</Button>
       </div>
     </div>
   )

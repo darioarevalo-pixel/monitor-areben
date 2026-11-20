@@ -251,7 +251,7 @@ function TablaEscaneada({ filas, onCantidad, conEnviada, contra = 'enviadas', ha
   const conHay = !!hayDe && !conEnviada
   return (
     <TableWrap style={{ marginTop: space[3] }}>
-      <THead><Tr><Th>Producto</Th><Th>Código</Th>{conHay && <Th style={{ textAlign: 'right' }}>Hay en {origen}</Th>}{conEnviada && <Th style={{ textAlign: 'right' }}>{contra === 'pidieron' ? 'Pedida' : 'Enviada'}</Th>}<Th style={{ textAlign: 'right' }}>{conEnviada ? (contra === 'pidieron' ? 'Preparada' : 'Recibida') : 'Cantidad'}</Th></Tr></THead>
+      <THead><Tr><Th>Producto</Th><Th>SKU</Th>{conHay && <Th style={{ textAlign: 'right' }}>Hay en {origen}</Th>}{conEnviada && <Th style={{ textAlign: 'right' }}>{contra === 'pidieron' ? 'Pedida' : 'Enviada'}</Th>}<Th style={{ textAlign: 'right' }}>{conEnviada ? (contra === 'pidieron' ? 'Preparada' : 'Recibida') : 'Cantidad'}</Th></Tr></THead>
       <TBody>
         {filas.map((f) => {
           const dif = conEnviada ? f.cantidad - (f.enviada ?? 0) : 0

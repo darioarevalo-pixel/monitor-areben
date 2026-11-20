@@ -44,7 +44,7 @@ const tono = (f: FilaComparacion): Tone => (f.clase === 'coincide' ? 'success' :
 
 function bajarCsv(filas: FilaComparacion[], marca: MarcaErp) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Producto', 'Variante', 'código', 'Tienda', 'Según Areben Gestión', 'Tienda Nube', 'Diferencia', 'En Gestión Nube', 'Reservado', 'Qué pasa'].map(c).join(';')]
+  const renglones = [['Producto', 'Variante', 'SKU', 'Tienda', 'Según Areben Gestión', 'Tienda Nube', 'Diferencia', 'En Gestión Nube', 'Reservado', 'Qué pasa'].map(c).join(';')]
   for (const f of filas) renglones.push([f.nombre, f.talleNombre, f.sku, TIENDA[f.tienda], f.paraTienda ?? '', f.tn ?? '', f.diferencia ?? '', f.gn ?? '', f.enPedidos, QUE[f.clase]?.nombre ?? f.clase].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -165,7 +165,7 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = f
           activa={ficha?.id ?? null} onAbrir={abrir} etiquetaFila={(f) => `el producto ${f.nombre} ${f.talleNombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay productos con ese nombre o código.' : vista === 'no' ? 'Todo coincide con la tienda.' : 'No hay productos en esta vista.'} />
+              <EmptyState title={q ? 'No hay productos con ese nombre o SKU.' : vista === 'no' ? 'Todo coincide con la tienda.' : 'No hay productos en esta vista.'} />
               {vista !== 'todas' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todas')}>Ver todas</Button></div>}
             </div>
           ) : null}
@@ -190,7 +190,7 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = f
       )}
       {ficha && !ficha.producto && (
         <Notice tone="warning" onClose={() => setFicha(null)}>
-          <b>{ficha.nombre} {ficha.talleNombre}</b> (SKU {ficha.sku ?? '—'}, código {ficha.barcode ?? '—'}): {QUE.sin_variante.mirar}
+          <b>{ficha.nombre} {ficha.talleNombre}</b> (SKU {ficha.sku ?? '—'}, código de barras {ficha.barcode ?? '—'}): {QUE.sin_variante.mirar}
         </Notice>
       )}
     </div>

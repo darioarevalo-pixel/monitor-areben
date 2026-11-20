@@ -151,7 +151,7 @@ export function ConciliacionDia({ ajustar, alContar }: { ajustar: (p: PrendaAAju
           <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
             <VistasLista todasRojas vistas={vistas} valor={enVista} conteo={conteo} onCambio={setVista} />
             <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-              <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en la conciliación" placeholder="Producto, código o número de pedido" />
+              <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en la conciliación" placeholder="Producto, SKU o número de pedido" />
             </div>
             {enVista !== 'todas' && <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>Qué mirar: {datos.grupos.find((g) => `${g.tipo}/${g.clase}` === enVista)?.mirar}{(() => { const g = datos.grupos.find((x) => `${x.tipo}/${x.clase}` === enVista); return g?.deAntes ? ` (${g.deAntes} vienen de días anteriores)` : '' })()}</div>}
             <ListaTrabajo

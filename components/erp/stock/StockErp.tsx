@@ -50,7 +50,7 @@ const u = (n: number) => `${n.toLocaleString('es-AR')} u`
 function bajarCsv(filas: FilaStock[], marca: MarcaErp, titulos: Record<string, [string, ...unknown[]]>) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
   const deps = Object.keys(filas[0]?.deps ?? {})
-  const renglones = [['Producto', 'Variante', 'código', 'Disponible', 'Físico', ...deps.map((d) => titulos[`dep:${d}`]?.[0] ?? d), 'Reservado', 'En bolsas', 'Gestión Nube', 'Línea'].map(c).join(';')]
+  const renglones = [['Producto', 'Variante', 'SKU', 'Disponible', 'Físico', ...deps.map((d) => titulos[`dep:${d}`]?.[0] ?? d), 'Reservado', 'En bolsas', 'Gestión Nube', 'Línea'].map(c).join(';')]
   for (const f of filas) renglones.push([f.nombre, f.talleNombre, f.sku, f.disponible, f.estanteria, ...deps.map((d) => f.deps[d]), f.enPedidos, f.enBolsas, f.gn ?? '', LINEA[f.linea] ?? f.linea].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -167,7 +167,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {/* El título «Stock» lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
-      {!!sinVarianteAca && <Notice tone="warning">{u(sinVarianteAca)} de pedidos sin pagar traen un código que {enErp || linea === 'stunned' ? 'Areben Gestión' : 'Gestión Nube'} no tiene: no se descuentan de ningún producto.</Notice>}
+      {!!sinVarianteAca && <Notice tone="warning">{u(sinVarianteAca)} de pedidos sin pagar traen un SKU que {enErp || linea === 'stunned' ? 'Areben Gestión' : 'Gestión Nube'} no tiene: no se descuentan de ningún producto.</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="Disponible" valor={u(res.disponible)} oscuro nota="lo que se puede vender" />
@@ -203,7 +203,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
           activa={filaDeFicha?.id ?? null} onAbrir={abrir} etiquetaFila={(f) => `el producto ${f.nombre} ${f.talleNombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay productos con ese nombre o código.' : 'No hay productos en esta vista.'} />
+              <EmptyState title={q ? 'No hay productos con ese nombre o SKU.' : 'No hay productos en esta vista.'} />
               {vista !== 'todo' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todo')}>Ver todo</Button></div>}
             </div>
           ) : null}

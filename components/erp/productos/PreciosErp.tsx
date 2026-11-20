@@ -22,12 +22,12 @@ import { Button, EmptyState, Icono, MoneyText, Notice, color, font, space } from
 import { ListaTrabajo, IconoFila, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
-import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto, estiloNombre } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, VistasLista, cuandoCorto, estiloNombre } from '@/components/ui/PiezasLista'
 import { leerListaDeProductos, type FilaProducto, type ListaDeProductos, type MarcaErp } from '@/lib/erp/cliente'
 import { filtrar } from '@/lib/erp/productos-lista.core.js'
 import {
   LISTAS_PRECIO, VISTAS_PRECIO, alternarColumnaPrecio, columnasPrecio, contarVistasPrecio, filtrarPrecio, moverColumna,
-  normalizarPrefsPrecio, ofertaDe, ordenarPrecio, resumenPrecio,
+  normalizarPrefsPrecio, ofertaDe, ordenarPrecio,
 } from '@/lib/erp/precios-lista.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
@@ -53,11 +53,11 @@ function textoOferta(f: FilaProducto): string {
   return `Oferta en Tienda Nube · ${pesos(o.precio)}${o.pct ? ` (−${o.pct}%)` : ''}`
 }
 
-function bajarCsv(filas: FilaProducto[], marca: MarcaErp) {
+function bajarCsv(filas: FilaProducto[], marca: MarcaErp, conCosto: boolean) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Producto', 'Local', 'Online', 'Mayorista', 'Tienda Nube con oferta', 'Oferta o liquidación', 'Último cambio', 'Quién', 'Categoría', 'Línea'].map(c).join(';')]
+  const renglones = [['Producto', ...(conCosto ? ['Costo'] : []), 'Local', 'Online', 'Mayorista', 'Tienda Nube con oferta', 'Oferta o liquidación', 'Último cambio', 'Quién', 'Categoría', 'Línea'].map(c).join(';')]
   for (const f of filas) {
-    renglones.push([f.nombre, ...LISTAS_PRECIO.map((l) => f.precios[l] ?? ''), f.precios.oferta ?? '', textoOferta(f),
+    renglones.push([f.nombre, ...(conCosto ? [f.costo ?? ''] : []), ...LISTAS_PRECIO.map((l) => f.precios[l] ?? ''), f.precios.oferta ?? '', textoOferta(f),
       f.ultimoCambio ? diaArgentino(Date.parse(f.ultimoCambio.cuando)) : '', f.ultimoCambio?.quien ?? '', f.categoria, LINEA[f.linea] ?? f.linea].map(c).join(';'))
   }
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
@@ -98,10 +98,12 @@ export function PreciosErp() {
     return () => { vivo = false }
   }, [marca, clave])
   const cargando = datos?.clave !== clave
+  // Sin `costos` (todos menos Admin y Administración) el servidor ⛔ manda el costo: ⛔ columna.
+  const conCosto = datos?.costos === true
+  const sinCol = (ks: string[]) => (conCosto ? ks : ks.filter((k) => k !== 'costo'))
 
   const base = useMemo(() => filtrar(datos?.filas ?? [], { q, linea }), [datos, q, linea])
   const conteo = useMemo(() => contarVistasPrecio(base), [base])
-  const res = useMemo(() => resumenPrecio(base), [base])
   const filas: FilaProducto[] = useMemo(() => ordenarPrecio(filtrarPrecio(base, vista), orden), [base, vista, orden])
   const elegidas = filas.filter((f) => seleccion.has(f.id))
   const mirada = `${vista}|${q}|${linea}|${orden?.col ?? ''}|${orden?.dir ?? ''}`
@@ -112,13 +114,14 @@ export function PreciosErp() {
 
   // 📱 En el celular la tarjeta arma lo suyo con TODAS las columnas: las de `prefs` son de la compu.
   const angosta = usePantallaAngosta()
-  const columnas = (angosta ? prefs.orden : prefs.visibles).map((k) => {
+  const columnas = sinCol(angosta ? prefs.orden : prefs.visibles).map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k]
-    return { key: k, titulo, ancho, ordena, derecha: (LISTAS_PRECIO as string[]).includes(k), movil: MOVIL[k] ?? 'oculta' }
+    return { key: k, titulo, ancho, ordena, derecha: k === 'costo' || (LISTAS_PRECIO as string[]).includes(k), movil: MOVIL[k] ?? 'oculta' }
   })
 
   const celda = (f: FilaProducto, k: string): React.ReactNode => {
     if (k === 'p') return <span title={f.nombre} style={estiloNombre}>{f.nombre}</span>
+    if (k === 'costo') return f.costo == null ? <span style={{ color: color.mut2 }} title="Sin costo en Areben Gestión">—</span> : <MoneyText value={f.costo} />
     if ((LISTAS_PRECIO as string[]).includes(k)) {
       const n = f.precios[k]
       return n == null ? <span style={{ color: color.mut2 }} title="Sin precio en esta lista">—</span> : <MoneyText value={n} />
@@ -154,30 +157,25 @@ export function PreciosErp() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      {/* El título lo pone el menú del ERP (`Erp.tsx`) arriba de las pestañas. */}
-      <p style={{ margin: 0, color: color.mut }}>Todas las listas de cada producto en una grilla, con su oferta o liquidación y el último cambio. El $ de cada fila carga un precio (de cualquier lista) o el costo; abrí un producto para ver su historial.</p>
-      <Notice tone="neutral">Un precio cargado acá queda en Areben Gestión, con quién y cuándo, y manda sobre la copia de Gestión Nube. {aviso.largo}</Notice>
+      {/* Darío 20-nov: sin subtítulo ni cuadros de resumen (repetían las pestañas). */}
+      {/* Darío 20-nov: el cartel fijo sólo ANTES del corte (lo raro: el precio no llega a la Caja ni a la tienda). Con la marca
+          ya en el ERP, que el precio llegue es lo normal: se dice al guardar, en la confirmación. */}
+      {aviso.antes && <Notice tone="neutral">Un precio cargado acá queda en Areben Gestión, con quién y cuándo, y manda sobre la copia de Gestión Nube. {aviso.largo}</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {datos?.liquidacionesError && <Notice tone="warning">No se pudieron leer las liquidaciones del monitor: la columna «Oferta o liquidación» muestra sólo las ofertas de Tienda Nube.</Notice>}
 
-      <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-        <TileResumen titulo="Con liquidación u oferta" valor={(res.liquidacion + res.oferta).toLocaleString('es-AR')} oscuro nota={`${res.liquidacion.toLocaleString('es-AR')} en liquidación · ${res.oferta.toLocaleString('es-AR')} con oferta en Tienda Nube`} />
-        <TileResumen titulo="Cambiados este mes" valor={res.cambiados.toLocaleString('es-AR')} nota={res.cambiados ? 'con un precio distinto del anterior' : 'el historial arranca con la copia de Gestión Nube y Tienda Nube'} />
-        <TileResumen titulo="Sin precio mayorista" valor={res.sinMayorista.toLocaleString('es-AR')} nota="no se venden por catálogo" />
-        <TileResumen titulo="Listas" valor="4" nota="Local · Online · Mayorista · Tienda Nube con oferta" />
-      </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS_PRECIO} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un producto" placeholder="Producto o código" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un producto" placeholder="Producto o SKU" />
           <PanelColumnas
-            columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
+            columnas={sinCol(prefs.orden).map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumnaPrecio(prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
             onRestablecer={() => setPrefs({ ...normalizarPrefsPrecio(null) })}
           />
-          <Button variant="outline" disabled={!filas.length} onClick={() => bajarCsv(filas, marca)}>Exportar</Button>
+          <Button variant="outline" disabled={!filas.length} onClick={() => bajarCsv(filas, marca, conCosto)}>Exportar</Button>
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
         </div>
         <ListaTrabajo
@@ -186,7 +184,7 @@ export function PreciosErp() {
           activa={filaDeFicha?.id ?? null} onAbrir={(f) => abrir(f)} etiquetaFila={(f) => `el producto ${f.nombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay productos con ese nombre o código.' : 'No hay productos en esta vista.'} />
+              <EmptyState title={q ? 'No hay productos con ese nombre o SKU.' : 'No hay productos en esta vista.'} />
               {vista !== 'todos' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todos')}>Ver todos</Button></div>}
             </div>
           ) : null}
@@ -203,7 +201,7 @@ export function PreciosErp() {
       </div>
 
       <BarraSeleccion cuantas={elegidas.length} onSoltar={() => setSeleccion(new Set())}>
-        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca)}>Exportar los elegidos</AccionSeleccion>
+        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca, conCosto)}>Exportar los elegidos</AccionSeleccion>
       </BarraSeleccion>
 
       {ficha && (

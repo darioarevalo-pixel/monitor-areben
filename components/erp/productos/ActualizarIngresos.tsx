@@ -131,7 +131,7 @@ export function ActualizarIngresos() {
                   Todos
                 </label>
               )}
-              <div style={{ flex: 1 }}><BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en lo leído" placeholder="Producto o código" /></div>
+              <div style={{ flex: 1 }}><BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en lo leído" placeholder="Producto o SKU" /></div>
               {vista === 'pendiente' && <Button onClick={importar} disabled={importando || !elegidos.size}>{importando ? 'Importando…' : `Importar ${elegidos.size || ''}`.trim()}</Button>}
             </div>
             {vista === 'pendiente' && (lista.length === 0

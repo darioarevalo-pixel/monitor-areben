@@ -26,7 +26,7 @@ describe('armarPrecioDeProducto', () => {
     expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: COSTO, tn: [tnV(25500.5, 12000.9)] }).avisos).toEqual([])
   })
   it('sin Tienda Nube lo dice; Tienda Nube con variantes distintas toma el que más se repite y avisa', () => {
-    expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [], costo: COSTO, tn: [] }).avisos).toEqual(['No está en Tienda Nube (ningún código del producto cruza).'])
+    expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [], costo: COSTO, tn: [] }).avisos).toEqual(['No está en Tienda Nube (ningún SKU del producto cruza).'])
     const r = armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: COSTO, tn: [tnV(25500), tnV(25500), tnV(26000)] })
     expect(r.tn).toMatchObject({ precio: 25500, variantes: 3, distintos: true })
     expect(r.avisos).toEqual(['En Tienda Nube las variantes tienen precios o costos distintos: se muestra el que más se repite.'])

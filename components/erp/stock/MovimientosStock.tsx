@@ -46,7 +46,7 @@ const conSigno = (n: number) => (n > 0 ? `+${n}` : String(n))
 
 function bajarCsv(filas: FilaMovimiento[], marca: MarcaErp, desde: string, hasta: string) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Cuándo', 'Tipo', 'Producto', 'Variante', 'código', 'Dónde', 'Cantidad', 'Queda', 'Documento', 'Quién', 'Línea'].map(c).join(';')]
+  const renglones = [['Cuándo', 'Tipo', 'Producto', 'Variante', 'SKU', 'Dónde', 'Cantidad', 'Queda', 'Documento', 'Quién', 'Línea'].map(c).join(';')]
   for (const f of filas) renglones.push([cuandoCorto(f.cuando), f.tipoTexto, f.nombre, f.talleNombre, f.sku, f.depositoTexto, f.cantidad, f.queda, f.documento, f.quien, LINEA[f.linea] ?? f.linea].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -148,7 +148,7 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en los movimientos" placeholder="Producto, código, documento o quién" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en los movimientos" placeholder="Producto, SKU, documento o quién" />
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
             {PERIODOS_MOV.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
           </Select>

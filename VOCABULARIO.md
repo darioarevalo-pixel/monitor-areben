@@ -342,6 +342,11 @@ todas las pantallas viejas que lo dicen mal.
 selección); **oferta**, los que están en una liquidación. ⛔ Usar una por la otra: en la política de
 cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una para lo suyo.)
 
+🔑 **`SKU` y `Código de barras`** (Darío, 20-nov-2026; reemplaza la fila «`código` ⛔ `SKU`» de Bruno, 26-oct): en
+pantalla el SKU se llama **SKU** y el número de la etiqueta, **Código de barras**. «Código» a secas había quedado
+para los dos (la ficha de stock decía «código» y «Código» uno al lado del otro). Sin fila: «código» sigue valiendo
+para lo que no es del producto (cupón, seguimiento, caja) y para lo que se escanea.
+
 | se dice | ⛔ no se dice | app | dónde | por qué / desde |
 |---|---|---|---|---|
 | `caja` (abrir, cerrar, cajas anteriores) | `turno` · `turnos` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` · `components/erp` · `lib/erp` · `lib/nav.ts` · `lib/nav.datos.ts` | Bruno, 12-oct-2026: la cajera abre y cierra **la caja** |
@@ -356,7 +361,6 @@ cambio van las dos, por separado. (Sin fila: las dos palabras valen, cada una pa
 | `Físico` (lo que hay en el local y el depósito) | `En estantería` · `estantería` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
 | `Reservado` (lo que ya tiene dueño) | `En pedidos` · `Con pedidos` · `apartad*` · `retenid*` · `retiene` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
 | `movimientos de stock` · `Areben Gestión` | `libro` · `el libro` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct: «libro» es jerga de quien lo construyó |
-| `código` | `SKU` · `SKUs` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
 | `Tienda Nube` · `Gestión Nube` · `Mercado Libre` | `TN` · `GN` · `ML` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Bruno, 26-oct: sin siglas en pantalla |
 | `Caja` | `Caja (POS)` · `POS` | monitor | `components/erp` · `lib/erp` | Bruno, 26-oct |
 | `Ingreso de plata` · `Salida de plata` (los resúmenes y filtros de ERP › Cobros) | `Entró` · `Salió` · `Entró plata` · `Salió plata` · `Entró a` · `Salió de` | monitor | `components/erp/ventas/CobrosErp.tsx` · `lib/erp/cobros.core.js` · `components/erp/Facturacion.tsx` | Bruno, 9-nov: «le falta vocabulario a entró y salió» |

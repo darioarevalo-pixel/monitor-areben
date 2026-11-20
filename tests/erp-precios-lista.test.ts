@@ -37,7 +37,7 @@ const de = (id: string) => filas.find((f) => f.producto === id)!
 
 describe('armarFilasProductos › lo de Precios', () => {
   it('el último cambio dice quién en palabras y si fue la copia', () => {
-    expect(de('1').ultimoCambio).toEqual({ lista: 'local', precio: 21990, cuando: '2026-10-15T01:00:00.000Z', quien: 'Copia de Gestión Nube', copia: true })
+    expect(de('1').ultimoCambio).toEqual({ lista: 'local', precio: 21990, cuando: '2026-10-15T01:00:00.000Z', quien: 'Copia inicial', copia: true })
     expect(de('2').ultimoCambio).toMatchObject({ quien: 'Bruno Arevalo', copia: false, precio: 9990 })
     expect(de('4').ultimoCambio).toBeNull()
   })
@@ -71,7 +71,7 @@ describe('vistas, resumen y orden', () => {
     expect(ordenarPrecio(filas, null).map((f) => f.nombre)).toEqual(['AROS LUNA', 'BIKINI SOL', 'CINTO CALYPSO', 'TOP SAHARA'])
   })
   it('las columnas de siempre y prefs rotas vuelven a las de siempre', () => {
-    expect(normalizarPrefsPrecio(null).visibles).toEqual(['p', 'local', 'online', 'mayorista', 'oferta', 'ult'])
+    expect(normalizarPrefsPrecio(null).visibles).toEqual(['p', 'costo', 'local', 'online', 'mayorista', 'oferta', 'ult'])
     expect(normalizarPrefsPrecio({ orden: ['zz'], visibles: ['zz'] }).visibles).toContain('p')
   })
 })

@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, Field, Input, Modal, Notice, color, font, space } from '@/components/ui'
 import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
-import { BuscadorLista, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { buscarVariantesVinculo, leerVinculos, ponerVinculo, type FilaVinculo, type MarcaErp, type VariantesDeVinculo, type VariantePorVincular } from '@/lib/erp/cliente'
 import { normal } from '@/lib/erp/stock-lista.core.js'
 import { useTiendaErp } from '@/lib/erp/linea-erp'
@@ -20,7 +20,7 @@ import { useTiendaErp } from '@/lib/erp/linea-erp'
 const BASE: ColumnaLista[] = [
   { key: 'producto', titulo: 'Producto en Tienda Nube', ancho: 'minmax(220px, 1.6fr)', movil: 'titulo' },
   { key: 'variante', titulo: 'Variante', ancho: 'minmax(150px, 1fr)', movil: 'chico' },
-  { key: 'sku', titulo: 'Código', ancho: '120px', movil: 'oculta' },
+  { key: 'sku', titulo: 'SKU', ancho: '120px', movil: 'oculta' },
   { key: 'estado', titulo: 'Tienda', ancho: '84px', movil: 'chico' },
   { key: 'stock', titulo: 'Stock', ancho: '64px', derecha: true, movil: 'dato' },
 ]
@@ -33,7 +33,7 @@ const VISTAS = [['sin_par', 'Sin vincular'] as const, ['trabados', 'Repetidas'] 
 const AYUDA: Record<string, string> = {
   sin_par: 'No cruzan con ninguna variante de Areben Gestión: no reciben stock. Si no aparece en el buscador, primero hay que cargar el producto.',
   trabados: 'Varias variantes de Tienda Nube sobre una sola de Areben Gestión, sin poder llevar el mismo stock (cambia algo más que el modelo, o falta vincular alguna): no reciben stock hasta resolverlas.',
-  elegidas: 'Lo que ya se eligió en esta pantalla. La copia desde Gestión Nube no lo pisa. Para corregir una, abrila y elegí otra.',
+  elegidas: 'Lo que ya se eligió en esta pantalla. Para corregir una, abrila y elegí otra.',
 }
 
 type Fila = FilaVinculo & { grupo?: string | null; product_id?: number; usuario?: string | null; actualizado_en?: string }
@@ -132,7 +132,7 @@ export function VincularTN() {
         <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
           <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-            <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en los vínculos" placeholder="Producto, variante o código" />
+            <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en los vínculos" placeholder="Producto, variante o SKU" />
           </div>
           <ListaTrabajo
             columnas={COLUMNAS[vista]} filas={filas} claveDe={(f) => String(f.variant_id)} celda={celda}
@@ -147,31 +147,56 @@ export function VincularTN() {
 
       {abierta && (
         <Modal
-          abierto onCerrar={() => setAbierta(null)} titulo="Vincular con una variante de Areben Gestión"
+          abierto onCerrar={() => setAbierta(null)} titulo="Vincular variante" ancho="ancho"
           pie={(
             <div style={{ display: 'flex', gap: space[2], justifyContent: 'flex-end' }}>
               <Button variant="outline" onClick={() => setAbierta(null)} disabled={trabajando}>Cancelar</Button>
-              <Button onClick={guardar} disabled={trabajando || !elegida}>Guardar</Button>
+              <Button variant="solid" tone="brand" onClick={guardar} disabled={trabajando || !elegida}>Vincular</Button>
             </div>
           )}
         >
-          <p style={{ margin: `0 0 ${space[3]}px`, color: color.mut }}>En Tienda Nube: <b style={{ color: color.ink }}>{abierta.producto} · {nombreVariante(abierta)}</b></p>
+          {/* Darío 20-nov: arriba la variante de Tienda Nube, como el encabezado de la venta. */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], alignItems: 'flex-start', marginBottom: space[4] }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: font.sm, color: color.mut }}>En Tienda Nube</div>
+              <div style={{ fontSize: 20, fontWeight: 700, overflowWrap: 'anywhere' }}>{abierta.producto} · {nombreVariante(abierta)}</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                <ChipEstado mapa={{ p: ['success', 'Publicada'], o: ['neutral', 'Oculta'] }} k={abierta.publicado ? 'p' : 'o'} />
+                {abierta.sku && <span style={{ fontSize: font.sm, color: color.mut, alignSelf: 'center' }}>{abierta.sku}</span>}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
+              <div style={{ fontSize: font.sm, color: color.mut }}>Stock</div>
+              <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{abierta.stock ?? '—'}</div>
+            </div>
+          </div>
+          {vista !== 'sin_par' && (
+            <div style={{ marginBottom: space[3], padding: '10px 12px', borderRadius: 9, background: color.bg, border: `1px solid ${color.line}` }}>
+              <span style={{ color: color.mut }}>{vista === 'elegidas' ? 'Vinculada hoy a' : 'Hoy está en'}</span> <b>{abierta.grupo ?? 'Ya no está en Areben Gestión'}</b>
+            </div>
+          )}
           {errorModal && <div style={{ marginBottom: space[3] }}><Notice tone="danger" onClose={() => setErrorModal(null)}>{errorModal}</Notice></div>}
           <Field label="Buscar en Areben Gestión">
-            <Input value={texto} onChange={(e) => { setTexto(e.target.value); setElegida(null) }} placeholder="Nombre, variante o código" autoFocus />
+            <Input value={texto} onChange={(e) => { setTexto(e.target.value); setElegida(null) }} placeholder="Nombre, variante o SKU" autoFocus />
           </Field>
-          <div role="listbox" aria-label="Variantes de Areben Gestión" style={{ marginTop: space[3], maxHeight: 280, overflowY: 'auto', border: `1px solid ${color.line}`, borderRadius: 10 }}>
+          <div role="listbox" aria-label="Variantes de Areben Gestión" style={{ marginTop: space[3], maxHeight: 320, overflowY: 'auto', border: `1px solid ${color.line}`, borderRadius: 10 }}>
+            {!!resultados?.length && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr) 140px', gap: space[3], padding: '8px 12px', fontSize: font.sm, color: color.mut, borderBottom: `1px solid ${color.line}`, position: 'sticky', top: 0, background: color.surface }}>
+                <span>Producto</span><span>Variante</span><span>SKU</span>
+              </div>
+            )}
             {resultados === null && <div style={{ padding: space[3], color: color.mut }}>Buscando…</div>}
-            {resultados?.length === 0 && <div style={{ padding: space[3], color: color.mut }}>No aparece con ese texto. Probá con menos palabras; si no está, hay que cargar el producto.</div>}
+            {resultados?.length === 0 && <div style={{ padding: space[3], color: color.mut }}>{texto.trim() ? `Ningún producto coincide con «${texto.trim()}».` : 'Escribí el nombre, la variante o el SKU.'}</div>}
             {resultados?.map((v) => {
               const on = elegida?.product_id === v.product_id && elegida?.size_id === v.size_id
               return (
                 <button
                   key={`${v.product_id}:${v.size_id}`} type="button" role="option" aria-selected={on} onClick={() => setElegida(v)}
-                  style={{ display: 'flex', width: '100%', justifyContent: 'space-between', gap: space[3], padding: '8px 12px', border: 'none', borderBottom: `1px solid ${color.bg2}`, background: on ? color.bg2 : 'transparent', cursor: 'pointer', textAlign: 'left', font: 'inherit', color: color.ink }}
+                  style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr) 140px', gap: space[3], width: '100%', height: 'auto', padding: '9px 12px', border: 'none', borderBottom: `1px solid ${color.bg2}`, boxShadow: on ? 'inset 3px 0 0 var(--mo-brand, #4f46e5)' : 'none', background: on ? 'var(--mo-brand-bg, #eef2ff)' : 'transparent', cursor: 'pointer', textAlign: 'left', font: 'inherit', color: color.ink }}
                 >
-                  <span>{v.producto} · <b>{v.talle}</b></span>
-                  <span style={{ color: color.mut, whiteSpace: 'nowrap' }}>{v.sku ?? '—'}</span>
+                  <span style={{ fontWeight: on ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.producto}</span>
+                  <span>{v.talle}</span>
+                  <span style={{ color: color.mut, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.sku ?? '—'}</span>
                 </button>
               )
             })}

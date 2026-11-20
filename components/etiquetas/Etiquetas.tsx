@@ -923,7 +923,7 @@ function ModoPanel({
                   {th('Producto')}
                   {th('Variante')}
                   {th('SKU')}
-                  {th('Código')}
+                  {th('Código de barras')}
                   {conPrecio && th('Precio', 'right')}
                   {conAntesAhora && th('Antes', 'right')}
                   {conAntesAhora && th('Ahora', 'right')}

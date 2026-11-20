@@ -330,7 +330,7 @@ export function Marketing() {
             <>
               Buscar
               <InfoPopover titulo="Buscar">
-                Filtra los productos por su <b>nombre o código (SKU)</b>.
+                Filtra los productos por su <b>nombre o SKU</b>.
               </InfoPopover>
             </>
           }
