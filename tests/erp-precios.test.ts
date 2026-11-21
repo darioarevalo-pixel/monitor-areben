@@ -16,20 +16,20 @@ describe('armarPrecioDeProducto', () => {
     expect(r.costo).toMatchObject({ costo: 12000, proveedor: 'Textil Sur', fuente: 'gn' })
     expect(r.avisos).toEqual([])
   })
-  it('avisa lo que hay que mirar al cortar Gestión Nube: local ≠ Tienda Nube, sin costo, costo de Tienda Nube ≠ el de Areben Gestión', () => {
+  it('avisa sólo el costo distinto de Tienda Nube (Darío 21-nov: precio distinto y «sin costo» ya se ven en la tabla y la etiqueta)', () => {
     expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: COSTO, tn: [tnV(27000)] }).avisos)
-      .toEqual(['El precio del local ($25500) no es el que cobra Tienda Nube ($27000).'])
-    expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: null, tn: [tnV(25500, null)] }).avisos).toEqual(['Sin costo en Areben Gestión.'])
+      .toEqual([])
+    expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: null, tn: [tnV(25500, null)] }).avisos).toEqual([])
     expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: COSTO, tn: [tnV(25500, 13000)] }).avisos)
-      .toEqual(['El costo de Tienda Nube ($13000) no es el de Areben Gestión ($12000).'])
+      .toEqual(['Costo distinto en Tienda Nube: $ 13.000.'])
     // Un peso de diferencia es redondeo, ⛔ aviso.
     expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: COSTO, tn: [tnV(25500.5, 12000.9)] }).avisos).toEqual([])
   })
-  it('sin Tienda Nube lo dice; Tienda Nube con variantes distintas toma el que más se repite y avisa', () => {
-    expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [], costo: COSTO, tn: [] }).avisos).toEqual(['No está en Tienda Nube (ningún SKU del producto cruza).'])
+  it('sin Tienda Nube ⛔ cartel (lo dice la etiqueta); Tienda Nube con variantes distintas toma el que más se repite y avisa', () => {
+    expect(armarPrecioDeProducto({ listas: LISTAS, vigentes: [], costo: COSTO, tn: [] }).avisos).toEqual([])
     const r = armarPrecioDeProducto({ listas: LISTAS, vigentes: [vig('local', 25500)], costo: COSTO, tn: [tnV(25500), tnV(25500), tnV(26000)] })
     expect(r.tn).toMatchObject({ precio: 25500, variantes: 3, distintos: true })
-    expect(r.avisos).toEqual(['En Tienda Nube las variantes tienen precios o costos distintos: se muestra el que más se repite.'])
+    expect(r.avisos).toEqual(['Variantes con precios distintos en Tienda Nube.'])
   })
   it('el historial junta precios y costos, del más nuevo al más viejo', () => {
     const r = armarPrecioDeProducto({
@@ -56,7 +56,7 @@ describe('precio que sigue a lo que cobra Tienda Nube (motor sql/018)', () => {
     })
     expect(r.listas.map((l) => [l.lista, l.precio, l.puedeSoltar])).toEqual([['local', 36990, true], ['online', 45990, false], ['oferta', 31490, false], ['mayorista', null, false]])
     expect(r.tn).toMatchObject({ precio: 45990, promocional: 31490, cobra: 31490 })
-    expect(r.avisos).toEqual(['El precio del local ($36990) no es el que cobra Tienda Nube ($31490).'])
+    expect(r.avisos).toEqual([])
   })
   it('suelto: el local sigue a la oferta, sin aviso ni botón; una promo MAYOR que la de lista ⛔ es oferta', () => {
     const r = armarPrecioDeProducto({
@@ -105,7 +105,7 @@ describe('leerCarga', () => {
   })
   it('🔴 «desde» HOY = ahora (a las 00:00 perdería contra la copia de Gestión Nube de la mañana); hacia atrás ⛔', () => {
     expect(leerCarga({ que: 'costo', producto: '1', monto: 1500, desde: '2026-10-15' }, { hoy: '2026-10-15' })).toMatchObject({ desde: null })
-    expect(leerCarga({ que: 'costo', producto: '1', monto: 1500, desde: '2026-10-14' }, { hoy: '2026-10-15' }).error).toMatch(/desde hoy/)
+    expect(leerCarga({ que: 'costo', producto: '1', monto: 1500, desde: '2026-10-14' }, { hoy: '2026-10-15' }).error).toMatch(/de hoy en adelante/)
   })
   it('frena lo que el motor rechazaría con un error menos claro', () => {
     expect(leerCarga({ producto: '1', monto: 1 }).error).toBeTruthy()
@@ -113,7 +113,7 @@ describe('leerCarga', () => {
     expect(leerCarga({ que: 'precio', producto: '1', monto: 1 }).error).toMatch(/lista/)
     expect(leerCarga({ que: 'costo', producto: '1', monto: '' }).error).toBeTruthy()
     expect(leerCarga({ que: 'costo', producto: '1', monto: -5 }).error).toBeTruthy()
-    expect(leerCarga({ que: 'costo', producto: '1', monto: 5, desde: '20/10' }).error).toMatch(/AAAA/)
+    expect(leerCarga({ que: 'costo', producto: '1', monto: 5, desde: '20/10' }).error).toBe('Fecha inválida.')
   })
 })
 

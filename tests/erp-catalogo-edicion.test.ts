@@ -33,9 +33,9 @@ describe('leerAccion', () => {
 })
 
 describe('errorDe y avisos', () => {
-  it('dice el barcode repetido con la variante que lo tiene', () => {
+  it('dice el barcode repetido (Darío 21-nov: sin los números internos de la otra variante)', () => {
     expect(errorDe({ error: { codigo: 'BARCODE_REPETIDO', mensaje: 'x', otra: { product_id: 4, size_id: 9 } } }))
-      .toEqual({ status: 409, error: 'Ese código de barras ya es de otra variante (producto 4, variante 9).' })
+      .toEqual({ status: 409, error: 'Ese código de barras ya es de otra variante.' })
     expect(errorDe({ error: { codigo: 'NO_ENCONTRADO', mensaje: 'x' } }).status).toBe(404)
     expect(errorDe({ error: { codigo: 'ENTRADA_INVALIDA', mensaje: '⛔ Falta quién' } })).toEqual({ status: 400, error: 'no Falta quién' })
   })

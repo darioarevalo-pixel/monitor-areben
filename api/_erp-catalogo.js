@@ -40,7 +40,7 @@ export async function accionDeCatalogo({ body, usuario }, deps) {
   if (!ACCIONES.includes(body?.accion)) return { status: 400, error: 'Acción desconocida' }
   const e = leerAccion(body)
   if (e.error) return { status: 400, error: e.error }
-  if (!usuario) return { status: 400, error: 'No sé quién lo cambia.' }
+  if (!usuario) return { status: 400, error: 'Volvé a iniciar sesión.' }
   const m = await motor()
   return deps.conMotor(baseDe(e.marca), 'La edición del producto', async (pg) => {
     if (!(await hayTabla(pg))) return { status: 409, error: SIN_TABLA }

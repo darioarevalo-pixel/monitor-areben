@@ -1616,7 +1616,8 @@ export async function precioDeProducto({ marca, producto, costos }) {
       const reglas = await reglasGuardadas(b, marca, marcaDeCaja(marca))
       feria = (await feriaDeCampanias(b, marca, reglas?.feriaCampanias)).feriaPrecios[Number(producto)] ?? null
     } catch (e) {
-      sinFeria = `No se pudieron leer los productos en oferta de Liquidación (${e instanceof Error ? e.message : e}): si éste está en oferta, el local lo cobra al precio de su campaña.`
+      sinFeria = 'No se pudo leer la Liquidación.'
+      console.error(`[erp] liquidación de ${marca}: ${e instanceof Error ? e.message : e}`)
     }
   }
   const armado = armarPrecioDeProducto({
@@ -1644,7 +1645,7 @@ export async function cargarPrecioCosto({ marca, body, usuario }, deps = {}) {
   const b = deps.b || (() => { const { url, key } = cfgDeMarca(marca); return createClient(url, key) })()
   const inv = await b.from('inventario').select('sku').eq('product_id', c.producto)
   if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
-  if (!inv.data.length) return { status: 404, error: 'El producto no está en la copia de Gestión Nube.' }
+  if (!inv.data.length) return { status: 404, error: 'El producto no existe.' }
   const linea = lineaDelProducto(marca, inv.data.map((x) => x.sku))
   const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conMotor(marca, 'Cargar precios', fn)
   return correr(async (db) => {
@@ -1657,7 +1658,7 @@ export async function cargarPrecioCosto({ marca, body, usuario }, deps = {}) {
     // Sin «desde» tiene que valer YA: si lo vigente ⛔ es lo recién cargado, se dice (⛔ «cargado» callado).
     const fila = r.precio ?? r.costo, v = r.vigente
     const esLaMisma = v && v.fuente === 'carga' && Number(v[c.que]) === Number(fila[c.que]) && Date.parse(v.vigente_desde) === Date.parse(fila.vigente_desde)
-    const aviso = !c.desde && !esLaMisma ? 'Quedó guardado, pero lo vigente sigue siendo otra fila: revisá el historial.' : null
+    const aviso = !c.desde && !esLaMisma ? 'Guardado, pero sigue valiendo el precio anterior: revisá el historial.' : null
     return { ok: true, futuro: !!c.desde, aviso }
   })
 }
@@ -1673,18 +1674,18 @@ export async function soltarPrecioDeLista({ marca, body, usuario }, deps = {}) {
   const b = deps.b || (() => { const { url, key } = cfgDeMarca(marca); return createClient(url, key) })()
   const inv = await b.from('inventario').select('sku').eq('product_id', c.producto)
   if (inv.error) throw new Error(`inventario: ${inv.error.message}`)
-  if (!inv.data.length) return { status: 404, error: 'El producto no está en la copia de Gestión Nube.' }
+  if (!inv.data.length) return { status: 404, error: 'El producto no existe.' }
   const linea = lineaDelProducto(marca, inv.data.map((x) => x.sku))
   const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conMotor(marca, 'Cargar precios', fn)
   return correr(async (db) => {
     const { soltarPrecio } = await import('../motor/venta/precio.mjs')
     const r = await soltarPrecio(db, { marca: linea, product_id: Number(c.producto), lista: c.lista, usuario: usuario || 'admin', motivo: c.motivo })
-    if (!r.ok) return { status: 409, error: r.error.mensaje }
+    if (!r.ok) return { status: 409, error: r.error.codigo === 'NO_CARGADO' ? 'Ese precio ya está igualado.' : r.error.mensaje }
     return { ok: true, precio: r.vigente?.precio == null ? null : Number(r.vigente.precio), deLista: r.vigente?.de_lista ?? null }
   })
 }
 
-const SIN_PROVEEDORES = 'La lista de proveedores todavía no está en esta base: el proveedor se escribe a mano.'
+const SIN_PROVEEDORES = 'Escribí el proveedor.'
 // La regla es del motor (tabla Y permiso del rol): sin el GRANT, 409 y texto (⛔ 500).
 const tieneProveedores = async (db) => (await import('../motor/venta/proveedor.mjs')).hayProveedores(db)
 

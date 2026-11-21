@@ -50,12 +50,12 @@ function textoOferta(f: FilaProducto): string {
   const o = ofertaDe(f)
   if (!o) return ''
   if (o.tipo === 'liquidacion') return `${o.nombre}${o.precio != null ? ` · ${pesos(o.precio)}` : ''}`
-  return `Oferta en Tienda Nube · ${pesos(o.precio)}${o.pct ? ` (−${o.pct}%)` : ''}`
+  return `${pesos(o.precio)}${o.pct ? ` (−${o.pct}%)` : ''}`
 }
 
 function bajarCsv(filas: FilaProducto[], marca: MarcaErp, conCosto: boolean) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Producto', ...(conCosto ? ['Costo'] : []), 'Local', 'Online', 'Mayorista', 'Tienda Nube con oferta', 'Oferta o liquidación', 'Último cambio', 'Quién', 'Categoría', 'Línea'].map(c).join(';')]
+  const renglones = [['Producto', ...(conCosto ? ['Costo'] : []), 'Local', 'Online', 'Mayorista', 'Tienda Nube con oferta', 'Oferta', 'Último cambio', 'Quién', 'Categoría', 'Marca'].map(c).join(';')]
   for (const f of filas) {
     renglones.push([f.nombre, ...(conCosto ? [f.costo ?? ''] : []), ...LISTAS_PRECIO.map((l) => f.precios[l] ?? ''), f.precios.oferta ?? '', textoOferta(f),
       f.ultimoCambio ? diaArgentino(Date.parse(f.ultimoCambio.cuando)) : '', f.ultimoCambio?.quien ?? '', f.categoria, LINEA[f.linea] ?? f.linea].map(c).join(';'))
@@ -121,10 +121,10 @@ export function PreciosErp() {
 
   const celda = (f: FilaProducto, k: string): React.ReactNode => {
     if (k === 'p') return <span title={f.nombre} style={estiloNombre}>{f.nombre}</span>
-    if (k === 'costo') return f.costo == null ? <span style={{ color: color.mut2 }} title="Sin costo en Areben Gestión">—</span> : <MoneyText value={f.costo} />
+    if (k === 'costo') return f.costo == null ? <span style={{ color: color.mut2 }} title="Sin costo">—</span> : <MoneyText value={f.costo} />
     if ((LISTAS_PRECIO as string[]).includes(k)) {
       const n = f.precios[k]
-      return n == null ? <span style={{ color: color.mut2 }} title="Sin precio en esta lista">—</span> : <MoneyText value={n} />
+      return n == null ? <span style={{ color: color.mut2 }} title="Sin precio">—</span> : <MoneyText value={n} />
     }
     if (k === 'oferta') {
       const o = ofertaDe(f)
@@ -136,7 +136,7 @@ export function PreciosErp() {
     }
     if (k === 'ult') {
       const u = f.ultimoCambio
-      if (!u) return <span style={{ color: color.mut2 }}>Sin historial</span>
+      if (!u) return <span style={{ color: color.mut2 }}>—</span>
       return (
         <span title={`${NOMBRE_LISTA[u.lista] ?? u.lista}: ${pesos(u.precio)}`} style={{ color: u.copia ? color.mut : color.ink2 }}>
           {cuandoCorto(u.cuando)} · {u.quien ?? 'sin dato'}
@@ -150,7 +150,7 @@ export function PreciosErp() {
 
   const acciones = (f: FilaProducto) => (
     <>
-      {puede('configurar') && <IconoFila label="Cargar precio o costo" onClick={() => abrir(f, true)}><Icono nombre="pesos" size={16} /></IconoFila>}
+      {puede('configurar') && <IconoFila label="Editar precio" onClick={() => abrir(f, true)}><Icono nombre="pesos" size={16} /></IconoFila>}
       <IconoFila indigo label={`Historial de precios de ${f.nombre}`} onClick={() => abrir(f)}><Icono nombre="historial" size={16} /></IconoFila>
     </>
   )
@@ -160,9 +160,9 @@ export function PreciosErp() {
       {/* Darío 20-nov: sin subtítulo ni cuadros de resumen (repetían las pestañas). */}
       {/* Darío 20-nov: el cartel fijo sólo ANTES del corte (lo raro: el precio no llega a la Caja ni a la tienda). Con la marca
           ya en el ERP, que el precio llegue es lo normal: se dice al guardar, en la confirmación. */}
-      {aviso.antes && <Notice tone="neutral">Un precio cargado acá queda en Areben Gestión, con quién y cuándo, y manda sobre la copia de Gestión Nube. {aviso.largo}</Notice>}
+      {aviso.antes && <Notice tone="neutral">Zattia: el precio todavía no llega a la Caja ni a Tienda Nube.</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
-      {datos?.liquidacionesError && <Notice tone="warning">No se pudieron leer las liquidaciones del monitor: la columna «Oferta o liquidación» muestra sólo las ofertas de Tienda Nube.</Notice>}
+      {datos?.liquidacionesError && <Notice tone="warning">No se pudo leer la Liquidación: se ven solo las ofertas de Tienda Nube.</Notice>}
 
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
@@ -184,7 +184,7 @@ export function PreciosErp() {
           activa={filaDeFicha?.id ?? null} onAbrir={(f) => abrir(f)} etiquetaFila={(f) => `el producto ${f.nombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay productos con ese nombre o SKU.' : 'No hay productos en esta vista.'} />
+              <EmptyState title={q ? `Ningún producto coincide con «${q.trim()}».` : 'Sin productos.'} />
               {vista !== 'todos' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todos')}>Ver todos</Button></div>}
             </div>
           ) : null}
@@ -196,12 +196,11 @@ export function PreciosErp() {
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo los precios…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
-          {' · '}la «Mayorista especial» todavía no es una lista de Areben Gestión{datos && <> · Tienda Nube leída {cuandoCorto(datos.tnLeidaEn)}</>}
         </div>
       </div>
 
       <BarraSeleccion cuantas={elegidas.length} onSoltar={() => setSeleccion(new Set())}>
-        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca, conCosto)}>Exportar los elegidos</AccionSeleccion>
+        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca, conCosto)}>Exportar</AccionSeleccion>
       </BarraSeleccion>
 
       {ficha && (

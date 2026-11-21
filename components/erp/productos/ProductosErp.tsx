@@ -19,7 +19,7 @@ import { Button, EmptyState, Icono, MenuAcciones, MoneyText, Notice, Select, col
 import { ListaTrabajo, IconoFila, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
-import { BuscadorLista, ChipEstado, VistasLista, cuandoCorto, estiloNombre } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, VistasLista, estiloNombre } from '@/components/ui/PiezasLista'
 import { leerListaDeProductos, type FilaProducto, type ListaDeProductos, type MarcaErp } from '@/lib/erp/cliente'
 import {
   LISTAS, PESTANIAS, REVISAR, VISTAS, alternarColumna, columnasDe, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar,
@@ -41,7 +41,7 @@ const u = (n: number) => `${n.toLocaleString('es-AR')} u`
 
 function bajarCsv(filas: FilaProducto[], marca: MarcaErp, conCosto: boolean) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Producto', 'Variantes', 'SKU', 'Disponible', ...(conCosto ? ['Costo'] : []), 'Local', 'Online', 'Mayorista', 'En Tienda Nube', 'Categoría', 'Proveedor', 'Línea'].map(c).join(';')]
+  const renglones = [['Producto', 'Variantes', 'SKU', 'Disponible', ...(conCosto ? ['Costo'] : []), 'Local', 'Online', 'Mayorista', 'Tienda Nube', 'Categoría', 'Proveedor', 'Marca'].map(c).join(';')]
   for (const f of filas) {
     renglones.push([f.nombre, f.variantes.length, f.variantes.map((v) => v.sku).filter(Boolean).join(' '), f.disponible, ...(conCosto ? [f.costo ?? ''] : []), ...LISTAS.map((l) => f.precios[l] ?? ''),
       EN_TN[f.tn][1], f.categoria, f.proveedor, LINEA[f.linea] ?? f.linea].map(c).join(';'))
@@ -116,9 +116,9 @@ export function ProductosErp() {
   const celda = (f: FilaProducto, k: string): React.ReactNode => {
     if (k === 'p') return <span title={f.nombre} style={estiloNombre}>{f.nombre}</span>
     if (k === 'var') return <span style={{ color: color.ink2 }} title={f.variantes.map((v) => v.talleNombre).join(' · ')}>{f.variantes.length}</span>
-    if (k === 'disp') return <span style={{ fontWeight: 700, color: f.negativas ? 'var(--mo-danger-ink)' : f.disponible === 0 ? color.mut2 : color.ink }} title={f.negativas ? `${f.negativas} variante(s) en negativo` : undefined}>{f.disponible}</span>
-    if (k === 'costo') return plata(f.costo ?? null, 'Sin costo en Areben Gestión')
-    if ((LISTAS as string[]).includes(k)) return plata(f.precios[k], 'Sin precio en esta lista')
+    if (k === 'disp') return <span style={{ fontWeight: 700, color: f.negativas ? 'var(--mo-danger-ink)' : f.disponible === 0 ? color.mut2 : color.ink }} title={f.negativas ? `${f.negativas} ${f.negativas === 1 ? 'variante' : 'variantes'} en negativo` : undefined}>{f.disponible}</span>
+    if (k === 'costo') return plata(f.costo ?? null, 'Sin costo')
+    if ((LISTAS as string[]).includes(k)) return plata(f.precios[k], 'Sin precio')
     if (k === 'tn') return <ChipEstado mapa={EN_TN} k={f.tn} />
     if (k === 'cat') return <span title={f.categoria ?? undefined} style={{ color: f.categoria ? color.ink2 : color.mut2 }}>{f.categoria ?? '—'}</span>
     if (k === 'prov') return <span title={f.proveedor ?? undefined} style={{ color: f.proveedor ? color.ink2 : color.mut2 }}>{f.proveedor ?? '—'}</span>
@@ -128,13 +128,13 @@ export function ProductosErp() {
 
   const acciones = (f: FilaProducto) => {
     const menu: AccionMenu[] = [
-      { key: 'ficha', label: 'Abrir la ficha', icono: 'abrir', onClick: () => abrir(f) },
-      ...(puede('configurar') ? [{ key: 'cargar', label: 'Cargar precio o costo', icono: 'pesos' as const, onClick: () => abrir(f, true) }] : []),
-      { key: 'etiq', label: 'Etiquetas en el monitor ↗', icono: 'abrir', onClick: () => window.open('/etiquetas', '_blank', 'noopener') },
+      { key: 'ficha', label: 'Ver producto', icono: 'abrir', onClick: () => abrir(f) },
+      ...(puede('configurar') ? [{ key: 'cargar', label: 'Editar precio', icono: 'pesos' as const, onClick: () => abrir(f, true) }] : []),
+      { key: 'etiq', label: 'Imprimir etiquetas ↗', icono: 'abrir', onClick: () => window.open('/etiquetas', '_blank', 'noopener') },
     ]
     return (
       <>
-        {puede('configurar') && <IconoFila label="Cargar precio o costo" onClick={() => abrir(f, true)}><Icono nombre="pesos" size={16} /></IconoFila>}
+        {puede('configurar') && <IconoFila label="Editar precio" onClick={() => abrir(f, true)}><Icono nombre="pesos" size={16} /></IconoFila>}
         <MenuAcciones acciones={menu} etiqueta={`Más acciones del producto ${f.nombre}`} vertical alinear="izquierda" />
       </>
     )
@@ -154,7 +154,7 @@ export function ProductosErp() {
               {queRevisar.map(([k, n]) => <option key={k} value={k} disabled={!conteo[k]}>{n} · {conteo[k] ?? 0}</option>)}
             </Select>
           )}
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un producto" placeholder="Nombre, SKU, código de barras, categoría o proveedor" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un producto" placeholder="Nombre, SKU o código de barras" />
           <PanelColumnas
             columnas={sinCol(prefs.orden).map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
@@ -169,7 +169,7 @@ export function ProductosErp() {
           activa={filaDeFicha?.id ?? null} onAbrir={(f) => abrir(f)} etiquetaFila={(f) => `el producto ${f.nombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay productos con ese nombre o SKU.' : 'No hay productos en esta vista.'} />
+              <EmptyState title={q ? `Ningún producto coincide con «${q.trim()}».` : 'Sin productos.'} />
               {vista !== 'todos' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todos')}>Ver todos</Button></div>}
             </div>
           ) : null}
@@ -181,13 +181,12 @@ export function ProductosErp() {
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo los productos…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
-          {datos && <> · el stock llega hasta {cuandoCorto(datos.libroHasta)} · Tienda Nube leída {cuandoCorto(datos.tnLeidaEn)}</>}
         </div>
       </div>
 
       <BarraSeleccion cuantas={elegidas.length} onSoltar={() => setSeleccion(new Set())}>
         <span style={{ color: '#cbd5e1', fontVariantNumeric: 'tabular-nums' }}>{u(elegidas.reduce((a, f) => a + f.disponible, 0))} disponibles</span>
-        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca, conCosto)}>Exportar los elegidos</AccionSeleccion>
+        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca, conCosto)}>Exportar</AccionSeleccion>
       </BarraSeleccion>
 
       {ficha && (

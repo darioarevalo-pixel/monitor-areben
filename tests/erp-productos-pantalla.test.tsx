@@ -123,12 +123,12 @@ describe('la lista de productos', () => {
 
   it('el $ de la fila abre la ficha con el Local en edición; el lápiz del Costo carga el costo con el monto bien leído (Darío 20-nov)', async () => {
     await montar()
-    await clic(boton('Cargar precio o costo', filaDe('TOP SAHARA')))
+    await clic(boton('Editar precio', filaDe('TOP SAHARA')))
     const tabla = document.querySelector('[aria-label="Precio por lista"]')!
     expect(tabla.querySelector('input')).toBeTruthy()
     await clic(boton('Editar costo', tabla))
     const f = tabla
-    const monto = [...f.querySelectorAll('label')].find((l) => l.textContent?.includes('Nuevo monto'))!.querySelector('input')!
+    const monto = [...f.querySelectorAll('label')].find((l) => l.textContent?.trim() === 'Costo')!.querySelector('input')!
     await act(async () => {
       const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
       set.call(monto, '8.100'); monto.dispatchEvent(new Event('input', { bubbles: true }))
@@ -175,7 +175,7 @@ describe('la lista de productos', () => {
     host = document.createElement('div'); document.body.appendChild(host)
     await act(async () => { root = createRoot(host); root.render(<PreciosErp />) })
     await act(async () => {})
-    await clic(boton('Cargar precio o costo', filaDe('TOP SAHARA')))
+    await clic(boton('Editar precio', filaDe('TOP SAHARA')))
     expect(document.querySelector('[aria-label="Precio por lista"] input')).toBeTruthy()
   })
 
@@ -186,7 +186,7 @@ describe('la lista de productos', () => {
       host = document.createElement('div'); document.body.appendChild(host)
       await act(async () => { root = createRoot(host); root.render(<PreciosErp />) })
       await act(async () => {})
-      expect(todo().includes('Mientras Gestión Nube funcione')).toBe(conCartel)
+      expect(todo().includes('el precio todavía no llega a la Caja')).toBe(conCartel)
       expect(todo()).not.toContain('Tienda Nube lo muestra en hasta 2 horas')
       act(() => root?.unmount()); root = null; host.remove()
     }

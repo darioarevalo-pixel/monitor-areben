@@ -72,9 +72,9 @@ export function EditarProducto({ marca, fila, onError, onListo, onCancelar }: {
     }
     for (const n of agregadas) filas.push(['Variante nueva', [n.talle.trim(), n.sku.trim(), n.barcode.trim()].filter(Boolean).join(' · ')])
     const ok = await confirmar({
-      titulo: `Guardar ${total === 1 ? '1 cambio' : `${total} cambios`} en ${fila.nombre}`,
-      mensaje: <div>{filas.map(([k, v], i) => <ConfirmDetalle key={i} label={k} valor={v} />)}<p style={{ marginTop: space[3] }}>Queda anotado quién lo cambió, con el antes y el después.</p></div>,
-      ok: 'Guardar cambios',
+      titulo: `¿Guardar ${total === 1 ? '1 cambio' : `${total} cambios`} en ${fila.nombre}?`,
+      mensaje: <div>{filas.map(([k, v], i) => <ConfirmDetalle key={i} label={k} valor={v} />)}</div>,
+      ok: 'Guardar',
       tono: 'brand',
     })
     if (!ok) return

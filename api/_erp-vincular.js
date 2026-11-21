@@ -13,7 +13,17 @@ const TIENDAS_DE = { bdi: ['bdi'], zattia: ['zattia', 'stunned'] }
 const STATUS = { NO_ENCONTRADA: 404, TIENDA_DESCONOCIDA: 400, VARIANTE_DESCONOCIDA: 400 }
 
 const envolver = (pg) => ({ q: async (sql, p) => (await pg.query(sql, p)).rows })
-const delMotor = (r) => (r.ok ? r : { status: STATUS[r.error.codigo] || 409, error: r.error.mensaje, codigo: r.error.codigo })
+/** Los errores del motor que ve una persona, dichos como en la pantalla (Darío 21-nov). */
+export function textoDeVinculo({ codigo, mensaje }) {
+  if (codigo === 'MEZCLA') {
+    const quien = /«([^»]+)»/.exec(String(mensaje || ''))?.[1]
+    return `Esa variante ya es de ${quien ? `«${quien}»` : 'otra'}, que no es del mismo color. Elegí otra.`
+  }
+  if (codigo === 'VARIANTE_DESCONOCIDA') return 'Esa variante no está en Areben Gestión.'
+  if (codigo === 'SIN_TABLA') return 'Vincular todavía no está disponible.'
+  return mensaje
+}
+const delMotor = (r) => (r.ok ? r : { status: STATUS[r.error.codigo] || 409, error: textoDeVinculo(r.error), codigo: r.error.codigo })
 const invalido = (marca, tienda) => (!MARCAS.includes(marca) ? 'Marca inválida' : !TIENDAS_DE[marca].includes(tienda) ? 'Esa tienda no es de esta marca' : null)
 const idValido = (x) => /^\d{1,18}$/.test(String(x ?? ''))
 

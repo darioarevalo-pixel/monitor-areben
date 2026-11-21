@@ -21,20 +21,15 @@ const BASE: ColumnaLista[] = [
   { key: 'producto', titulo: 'Producto en Tienda Nube', ancho: 'minmax(220px, 1.6fr)', movil: 'titulo' },
   { key: 'variante', titulo: 'Variante', ancho: 'minmax(150px, 1fr)', movil: 'chico' },
   { key: 'sku', titulo: 'SKU', ancho: '120px', movil: 'oculta' },
-  { key: 'estado', titulo: 'Tienda', ancho: '84px', movil: 'chico' },
+  { key: 'estado', titulo: 'Estado', ancho: '84px', movil: 'chico' },
   { key: 'stock', titulo: 'Stock', ancho: '64px', derecha: true, movil: 'dato' },
 ]
 const COLUMNAS: Record<string, ColumnaLista[]> = {
   sin_par: BASE,
-  trabados: [...BASE, { key: 'grupo', titulo: 'Están todas en', ancho: 'minmax(200px, 1.2fr)', movil: 'chico' }],
+  trabados: [...BASE, { key: 'grupo', titulo: 'Vinculadas a', ancho: 'minmax(200px, 1.2fr)', movil: 'chico' }],
   elegidas: [...BASE.filter((c) => c.key !== 'stock'), { key: 'grupo', titulo: 'Vinculada a', ancho: 'minmax(200px, 1.2fr)', movil: 'chico' }, { key: 'por', titulo: 'Quién', ancho: '120px', movil: 'oculta' }, { key: 'cuando', titulo: 'Cuándo', ancho: '104px', movil: 'chico' }],
 }
-const VISTAS = [['sin_par', 'Sin vincular'] as const, ['trabados', 'Repetidas'] as const, ['elegidas', 'Elegidas acá'] as const]
-const AYUDA: Record<string, string> = {
-  sin_par: 'No cruzan con ninguna variante de Areben Gestión: no reciben stock. Si no aparece en el buscador, primero hay que cargar el producto.',
-  trabados: 'Varias variantes de Tienda Nube sobre una sola de Areben Gestión, sin poder llevar el mismo stock (cambia algo más que el modelo, o falta vincular alguna): no reciben stock hasta resolverlas.',
-  elegidas: 'Lo que ya se eligió en esta pantalla. Para corregir una, abrila y elegí otra.',
-}
+const VISTAS = [['sin_par', 'Sin vincular'] as const, ['trabados', 'Repetidas'] as const, ['elegidas', 'Vinculadas'] as const]
 
 type Fila = FilaVinculo & { grupo?: string | null; product_id?: number; usuario?: string | null; actualizado_en?: string }
 
@@ -98,7 +93,7 @@ export function VincularTN() {
     try {
       const r = await ponerVinculo({ marca, tienda, variant_id: abierta.variant_id, product_id: elegida.product_id, size_id: elegida.size_id })
       const otras = r.vinculadas - 1
-      setHecho(`${abierta.producto} ${nombreVariante(abierta)} quedó vinculada a ${elegida.producto} · ${elegida.talle}${otras > 0 ? ` (y ${otras} más que ya cruzaba${otras > 1 ? 'n' : ''} ahí)` : ''}. Lleva el stock de esa variante desde el próximo envío.`)
+      setHecho(`Vinculada: ${abierta.producto} ${nombreVariante(abierta)} → ${elegida.producto} · ${elegida.talle}${otras > 0 ? ` (y ${otras} más)` : ''}.`)
       setAbierta(null)
       setDatos(await leerVinculos(marca, tienda))
       setError(null)
@@ -116,7 +111,7 @@ export function VincularTN() {
     if (k === 'sku') return f.sku ? <span style={{ color: color.mut }}>{f.sku}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'estado') return <span style={{ color: f.publicado ? color.ink2 : color.mut2 }}>{f.publicado ? 'Publicada' : 'Oculta'}</span>
     if (k === 'stock') return f.stock == null ? <span style={{ color: color.mut2 }} title="Tienda Nube no controla el stock de esta variante">—</span> : <span>{f.stock}</span>
-    if (k === 'grupo') return <span style={{ color: f.grupo ? color.ink2 : color.mut2 }}>{f.grupo ?? 'Ya no está en Areben Gestión'}</span>
+    if (k === 'grupo') return <span style={{ color: f.grupo ? color.ink2 : color.mut2 }}>{f.grupo ?? 'No está en Areben Gestión'}</span>
     if (k === 'por') return <span style={{ color: color.mut }}>{f.usuario ?? '—'}</span>
     if (k === 'cuando') return <span style={{ color: color.mut }}>{f.actualizado_en ? cuandoCorto(f.actualizado_en) : '—'}</span>
     return null
@@ -124,7 +119,7 @@ export function VincularTN() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>Qué variante de Areben Gestión es cada variante de Tienda Nube. {AYUDA[vista]}</p>
+      {vista === 'trabados' && <p style={{ margin: 0, color: color.mut }}>No reciben stock hasta resolverlas.</p>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
       {!datos && !error && <EmptyState title="Leyendo los vínculos…" />}
@@ -137,10 +132,10 @@ export function VincularTN() {
           <ListaTrabajo
             columnas={COLUMNAS[vista]} filas={filas} claveDe={(f) => String(f.variant_id)} celda={celda}
             activa={abierta ? String(abierta.variant_id) : null} onAbrir={abrir} etiquetaFila={(f) => `vincular ${f.producto} ${nombreVariante(f)}`}
-            vacio={<div style={{ padding: space[6] }}><EmptyState title={q ? 'Nada con esa búsqueda.' : 'No hay nada acá.'} /></div>}
+            vacio={<div style={{ padding: space[6] }}><EmptyState title={q ? `Ninguna variante coincide con «${q.trim()}».` : 'Sin variantes.'} /></div>}
           />
           <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-            El catálogo de Tienda Nube se lee cada 2 horas: una variante recién creada tarda en aparecer.
+            Una variante nueva de Tienda Nube tarda hasta 2 horas en aparecer.
           </div>
         </div>
       )}
@@ -172,7 +167,7 @@ export function VincularTN() {
           </div>
           {vista !== 'sin_par' && (
             <div style={{ marginBottom: space[3], padding: '10px 12px', borderRadius: 9, background: color.bg, border: `1px solid ${color.line}` }}>
-              <span style={{ color: color.mut }}>{vista === 'elegidas' ? 'Vinculada hoy a' : 'Hoy está en'}</span> <b>{abierta.grupo ?? 'Ya no está en Areben Gestión'}</b>
+              <span style={{ color: color.mut }}>Vinculada a</span> <b>{abierta.grupo ?? 'No está en Areben Gestión'}</b>
             </div>
           )}
           {errorModal && <div style={{ marginBottom: space[3] }}><Notice tone="danger" onClose={() => setErrorModal(null)}>{errorModal}</Notice></div>}
@@ -186,7 +181,7 @@ export function VincularTN() {
               </div>
             )}
             {resultados === null && <div style={{ padding: space[3], color: color.mut }}>Buscando…</div>}
-            {resultados?.length === 0 && <div style={{ padding: space[3], color: color.mut }}>{texto.trim() ? `Ningún producto coincide con «${texto.trim()}».` : 'Escribí el nombre, la variante o el SKU.'}</div>}
+            {resultados?.length === 0 && <div style={{ padding: space[3], color: color.mut }}>{texto.trim() ? `Ningún producto coincide con «${texto.trim()}».` : null}</div>}
             {resultados?.map((v) => {
               const on = elegida?.product_id === v.product_id && elegida?.size_id === v.size_id
               return (

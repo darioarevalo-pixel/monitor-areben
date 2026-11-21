@@ -31,6 +31,8 @@ const FUENTE: Record<string, string> = NOMBRE_FUENTE
 /** El estado en Tienda Nube, como chip (diseño §1: verde cumplido · ámbar alguien tiene que hacer algo · gris neutro). */
 export const EN_TN: Record<string, readonly [Tone, string]> = { publicado: ['success', 'Publicado'], oculto: ['warning', 'Oculto'], no: ['neutral', 'No está en Tienda Nube'] }
 const LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
+/** El nombre de cada dato cambiado, como en la pantalla (el historial guarda el nombre interno). */
+const CAMPO: Record<string, string> = { nombre: 'Nombre', categoria: 'Categoría', talle: 'Variante', sku: 'SKU', barcode: 'Código de barras' }
 /** Una lectura de TN de más de un día ya puede no ser lo que dice la tienda. */
 const VIEJA_MS = 24 * 3600_000
 const plata = (n: number | null | undefined) => (n == null ? <span style={{ color: color.mut2 }}>—</span> : <MoneyText value={n} />)
@@ -93,7 +95,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
     setTrabajando(true)
     try {
       const r = await soltarPrecio(marca, { producto: f.producto, lista: l.lista })
-      setHecho(`${l.nombre}: igual a ${aQuien?.nombre ?? l.sigue}${r.precio != null ? ` ($${r.precio.toLocaleString('es-AR')})` : ''}.`)
+      setHecho(r.precio != null ? `Precio ${l.nombre}: $ ${r.precio.toLocaleString('es-AR')}.` : `Precio ${l.nombre} igualado a ${aQuien?.nombre ?? l.sigue}.`)
       releer()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo igualar.')
@@ -108,8 +110,8 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
   const conStock = fila ? tieneStock(fila) : false
   async function cambiarActivo(activo: boolean) {
     const ok = await confirmar({
-      titulo: activo ? `¿Activar ${nombre}?` : '¿Seguro que querés eliminar este producto?',
-      mensaje: activo ? 'Vuelve a la lista de Productos.' : nombre,
+      titulo: activo ? '¿Activar este producto?' : '¿Eliminar este producto?',
+      mensaje: nombre,
       ok: activo ? 'Activar' : 'Eliminar',
       tono: activo ? 'brand' : 'danger',
     })
@@ -149,11 +151,14 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
   }
   const encabezado = (t: string, i: number) => <span key={i} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: i ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>
   // Darío 20-nov: UN historial (precios, costos y cambios de la ficha), el más nuevo arriba, como en Ventas.
+  const campo = (h: HechoEdicion) => CAMPO[h.campo] ?? h.campo
   const todo: HechoHistorial[] = [
     ...hechos,
     ...(ediciones ?? []).slice(0, 30).map((h): HechoHistorial => ({
       cuando: h.creada_en, icono: 'lapiz', tono: 'neutral',
-      titulo: `${h.entidad === 'variante' ? 'Variante · ' : ''}${h.campo}: ${h.antes ?? 'vacío'} → ${h.despues ?? 'vacío'}`,
+      titulo: h.campo === 'activo' || h.campo === 'activa'
+        ? `${h.entidad === 'variante' ? 'Variante ' : ''}${h.despues === 'true' ? 'Activado' : 'Eliminado'}`
+        : `${h.entidad === 'variante' && h.campo !== 'talle' ? 'Variante · ' : ''}${campo(h)}: ${h.antes ?? 'vacío'} → ${h.despues ?? 'vacío'}`,
       detalle: h.usuario,
     })),
   ].sort((a, b) => String(b.cuando).localeCompare(String(a.cuando)))
@@ -237,12 +242,12 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
                 })}
               </div>
             )}
-            {f && tnVieja && <div style={{ fontSize: font.sm, color: 'var(--mo-warning-ink)' }}>Tienda Nube leída {cuandoCorto(f.tnLeidaEn)}: puede haber cambiado.</div>}
+            {f && tnVieja && <div style={{ fontSize: font.sm, color: 'var(--mo-warning-ink)' }}>Tienda Nube al {cuandoCorto(f.tnLeidaEn)}.</div>}
           </section>
 
           <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
             <h3 style={h3}>Variantes{fila ? ` · ${fila.variantes.length}` : ''}</h3>
-            {!fila ? <span style={{ color: color.mut }}>Leyendo…</span> : !fila.variantes.length ? <span style={{ color: color.mut }}>Sin variantes en el stock.</span> : (
+            {!fila ? <span style={{ color: color.mut }}>Leyendo…</span> : !fila.variantes.length ? <span style={{ color: color.mut }}>Sin variantes.</span> : (
               <div style={{ overflowX: 'auto' }}>
                 <div role="table" aria-label="Stock por variante" style={{ display: 'grid', gridTemplateColumns: `minmax(120px, 1fr) repeat(${deps.length}, 72px) 84px`, columnGap: 10, fontVariantNumeric: 'tabular-nums', minWidth: 'max-content' }}>
                   {['Variante', ...deps.map((d) => (d === 'local' ? 'Local' : NOMBRE_DEPOSITO[d as keyof typeof NOMBRE_DEPOSITO] ?? d)), 'Disponible'].map(encabezado)}

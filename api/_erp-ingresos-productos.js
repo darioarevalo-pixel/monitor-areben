@@ -77,7 +77,7 @@ export async function productosDeIngresos({ marca, modo = 'habitual', admin }, d
 export async function importarDeIngresosErp({ body, usuario, modo = 'habitual', admin }, deps) {
   const { marca, elegidos } = body ?? {}
   if (!Array.isArray(elegidos) || !elegidos.length || elegidos.length > MAX_ELEGIDOS || !elegidos.every((x) => /^\d{1,18}$/.test(String(x)))) return { status: 400, error: 'No hay productos elegidos.' }
-  if (!usuario) return { status: 400, error: 'No sé quién importa.' }
+  if (!usuario) return { status: 400, error: 'Volvé a iniciar sesión.' }
   const { importarDeIngresos } = await motor()
   const r = await correr(marca, deps, (a) => importarDeIngresos({ ...a, elegidos: elegidos.map(Number), usuario, admin, modo }))
   if (r.status || !r.manda || !r.skus?.length) return r

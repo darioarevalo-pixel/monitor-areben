@@ -47,7 +47,7 @@ describe('armarPrecioDeProducto: el proveedor DEL PRODUCTO (Bruno, 18-oct: nace 
 describe('proveedores sin la tabla (base sin sql/013)', () => {
   const sinTabla = { query: async () => ({ rows: [{ hay: false }] }) }
   it('lista y alta contestan 409 con el aviso (la pantalla deja el texto)', async () => {
-    expect(await proveedoresDeMarca({ marca: 'zattia', linea: 'zattia' }, { db: sinTabla })).toMatchObject({ status: 409, error: expect.stringMatching(/a mano/) })
+    expect(await proveedoresDeMarca({ marca: 'zattia', linea: 'zattia' }, { db: sinTabla })).toMatchObject({ status: 409, error: 'Escribí el proveedor.' })
     expect(await altaDeProveedor({ marca: 'zattia', body: { nombre: 'X' } }, { db: sinTabla })).toMatchObject({ status: 409 })
   })
   it('marca inválida ⇒ 400 sin tocar la base', async () => {

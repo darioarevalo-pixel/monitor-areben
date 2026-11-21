@@ -49,7 +49,7 @@ describe('Vincular (pantalla)', () => {
     await montar()
     await act(async () => { boton('Repetidas')?.click() })
     expect(texto()).toContain('CAMISA TAOS · S')
-    await act(async () => { boton('Elegidas acá')?.click() })
+    await act(async () => { boton('Vinculadas')?.click() })
     expect(texto()).toContain('TWIST · iPhone 16')
     expect(texto()).toContain('Bruno')
   })
