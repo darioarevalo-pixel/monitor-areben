@@ -43,7 +43,7 @@ describe('padronDelPanel', () => {
     const no = await padronDelPanel({ cuit: '30718508181' }, { prendido: true, arca: { persona: async () => { throw new Error('Padrón de ARCA: No existe persona con ese Id') } } })
     expect(no).toEqual({ status: 502, error: 'ARCA dice: No existe persona con ese Id' })
     const sinTabla = await padronDelPanel({ cuit: '30718508181' }, { prendido: true, arca: { persona: async () => { throw new Error('arca_ta_servicio: relation "public.arca_ta_servicio" does not exist') } } })
-    expect(sinTabla).toMatchObject({ status: 409, error: expect.stringMatching(/migrate-arca-ta-servicio/) })
+    expect(sinTabla).toMatchObject({ status: 409, error: 'Todavía no disponible.' })
   })
   it('la vista pide el permiso de facturar', () => {
     expect(permisoErpDe({ method: 'GET', vista: 'padron-panel' })).toBe('facturar-venta')

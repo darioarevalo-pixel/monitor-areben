@@ -82,7 +82,7 @@ describe('puedeFacturar', () => {
   })
   it('una venta de prueba sale en homologación y ⛔ en producción', () => {
     expect(puedeFacturar(v, { ambiente: 'homologacion', facturada: false })).toBeNull()
-    expect(puedeFacturar(v, { ambiente: 'produccion', facturada: false })).toMatch(/PRUEBA/)
+    expect(puedeFacturar(v, { ambiente: 'produccion', facturada: false })).toBe('Venta de prueba: se factura en Gestión Nube.')
     expect(puedeFacturar({ ...v, prueba: false }, { ambiente: 'produccion', facturada: false })).toBeNull()
   })
   it('frena la anulada, el cambio, la de $0 y la ya facturada', () => {
@@ -143,7 +143,7 @@ describe('clavesDeFactura y distintaDeLaPedida', () => {
   it('la misma clase y receptor ⇒ la misma; otra ⇒ dice cuál tiene y que va con NC', () => {
     const ya = { tipo: 6, doc_tipo: 99, doc_nro: 0, pto_vta: 1, numero: 16 }
     expect(distintaDeLaPedida(ya, leerFacturar({ ventaId: ID }) as never)).toBeNull()
-    expect(distintaDeLaPedida(ya, leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri' }) as never)).toMatch(/factura B 1-16 \(sin identificar\).*nota de crédito/)
+    expect(distintaDeLaPedida(ya, leerFacturar({ ventaId: ID, clase: 'A', doc: CUIT, condicion: 'ri' }) as never)).toBe('La venta ya tiene factura: primero va la nota de crédito.')
     expect(distintaDeLaPedida(ya, leerFacturar({ ventaId: ID, doc: '30123456' }) as never)).toBeTruthy()
   })
 })
@@ -212,8 +212,8 @@ describe('el CAMBIO facturado: NC por lo devuelto + factura por lo nuevo', () =>
     // Bruno, 15-oct: original SIN factura ⇒ se factura lo cobrado hoy; sin nada cobrado, ⛔ hay qué facturar.
     expect(puedeFacturarCambio({ ...c, total: 1700 }, original, { ambiente: 'homologacion', facturaOriginal: null })).toBeNull()
     expect(puedeFacturarCambio({ ...c, total: 0 }, original, { ambiente: 'homologacion', facturaOriginal: null })).toMatch(/no se cobró nada/)
-    expect(puedeFacturarCambio(c, original, { ambiente: 'produccion', facturaOriginal: { ...facturaOriginal, ambiente: 'produccion' } })).toMatch(/PRUEBA/)
-    expect(puedeFacturarCambio(c, original, { ambiente: 'produccion', facturaOriginal })).toMatch(/PRUEBA/)
+    expect(puedeFacturarCambio(c, original, { ambiente: 'produccion', facturaOriginal: { ...facturaOriginal, ambiente: 'produccion' } })).toBe('Cambio de prueba: se factura en Gestión Nube.')
+    expect(puedeFacturarCambio(c, original, { ambiente: 'produccion', facturaOriginal })).toBe('Cambio de prueba: se factura en Gestión Nube.')
     expect(puedeFacturarCambio({ ...c, prueba: false }, original, { ambiente: 'produccion', facturaOriginal })).toMatch(/no está autorizada en este modo de ARCA/)
   })
 })

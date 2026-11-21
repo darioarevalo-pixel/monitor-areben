@@ -198,13 +198,12 @@ export function CajasErp() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>Cada caja del período: quién abrió y cerró, el efectivo que tenía que haber, lo que se contó y la diferencia. Abrir, contar y cerrar se hace en la Caja. En el arqueo de caja se revisa el sobre de cada cierre, billete por billete.</p>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {arqueoNo && <Notice tone="warning">{arqueoNo}</Notice>}
       {admin && !arqueoNo && (
         <form onSubmit={(e) => { e.preventDefault(); void abrirSobre() }} style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
           <label htmlFor="erp-cajas-sobre" style={{ fontWeight: 600 }}>Arqueo de caja</label>
-          <Input id="erp-cajas-sobre" aria-label="Código de la caja" placeholder="Código de la caja (escaneá o escribí, ej. Z-0142)" value={codigo}
+          <Input id="erp-cajas-sobre" aria-label="Código de la caja" placeholder="Código de la caja" value={codigo}
             onChange={(e) => setCodigo(e.target.value)} style={{ maxWidth: 340 }} autoComplete="off" />
           <Button type="submit" variant="outline" disabled={!codigo.trim() || buscando}>{buscando ? 'Buscando…' : 'Revisar'}</Button>
         </form>
@@ -214,10 +213,10 @@ export function CajasErp() {
         <TileResumen titulo={NOMBRE[marca]} valor={abiertaFila ? 'Abierta' : cargando ? '…' : 'Cerrada'} oscuro
           nota={abiertaFila ? `desde ${cuandoCorto(abiertaFila.abiertoEn)} · ${abiertaFila.abiertoPor ?? 'sin dato'}` : 'sin caja abierta en el período'} />
         <TileResumen titulo="Efectivo esperado ahora" valor={!abiertaFila ? '—' : enVivo?.esperado != null ? pesos(enVivo.esperado) : enVivo?.error ? 'Sin dato' : 'Calculando…'}
-          nota={!abiertaFila ? 'no hay caja abierta' : enVivo?.error ? 'la Caja no contestó' : enVivo?.ventas != null ? `${enVivo.ventas} ventas en esta caja` : 'lo calcula la Caja'} />
+          nota={!abiertaFila ? 'no hay caja abierta' : enVivo?.error ? 'No se pudo leer' : enVivo?.ventas != null ? `${enVivo.ventas} ${enVivo.ventas === 1 ? 'venta' : 'ventas'} en esta caja` : undefined} />
         <TileResumen titulo={`Diferencias · ${nombrePeriodo.toLowerCase()}`} valor={res.cierres ? conSigno(res.diferencia) : '—'}
-          nota={res.cierres ? `faltó ${pesos(Math.abs(res.falto))} · sobró ${pesos(res.sobro)} · en ${res.cierres} cierres` : 'sin cierres en el período'} />
-        <TileResumen tono={tonoDeConteo(res.conDiferencia)} titulo="Cierres con diferencia" valor={res.conDiferencia.toLocaleString('es-AR')} nota={`de ${res.cierres} cierres`} />
+          nota={res.cierres ? `faltó ${pesos(Math.abs(res.falto))} · sobró ${pesos(res.sobro)} · en ${res.cierres} ${res.cierres === 1 ? 'cierre' : 'cierres'}` : 'sin cierres en el período'} />
+        <TileResumen tono={tonoDeConteo(res.conDiferencia)} titulo="Cierres con diferencia" valor={res.conDiferencia.toLocaleString('es-AR')} nota={`de ${res.cierres} ${res.cierres === 1 ? 'cierre' : 'cierres'}`} />
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
@@ -241,7 +240,7 @@ export function CajasErp() {
           vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={VACIO[vista] ?? 'No hubo cajas en el período.'} /></div> : null}
         />
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo las cajas…' : `${filas.length.toLocaleString('es-AR')} cajas`} · la diferencia es la del cierre: + sobró, − faltó · se cuenta sólo el efectivo
+          {cargando && !datos ? 'Leyendo las cajas…' : `${filas.length.toLocaleString('es-AR')} ${filas.length === 1 ? 'caja' : 'cajas'}`} · + sobró, − faltó
         </div>
       </div>
 
@@ -260,16 +259,16 @@ export function CajasErp() {
             {fichaFila.efectivo ? (
               <div>
                 <h3 style={{ margin: '0 0 8px', fontSize: font.md }}>El efectivo</h3>
-                {([['Fondo', fichaFila.efectivo.fondo], ['Cobrado en efectivo', fichaFila.efectivo.cobrado], ['Esperando transferencia', fichaFila.efectivo.deEspera], ['Cobrado en Gestión Nube', fichaFila.efectivo.cobradoGN], ['Pedidos web (Areben Gestión)', fichaFila.efectivo.cobradoERP ?? 0], ['Ingresos', fichaFila.efectivo.aportes], ['Salidas', -fichaFila.efectivo.salidas]] as Array<[string, number]>)
+                {([['Fondo', fichaFila.efectivo.fondo], ['Cobrado en efectivo', fichaFila.efectivo.cobrado], ['Esperando transferencia', fichaFila.efectivo.deEspera], ['Cobrado en Gestión Nube', fichaFila.efectivo.cobradoGN], ['Pedidos web', fichaFila.efectivo.cobradoERP ?? 0], ['Ingresos', fichaFila.efectivo.aportes], ['Salidas', -fichaFila.efectivo.salidas]] as Array<[string, number]>)
                   .filter(([, n]) => n).map(([t, n]) => <div key={t} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span style={{ color: color.mut }}>{t}</span><MoneyText value={n} /></div>)}
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: `1px solid ${color.line}`, fontWeight: 700 }}><span>Esperado</span><MoneyText value={fichaFila.efectivo.esperado} /></div>
                 {fichaFila.contado != null && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span>Contado</span><MoneyText value={fichaFila.contado} /></div>}
               </div>
-            ) : <Notice tone="neutral">{fichaFila.abierta ? 'La caja sigue abierta: el cierre se ve cuando se cierre.' : 'Este cierre no guardó el detalle del efectivo.'}</Notice>}
+            ) : <Notice tone="neutral">{fichaFila.abierta ? 'Caja abierta.' : 'Sin detalle del efectivo.'}</Notice>}
             {fichaFila.porForma.length > 0 && (
               <div>
                 <h3 style={{ margin: '0 0 8px', fontSize: font.md }}>Por forma de pago</h3>
-                {fichaFila.porForma.map((x, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span style={{ color: color.mut }}>{x.nombre} · {x.cobros} cobros</span><MoneyText value={x.monto} /></div>)}
+                {fichaFila.porForma.map((x, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span style={{ color: color.mut }}>{x.nombre} · {x.cobros} {x.cobros === 1 ? 'cobro' : 'cobros'}</span><MoneyText value={x.monto} /></div>)}
               </div>
             )}
             {fichaFila.nota && <DatoFicha titulo="Nota">{fichaFila.nota}</DatoFicha>}
@@ -310,7 +309,6 @@ function ArqueoDeLaCaja({ f, admin, onRevisar }: { f: FilaCaja; admin: boolean; 
       )}
       {admin && !a && <Button variant="solid" tone="brand" fullWidth disabled={f.sobre == null} onClick={onRevisar}>Revisar</Button>}
       {admin && a && <Button variant="ghost" size="sm" style={{ alignSelf: 'flex-start' }} onClick={onRevisar}>Corregir el arqueo</Button>}
-      {!admin && !a && <span style={{ color: color.mut, fontSize: font.sm }}>La revisa un admin cuando recibe el sobre.</span>}
     </div>
   )
 }
@@ -318,7 +316,7 @@ function ArqueoDeLaCaja({ f, admin, onRevisar }: { f: FilaCaja; admin: boolean; 
 /** Los renglones del efectivo que se comparan al recalcular (los mismos de «El efectivo»). */
 const RENGLONES_EFECTIVO: Array<[string, (e: EfectivoCierre) => number]> = [
   ['Cobrado en efectivo', (e) => e.cobrado], ['Esperando transferencia', (e) => e.deEspera], ['Cobrado en Gestión Nube', (e) => e.cobradoGN],
-  ['Pedidos web (Areben Gestión)', (e) => e.cobradoERP ?? 0], ['Ingresos', (e) => e.aportes], ['Salidas', (e) => -e.salidas],
+  ['Pedidos web', (e) => e.cobradoERP ?? 0], ['Ingresos', (e) => e.aportes], ['Salidas', (e) => -e.salidas],
 ]
 
 /**
@@ -358,7 +356,7 @@ function RecalcularElCierre({ f, marca, admin, onGuardado }: { f: FilaCaja; marc
       {vista && !vista.cambia && <Notice tone="neutral">El cierre ya está al día: no hay nada que recalcular.</Notice>}
       {vista && vista.cambia && (
         <div style={{ border: `1px solid ${color.line}`, borderRadius: 12, padding: space[3], display: 'flex', flexDirection: 'column', gap: space[1] }}>
-          <h3 style={{ margin: '0 0 4px', fontSize: font.md }}>Con lo de hoy</h3>
+          <h3 style={{ margin: '0 0 4px', fontSize: font.md }}>Recalculado</h3>
           {cambios.map(([t, a, d]) => fila(t, a, d))}
           {fila('Esperado', vista.antes.esperado, vista.despues.esperado, true)}
           {fila('Diferencia', vista.antes.diferencia, vista.despues.diferencia, true, (n) => (n ? conSigno(n) : '$ 0'))}
@@ -441,7 +439,7 @@ function RevisionDeLaCaja({ f, marca, onGuardado, onVolver }: { f: FilaCaja; mar
             <div key={r.clave} style={{ ...GRILLA_REVISION, padding: '8px 10px', borderRadius: 10, border: `1px solid ${estado === 'ok' ? color.successBorder : estado === 'dif' ? color.warningBorder : color.line}`, background: estado === 'ok' ? color.successBg : estado === 'dif' ? color.warningBg : undefined }}>
               <b style={{ fontVariantNumeric: 'tabular-nums' }}>{r.valor == null ? 'Monto' : pesos(r.valor)}</b>
               <span style={{ textAlign: 'center', color: color.mut, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{r.valor == null ? pesos(r.esperado) : r.esperado}</span>
-              <Input data-renglon aria-label={`Verificado de ${r.valor == null ? 'el monto' : pesos(r.valor)}`} inputMode={r.valor == null ? 'decimal' : 'numeric'} autoComplete="off"
+              <Input data-renglon aria-label={r.valor == null ? 'Verificado del monto' : `Verificado de ${pesos(r.valor)}`} inputMode={r.valor == null ? 'decimal' : 'numeric'} autoComplete="off"
                 value={valores[r.clave] ?? ''} onChange={(e) => setValores((v) => ({ ...v, [r.clave]: e.target.value }))}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); siguiente(i) } }}
                 style={{ textAlign: 'center', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }} />
@@ -472,7 +470,7 @@ function RevisionDeLaCaja({ f, marca, onGuardado, onVolver }: { f: FilaCaja; mar
         )}
         {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
         <Button variant="solid" tone="brand" fullWidth disabled={guardando || !completo || (conDif && !nota.trim())} onClick={() => void guardar()}>
-          {guardando ? 'Guardando…' : completo && conDif ? 'Guardar con diferencia' : 'Listo'}
+          {guardando ? 'Guardando…' : completo && conDif ? 'Guardar con diferencia' : 'Guardar'}
         </Button>
         <div style={{ textAlign: 'center', fontSize: font.sm, color: color.mut, fontVariantNumeric: 'tabular-nums' }}>
           {!completo ? `${hechos} de ${renglones.length} revisados` : conDif ? `Diferencia ${conSigno(verificado - esperado)}` : 'Coincide'}

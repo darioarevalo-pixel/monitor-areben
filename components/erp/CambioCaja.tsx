@@ -16,7 +16,6 @@
  */
 
 import { useTiendaErp } from '@/lib/erp/linea-erp'
-import { ETIQUETA_LINEA, type Linea } from '@/lib/lineas'
 import { useEffect, useState } from 'react'
 import {
   Badge, Button, EmptyState, Field, Input, MoneyText, Notice, NumberField, PasoCantidad, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, space,
@@ -26,13 +25,15 @@ import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
 import { precioDeCaja, esDeStunned } from '@/lib/caja/precio'
-import { NOMBRE_MEDIO } from '@/lib/caja/core.core.js'
 import { buscarProducto, elegirVariante, leerConfig, type Candidato, type Config, type Variante } from '@/lib/caja/cliente'
 import { marcaParaPOS, usarMarcaCaja } from '@/lib/caja/marca'
 import type { MarcaErp } from '@/lib/erp/cliente'
 import { NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
 import { MEDIOS_CAMBIO, buscarVentasDelCambio, useCambio, type FilaVenta } from '@/components/caja/useCambio'
 import { DesestimarSaldo } from '@/components/caja/partesCambio'
+
+/** Cómo se lee la forma de pago en pantalla, como en Cobros. */
+const NOMBRE_MEDIO_CAMBIO: Record<string, string> = { efectivo: 'Efectivo', transferencia: 'Transferencia', debito: 'Débito', credito: 'Crédito' }
 
 export function CambioCaja() {
   const { marca: delShell } = useSesion()
@@ -115,25 +116,20 @@ export function CambioCaja() {
   const { diferencia, resto, saldoUsado, cobrado, aFavor, reglas, espera } = c
   /** Con una venta elegida manda ELLA; sin elegir, avisa si en la lista hay alguna de prueba. */
   const deEnsayo = venta ? c.deEnsayo : (ventas ?? []).some((v) => v.prueba)
-  const ventaDeGn = origen?.tipo === 'gn' ? origen : null
   const ventaErp = origen?.tipo === 'erp' ? origen : null
-  /** Cómo se llama la marca del cambio en los avisos (la de lo devuelto o, sin nada todavía, la de la tienda del menú). */
-  const marcaDelCambio = ETIQUETA_LINEA[(c.lineaDelCambio ?? tienda) as Linea] ?? tienda
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <SectionCard title={`Cambio · ${NOMBRE_MARCA[store] ?? store}`} subtitle="Buscá la venta por número o cliente, marcá lo que devuelve y escaneá lo que se lleva.">
+      <SectionCard title={`Cambio · ${NOMBRE_MARCA[store] ?? store}`}>
         {/* 🔑 El modo lo manda la venta (`prueba`: el motor ⛔ cambia una de prueba con un cambio real ni al revés). El cartel fijo
             seguía diciendo «el cambio de verdad se hace en GN» DESPUÉS del corte de Stunned: ahora sale sólo con una venta de prueba. */}
-        {deEnsayo && <Notice tone="warning">Venta de prueba: el cambio no mueve el stock ni sale a Gestión Nube. El cambio de verdad de las ventas que siguen en Gestión Nube se hace allá.</Notice>}
+        {deEnsayo && <Notice tone="warning">Venta de prueba: el cambio se hace en Gestión Nube.</Notice>}
         {/* 🔑 El motor mueve el stock sólo si la venta NO es de prueba y NO tiene venta de GN (`mueveStock`, motor/venta/armar.mjs). */}
-        {ventaErp && !ventaErp.prueba && !ventaErp.gnSaleId && <Notice tone="info">Venta real: el cambio mueve el stock y queda atado a la venta #{ventaErp.numero}.</Notice>}
-        {ventaErp && !ventaErp.prueba && !!ventaErp.gnSaleId && <Notice tone="info">Esta venta ya está en Gestión Nube: el cambio queda atado a la venta #{ventaErp.numero} y no mueve el stock.</Notice>}
-        {ventaDeGn && !ventaDeGn.prueba && <Notice tone="info">Venta {ventaDeGn.numero} de Gestión Nube: el cambio devuelve lo que pagó y mueve el stock de {marcaDelCambio} en Areben Gestión.</Notice>}
-        {tipo === 'suelto' && !deEnsayo && <Notice tone="info">Cambio sin venta: lo autoriza la encargada con su PIN y mueve el stock de {marcaDelCambio} en Areben Gestión.</Notice>}
+        {ventaErp && !ventaErp.prueba && !!ventaErp.gnSaleId && <Notice tone="info">Este cambio no mueve el stock.</Notice>}
+        {tipo === 'suelto' && !deEnsayo && <Notice tone="info">Cambio sin venta: lo autoriza la encargada.</Notice>}
         <form onSubmit={(e) => { e.preventDefault(); void buscar() }} style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Field label="Venta" style={{ flex: '1 1 220px' }}>
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={conCorte ? '#123, número de venta de Gestión Nube, nombre, DNI o mail' : '#123, nombre, DNI o mail'} />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nº de venta, nombre, DNI o mail" />
           </Field>
           <Button type="submit" disabled={c.trabajando}>Buscar</Button>
           {conCorte && <Button variant="outline" disabled={c.trabajando || tipo === 'suelto'} onClick={() => { c.empezarDeNuevo(); setVentas(null); c.elegirVenta({ origen: { tipo: 'suelto' }, vendidas: [] }) }}>Cambio sin venta</Button>}
@@ -144,8 +140,8 @@ export function CambioCaja() {
       {hecho && (
         <Notice tone="success" onClose={() => c.setHecho(null)}>
           Cambio #{hecho.numero} registrado.{' '}
-          {hecho.cobrado > 0 ? <>Se cobraron <MoneyText value={hecho.cobrado} />.</> : hecho.aFavor > 0 ? <>Quedan <MoneyText value={hecho.aFavor} /> a favor de la clienta{hecho.saldo != null && <> (saldo: <MoneyText value={hecho.saldo} />)</>}.</> : hecho.desestimado > 0 ? <>La clienta dejó <MoneyText value={hecho.desestimado} /> (saldo desestimado con PIN).</> : 'Sin diferencia.'}
-          {hecho.ncPendiente && ' La venta tenía factura: facturá el cambio en Caja › Factura (nota de crédito por lo devuelto y factura por lo nuevo).'}
+          {hecho.cobrado > 0 ? <>Se cobraron <MoneyText value={hecho.cobrado} />.</> : hecho.aFavor > 0 ? <>Quedan <MoneyText value={hecho.aFavor} /> a favor de la clienta{hecho.saldo != null && <> (saldo: <MoneyText value={hecho.saldo} />)</>}.</> : hecho.desestimado > 0 ? <>Saldo de <MoneyText value={hecho.desestimado} /> descartado.</> : 'Sin diferencia.'}
+          {hecho.ncPendiente && ' Tenía factura: facturá el cambio.'}
         </Notice>
       )}
 
@@ -223,7 +219,7 @@ export function CambioCaja() {
             )}
           </SectionCard>
 
-          <SectionCard title="Se lleva" subtitle="Con el precio de la etiqueta; se puede cambiar, como en la Caja.">
+          <SectionCard title="Se lleva">
             <form onSubmit={(e) => { e.preventDefault(); if (codigoNueva.trim()) void escanearNueva() }} style={{ display: 'flex', gap: space[2], marginBottom: space[3], alignItems: 'flex-end' }}>
               <Field label="Escanear lo que se lleva"><Input value={codigoNueva} onChange={(e) => setCodigoNueva(e.target.value)} placeholder="Código o nombre" /></Field>
             </form>
@@ -234,7 +230,7 @@ export function CambioCaja() {
                 ))}
               </div>
             )}
-            {!nuevas.length ? <EmptyState title="Sin productos nuevos: si no se lleva nada, la diferencia queda a favor." /> : (
+            {!nuevas.length ? <EmptyState title="Sin productos nuevos." /> : (
               <TableWrap>
                 <table>
                   <THead><Tr><Th>Producto</Th><Th>Variante</Th><Th>Cantidad</Th><Th>Precio</Th></Tr></THead>
@@ -260,7 +256,7 @@ export function CambioCaja() {
                   ? <>
                     {saldoUsado > 0 && <>Con saldo a favor: <MoneyText value={saldoUsado} strong /> · </>}
                     {resto > 0 && (cobrado.total > 0 && cobrado.total - saldoUsado !== resto
-                      ? <>A pagar: <MoneyText value={cobrado.total - saldoUsado} strong /> <span style={{ fontSize: 14 }}>(<MoneyText value={resto} /> con el descuento de la forma de pago)</span></>
+                      ? <>A pagar: <MoneyText value={cobrado.total - saldoUsado} strong /> <span style={{ fontSize: 14 }}>· {cobrado.total - saldoUsado < resto ? 'sin descuento' : 'sin recargo'} <MoneyText value={resto} /></span></>
                       : <>A pagar: <MoneyText value={resto} strong /></>)}
                   </>
                   : diferencia < 0 ? <>A favor de la clienta: <MoneyText value={aFavor} strong /></> : 'Sin diferencia'}
@@ -269,16 +265,16 @@ export function CambioCaja() {
                 <Field label={saldoUsado > 0 ? 'Forma de pago del resto' : 'Forma de pago'}>
                   <Select value={c.medio} onChange={(e) => c.setMedio(e.target.value as typeof c.medio)} disabled={!!espera}>
                     <option value="">Elegir…</option>
-                    {MEDIOS_CAMBIO.filter((m) => reglas?.medios?.[m]).map((m) => <option key={m} value={m}>{NOMBRE_MEDIO[m]}</option>)}
+                    {MEDIOS_CAMBIO.filter((m) => reglas?.medios?.[m]).map((m) => <option key={m} value={m}>{NOMBRE_MEDIO_CAMBIO[m] ?? m}</option>)}
                   </Select>
                 </Field>
               )}
               <span style={{ flex: 1 }} />
-              {!espera && <Button disabled={!c.listo || c.trabajando || (resto > 0 && !c.cuenta)} onClick={() => void c.confirmar()}>{cobrado.espera > 0 ? 'Esperar la transferencia' : 'Confirmar cambio'}</Button>}
+              {!espera && <Button disabled={!c.listo || c.trabajando || (resto > 0 && !c.cuenta)} onClick={() => void c.confirmar()}>{cobrado.espera > 0 ? 'Esperar la transferencia' : 'Registrar cambio'}</Button>}
             </div>
             {tipo === 'suelto' && (
               <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[3], alignItems: 'flex-end' }}>
-                <Field label="Encargada que autoriza (usuario)"><Input value={c.encargada.persona} onChange={(e) => c.setEncargada({ ...c.encargada, persona: e.target.value })} autoComplete="off" /></Field>
+                <Field label="Encargada"><Input value={c.encargada.persona} onChange={(e) => c.setEncargada({ ...c.encargada, persona: e.target.value })} autoComplete="off" /></Field>
                 <Field label="PIN de 4 dígitos"><Input type="password" inputMode="numeric" maxLength={4} value={c.encargada.pin} onChange={(e) => c.setEncargada({ ...c.encargada, pin: e.target.value.replace(/\D/g, '').slice(0, 4) })} autoComplete="off" style={{ width: 100 }} /></Field>
               </div>
             )}
@@ -308,7 +304,7 @@ export function CambioCaja() {
               <div style={{ marginTop: space[3], display: 'flex', flexDirection: 'column', gap: space[2] }}>
                 <Notice tone="action">
                   Esperando la transferencia de <MoneyText value={espera.monto} strong />.{' '}
-                  {espera.cruce.motivo ?? 'Se mira Mercado Pago cada 5 segundos: el cambio se registra solo cuando llega.'}
+                  {espera.cruce.motivo ?? 'El cambio se registra solo cuando llega.'}
                 </Notice>
                 {espera.recientes.length > 0 && (
                   <TableWrap>

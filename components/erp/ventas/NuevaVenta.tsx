@@ -116,8 +116,8 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
     : !pagos.length ? 'Elegí cómo pagó.'
     : pagos.some((p) => !p.cuenta) ? 'Elegí la cuenta de cada forma de pago.'
     : !cuenta.ok ? cuenta.error
-    : aCuenta && !conCliente ? 'Para que quede debiendo hace falta el cliente (documento y nombre).'
-    : modo === 'corregir' && motivo.trim().length < 3 ? 'Escribí por qué se carga ahora.'
+    : aCuenta && !conCliente ? 'Para dejar a cuenta, cargá el cliente.'
+    : modo === 'corregir' && motivo.trim().length < 3 ? 'Escribí el motivo.'
     : null
 
   const agregar = async (p: PrendaEncontrada) => {
@@ -198,7 +198,7 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
           return `${$(cuenta.ok ? cuenta.pagos[i].monto : 0)} ${f?.nombre ?? ''}${p.porcentaje ? ` (−${p.porcentaje} %)` : ''}${realNombre ? ` a ${realNombre}` : ''}`
         }).join(' · '),
         'No suma a la caja',
-        ...(r.avisos.some((a) => a.codigo === 'CUENTA_REAL_SIN_CAMBIAR') ? ['⚠️ La cuenta elegida en «Entra a» no se pudo poner: quedó la de la configuración. Corregila desde la venta.'] : []),
+        ...(r.avisos.some((a) => a.codigo === 'CUENTA_REAL_SIN_CAMBIAR') ? ['La cuenta elegida no se guardó: corregila desde la venta.'] : []),
       ]
       setGuardada({ venta: v, resumen })
       onGuardada(`${r.yaExistia ? 'Ya estaba guardada' : 'Guardada'}: venta ${v.numero} por ${$(v.total)}${v.prueba ? ' (de prueba)' : ''}.`)
@@ -245,7 +245,7 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0, fontSize: font['2xl'], color: color.ink }}>Nueva venta</h2>
         <div role="tablist" aria-label="Qué estás cargando" style={{ display: 'flex', gap: space[1], background: color.bg2, borderRadius: radius.lg, padding: space[1] }}>
-          {([['local', 'Venta del local'], ...(puede('venta-pasada') ? [['corregir', 'Corregir una venta pasada']] : [])] as Array<[typeof modo, string]>).map(([k, t]) => (
+          {([['local', 'Venta del local'], ...(puede('venta-pasada') ? [['corregir', 'Venta atrasada']] : [])] as Array<[typeof modo, string]>).map(([k, t]) => (
             <button key={k} role="tab" aria-selected={modo === k} onClick={() => setModo(k)}
               style={{ height: 36, padding: '0 14px', border: 0, borderRadius: radius.md, background: modo === k ? color.surface : 'transparent', fontWeight: modo === k ? 600 : 500, color: color.ink, cursor: 'pointer' }}>{t}</button>
           ))}
@@ -266,8 +266,8 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
         </div>
       </header>
 
-      {datos && !enErp && <Notice tone="warning">{MARCA[linea] ?? linea} todavía no vende por Areben Gestión: esta venta queda <b>de prueba</b> (no mueve el stock ni pasa a Gestión Nube).</Notice>}
-      {datos && !datos.manualHabilitado && <Notice tone="danger">La base de esta marca todavía no acepta ventas a mano.</Notice>}
+      {datos && !enErp && <Notice tone="warning">{MARCA[linea] ?? linea}: venta <b>de prueba</b>, no mueve el stock.</Notice>}
+      {datos && !datos.manualHabilitado && <Notice tone="danger">Esta marca todavía no acepta ventas a mano.</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       {modo === 'corregir' && (
@@ -278,8 +278,7 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
               {(datos?.canales ?? ['local']).map((c) => <option key={c} value={c}>{CANAL[c] ?? c}</option>)}
             </Select>
           </Field>
-          <div style={{ flex: '1 1 320px' }}><Field label="Por qué se carga ahora (obligatorio)"><Input value={motivo} maxLength={500} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej.: se cobró por transferencia y no se cargó en la caja" /></Field></div>
-          <p style={{ ...chico, flexBasis: '100%', margin: 0 }}>Queda con esa fecha, descuenta el stock desde hoy y no suma a ninguna caja. En Ventas se ve como «Manual» con el motivo.</p>
+          <div style={{ flex: '1 1 320px' }}><Field label="Motivo" required><Input value={motivo} maxLength={500} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej.: se cobró por transferencia y no se cargó en la caja" /></Field></div>
         </section>
       )}
 
@@ -289,8 +288,7 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
             <Input aria-label="Buscar producto" autoFocus placeholder="código, código de barras o nombre" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void buscar(q) }} style={{ height: 48, fontSize: font.lg }} />
           </Field>
           {buscando && <span style={chico}>Buscando…</span>}
-          {!buscando && q.trim().length >= 3 && !grupos.length && <span style={chico}>No se encontró ese producto.</span>}
-          {grupos.length > 0 && <span style={chico}>El stock es el de <b>{DEPOSITO[deposito] ?? deposito}</b>, de donde sale la venta.</span>}
+          {!buscando && q.trim().length >= 3 && !grupos.length && <span style={chico}>Ningún producto coincide con «{q.trim()}».</span>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
             {grupos.map((vs) => (
               <div key={vs[0].producto} style={{ border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: space[3], display: 'flex', flexDirection: 'column', gap: space[2] }}>
@@ -310,7 +308,7 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
 
         <section aria-label="Ticket" style={tarjeta}>
           <span style={rotulo}>Ticket</span>
-          {!renglones.length && <span style={chico}>Todavía no hay productos.</span>}
+          {!renglones.length && <span style={chico}>Sin productos.</span>}
           {renglones.map((r) => {
             const importe = r.precio === '' ? 0 : r.precio * r.cantidad * (1 - (r.descuento === '' ? 0 : r.descuento) / 100)
             return (
@@ -324,7 +322,7 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
                     onChange={(e) => setRenglones((x) => x.map((y) => (y.clave === r.clave ? { ...y, cantidad: Math.max(1, Math.floor(Number(e.target.value) || 1)) } : y)))} /></Field>
                   <Field label="Precio de lista"><Input aria-label="Precio de lista" type="number" min={0} step="0.01" value={r.precio} style={{ width: 120 }}
                     onChange={(e) => setRenglones((x) => x.map((y) => (y.clave === r.clave ? { ...y, precio: num(e.target.value) } : y)))} /></Field>
-                  <Field label="Desc. %"><Input aria-label="Descuento %" type="number" min={0} max={100} step="1" value={r.descuento} style={{ width: 80 }}
+                  <Field label="Descuento %"><Input aria-label="Descuento %" type="number" min={0} max={100} step="1" value={r.descuento} style={{ width: 80 }}
                     onChange={(e) => setRenglones((x) => x.map((y) => (y.clave === r.clave ? { ...y, descuento: num(e.target.value) } : y)))} /></Field>
                   <b style={{ marginLeft: 'auto', color: color.ink, paddingBottom: 8 }}>{$(Math.round(importe * 100) / 100)}</b>
                 </div>
@@ -348,10 +346,10 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
                     ))}
                   </div>
                   {f && !POS.includes(f.clave) && <span style={{ color: color.ink }}>Forma de pago: <b>{f.nombre}</b></span>}
-                  <div>
-                    <Button variant="ghost" size="sm" onClick={() => setMas((m) => !m)}>Más: {otras.map((o) => o.nombre).join(' · ') || 'nada más'}</Button>
-                  </div>
-                  {mas && (
+                  {otras.length > 0 && <div>
+                    <Button variant="ghost" size="sm" onClick={() => setMas((m) => !m)}>Más formas de pago</Button>
+                  </div>}
+                  {mas && otras.length > 0 && (
                     <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
                       {otras.map((o) => <Button key={o.clave} variant="outline" size="sm" onClick={() => elegirForma(i, o.clave)}>{o.nombre}</Button>)}
                     </div>
@@ -363,11 +361,11 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
                           {f.opciones.map((o) => <option key={o.clave} value={o.clave}>{o.nombre}</option>)}
                         </Select></Field>
                       )}
-                      {i < pagos.length - 1 && <Field label="Cuánto paga así (de lista)"><Input type="number" min={0} step="0.01" value={p.base} style={{ width: 120 }} onChange={(e) => cambiarPago(i, { base: num(e.target.value) })} /></Field>}
+                      {i < pagos.length - 1 && <Field label="Monto (precio de lista)"><Input type="number" min={0} step="0.01" value={p.base} style={{ width: 120 }} onChange={(e) => cambiarPago(i, { base: num(e.target.value) })} /></Field>}
                       <Field label="Descuento %"><Input aria-label="Porcentaje de la forma de pago" type="number" min={0} max={100} step="0.5" value={p.porcentaje} style={{ width: 80 }} onChange={(e) => cambiarPago(i, { porcentaje: num(e.target.value) })} /></Field>
                       {plata && (
                         <Field label="Entra a"><Select aria-label="Cuenta del pago" value={p.real} onChange={(e) => cambiarPago(i, { real: e.target.value })}>
-                          {!realDe(f) && <option value="">Sin cuenta en la configuración: elegí</option>}
+                          {!realDe(f) && <option value="">Elegí la cuenta</option>}
                           {reales.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                         </Select></Field>
                       )}
@@ -396,7 +394,7 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
-            <span style={rotulo}>Cliente <span style={{ fontWeight: 400, color: color.mut }}>(opcional; hace falta si queda debiendo)</span></span>
+            <span style={rotulo}>Cliente <span style={{ fontWeight: 400, color: color.mut }}>(opcional)</span></span>
             {cliente && !crearCliente ? (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ color: color.ink }}>{cliente.nombre}{cliente.doc ? ` · ${cliente.doc}` : ' · sin documento'}</span>
@@ -416,7 +414,7 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
                   <div style={fila}>
                     <Field label="Documento"><Input inputMode="numeric" value={cliente.doc} onChange={(e) => setCliente({ ...cliente, doc: e.target.value })} style={{ width: 140 }} /></Field>
                     <Field label="Nombre"><Input value={cliente.nombre} onChange={(e) => setCliente({ ...cliente, nombre: e.target.value })} style={{ width: 220 }} /></Field>
-                    <Button variant="ghost" onClick={() => setCrearCliente(false)}>Listo</Button>
+                    <Button variant="ghost" onClick={() => setCrearCliente(false)}>Usar este cliente</Button>
                   </div>
                 )}
               </>
@@ -429,7 +427,6 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
           <Button size="lg" disabled={!!falta || enviando || !datos?.manualHabilitado || (aCuenta && pidePin && pin.length < 4)} onClick={() => void enviar()}>
             {enviando ? 'Guardando…' : `${pidePin && aCuenta ? 'Autorizar y guardar' : 'Guardar venta'}${cuenta.ok ? ` · ${$(cuenta.total)}` : ''}`}
           </Button>
-          <p style={{ ...chico, margin: 0, textAlign: 'center' }}>Sale de {DEPOSITO[deposito] ?? deposito} · no suma a la caja · en Ventas se ve como «Manual»</p>
         </section>
       </div>
     </div>

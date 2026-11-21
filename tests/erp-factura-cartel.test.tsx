@@ -19,7 +19,7 @@ async function montar() {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   await act(async () => { root = createRoot(div); root.render(<FacturaCaja />) })
 }
-const hayCartel = () => div.textContent?.includes('sale de Gestión Nube') ?? false
+const hayCartel = () => div.textContent?.includes('solo facturas de prueba') ?? false
 
 describe('ERP › Facturar una venta: el cartel de Gestión Nube sigue al corte de la línea (Bruno, 3-nov)', () => {
   it('sin cortar, el cartel está', async () => {

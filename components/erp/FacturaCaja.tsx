@@ -174,13 +174,14 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
       ...(clase === 'A' ? { condicion: condicion || undefined, razonSocial: razonSocial.trim(), domicilio: domicilio.trim() } : {}),
     }
     const ok = await confirmar({
-      titulo: `Factura ${clase} de la venta #${ficha.venta.numero}`,
+      titulo: `¿Facturar la venta #${ficha.venta.numero}?`,
       mensaje: (
         <div>
+          <ConfirmDetalle label="Factura" valor={clase} />
           <ConfirmDetalle label="Total" valor={<MoneyText value={ficha.venta.total} />} />
-          <ConfirmDetalle label="Para" valor={clase === 'A' ? `${razonSocial.trim()} · CUIT ${docLimpio} · ${condicion === 'ri' ? 'Responsable inscripta' : 'Monotributista'}` : docLimpio ? `Consumidor final · ${docLimpio}` : 'Consumidor final'} />
+          <ConfirmDetalle label="Para" valor={clase === 'A' ? `${razonSocial.trim()} · CUIT ${docLimpio} · ${condicion === 'ri' ? 'Responsable inscripto' : 'Monotributista'}` : docLimpio ? `Consumidor final · ${docLimpio}` : 'Consumidor final'} />
           {clase === 'A' && <ConfirmDetalle label="Domicilio" valor={domicilio.trim()} />}
-          <p style={{ marginTop: space[3] }}>Una factura con CAE no se elimina: si sale mal, se anula con nota de crédito.</p>
+          <p style={{ marginTop: space[3] }}>No se puede eliminar.</p>
         </div>
       ),
       ok: 'Facturar',
@@ -208,8 +209,8 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <SectionCard title={`Factura · ${NOMBRE_MARCA[tienda] ?? tienda}`} subtitle="La factura que pide la clienta en el mostrador: buscá la venta y elegí A o B.">
-        {sinCortar && <Notice tone="warning">Hasta el corte de esta marca la factura real del local sale de Gestión Nube: acá sólo sale en el modo de prueba de ARCA.</Notice>}
+      <SectionCard title={`Factura · ${NOMBRE_MARCA[tienda] ?? tienda}`}>
+        {sinCortar && <Notice tone="warning">{NOMBRE_MARCA[tienda] ?? tienda}: solo facturas de prueba.</Notice>}
         <form onSubmit={(e) => { e.preventDefault(); void buscar() }} style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Field label="Venta" style={{ flex: '1 1 220px' }}>
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="#123, nombre, DNI o mail" />
@@ -233,7 +234,7 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
           {[cambioHecho.nc && `nota de crédito ${numeroComprobante(cambioHecho.nc)}`, cambioHecho.factura && `factura ${numeroComprobante(cambioHecho.factura)}`].filter(Boolean).join(' y ')}
           {(cambioHecho.nc ?? cambioHecho.factura)?.ambiente !== 'produccion' && ' (de prueba, sin validez fiscal)'}.{' '}
           {cambioHecho.nc && <Button variant="outline" disabled={trabajando} onClick={() => void bajar(cambioHecho.nc!)}>Descargar la nota de crédito</Button>}{' '}
-          {cambioHecho.factura && <Button variant="outline" disabled={trabajando} onClick={() => void bajar(cambioHecho.factura!)}>Descargar factura</Button>}
+          {cambioHecho.factura && <Button variant="outline" disabled={trabajando} onClick={() => void bajar(cambioHecho.factura!)}>Descargar PDF</Button>}
         </Notice>
       )}
 
@@ -270,7 +271,7 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
               <TBody>
                 {ficha.lineas.map((l) => (
                   <Tr key={l.id}>
-                    <Td>{l.nombre ?? l.sku ?? `Producto ${l.producto}`}{l.talleNombre && ` · ${l.talleNombre}`}</Td>
+                    <Td>{l.nombre ?? l.sku ?? 'Sin nombre'}{l.talleNombre && ` · ${l.talleNombre}`}</Td>
                     <Td style={{ textAlign: 'right' }}>{l.cantidad}</Td>
                     <Td style={{ textAlign: 'right' }}><MoneyText value={l.importe} /></Td>
                   </Tr>
@@ -285,8 +286,7 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
               <p>
                 {planCambio?.sinFacturaOriginal
                   ? <>Cambio de la venta #{ficha.original?.numero}, que no tiene factura: se factura sólo lo cobrado hoy (factura B a consumidor final).</>
-                  : <>Cambio de la venta #{ficha.original?.numero}: sale una nota de crédito por lo devuelto y una factura por lo nuevo,
-                    con la misma clase y a nombre de la factura de la venta original.</>}
+                  : 'Nota de crédito por lo devuelto y factura por lo nuevo.'}
               </p>
               {planCambio && (
                 <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', marginTop: space[2] }}>
@@ -314,8 +314,8 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
               </Select>
             </Field>
             {clase === 'A' && (
-              <Field label="Buscar cliente (CUIT o nombre)" style={{ flex: '1 1 100%' }}>
-                <Input value={buscaClienta} onChange={(e) => setBuscaClienta(e.target.value)} placeholder="Si no aparece, completá los datos de abajo y el cliente queda creado al facturar" />
+              <Field label="Buscar cliente" style={{ flex: '1 1 100%' }}>
+                <Input value={buscaClienta} onChange={(e) => setBuscaClienta(e.target.value)} placeholder="CUIT o nombre" />
                 {buscaClienta.trim().length >= 2 && clientas.length > 0 && (
                   <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[2] }}>
                     {clientas.map((c) => (
@@ -342,14 +342,13 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
               <Field label="Condición de IVA">
                 <Select value={condicion} onChange={(e) => setCondicion(e.target.value as '' | 'ri' | 'monotributo')}>
                   <option value="">Elegir…</option>
-                  <option value="ri">Responsable inscripta</option>
+                  <option value="ri">Responsable inscripto</option>
                   <option value="monotributo">Monotributista</option>
                 </Select>
               </Field>
             )}
             <Button disabled={trabajando || faltaDato} onClick={() => void facturar()}>Facturar</Button>
           </div>
-          {clase === 'A' && deFicha && deFicha === docLimpio && <p style={{ marginTop: space[2] }}>Datos de la ficha guardada de este CUIT. Si cambió algo, corregilo: la ficha se actualiza al facturar.</p>}
           </>)}
         </SectionCard>
       )}

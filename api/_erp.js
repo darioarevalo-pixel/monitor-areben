@@ -176,7 +176,10 @@ const finDeMes = (mes) => {
 }
 
 export function ambienteSeguro() {
-  try { return { ambiente: ambienteDeEntorno(process.env) } } catch (e) { return { ambiente: null, error: e.message } }
+  try { return { ambiente: ambienteDeEntorno(process.env) } } catch (e) {
+    console.error('[erp] facturación no disponible:', e.message)
+    return { ambiente: null, error: 'Facturación no disponible.' }
+  }
 }
 
 /**
@@ -872,7 +875,10 @@ async function leerLiquidaciones(marca) {
 /** Abre la conexión del motor de la marca, corre `fn(db, motor)` y la cierra. Sin la variable: 409, dicho. */
 async function conMotor(marca, que, fn) {
   const conexion = process.env[PG_DE_MARCA[marca]]
-  if (!conexion) return { status: 409, error: `${que} todavía no está disponible: Areben Gestión no está conectado en este servidor.` }
+  if (!conexion) {
+    console.error(`[erp] ${que}: falta ${PG_DE_MARCA[marca]} en este servidor`)
+    return { status: 409, error: 'Todavía no disponible.' }
+  }
   const [{ default: pg }, motor] = await Promise.all([import('pg'), import('../motor/venta/registrar.mjs')])
   const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: 5000, statement_timeout: 15000 })
   try {
@@ -983,7 +989,7 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
       // 🔴 Revisión 10-nov: la venta DE PRUEBA de una línea que ya cortó es la copia del paralelo de una venta de GN. Cambiarla
       // dejaba el cambio de prueba y ⛔ movía el stock, callado. Se cambia como venta de Gestión Nube (real).
       if (prueba && orig && lineaEnErp(await cortesDe(db), orig.marca)) {
-        return { status: 409, error: 'Esa es la copia de prueba de una venta de Gestión Nube, de antes del corte: buscala por su número de Gestión Nube y elegí la fila «Gestión Nube».' }
+        return { status: 409, error: 'Venta de prueba: buscala con su número de Gestión Nube.' }
       }
       devueltas = c.devueltas
       // La diferencia con la MISMA cuenta que el motor (lo devuelto al precio que se pagó).
@@ -1031,7 +1037,7 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
       return { status: 400, error: e.message }
     }
     if (c.total != null && Math.round(c.total * 100) !== Math.round(cobrado.total * 100)) {
-      return { status: 409, error: `La pantalla dice $${c.total} y el servidor $${cobrado.total}: recargá la venta y volvé a cobrar.`, total: cobrado.total }
+      return { status: 409, error: 'El total cambió: recargá la venta.', total: cobrado.total }
     }
     // 🔑 Con transferencia se ESPERA el pago, como en la Caja (Bruno, 14-oct): recién con el pago encontrado
     // en Mercado Pago (o confirmado a mano con el comprobante, sin cuenta conectada) se registra el cambio.
@@ -1044,7 +1050,10 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
     // El saldo a favor paga con la cuenta «Saldo a favor» del motor (va por uuid: ⛔ tiene cuenta en GN).
     if (cobrado.pagos.some((p) => p.cuenta === 'saldo')) {
       const [cs] = (await db.query(`select id from cuenta_cobro where marca = $1 and medio = 'saldo'`, [marcaVenta])).rows
-      if (!cs) return { status: 409, error: 'Falta la cuenta «Saldo a favor» en Areben Gestión (falta actualizar la base: 007).' }
+      if (!cs) {
+        console.error('[erp] cambio: falta la cuenta «Saldo a favor» (base sin la 007)', marcaVenta)
+        return { status: 409, error: 'Todavía no disponible.' }
+      }
       cobrado = { ...cobrado, pagos: cobrado.pagos.map((p) => (p.cuenta === 'saldo' ? { ...p, cuenta: cs.id } : p)) }
     }
     const r = await registrarCambio(db, {
@@ -1832,7 +1841,10 @@ export default async function handler(req, res) {
   if (!quien) return
   // «Ver como»: el Admin recibe lo que recibiría ese rol, costos incluidos. A quien no es Admin no le cambia nada.
   const perfil = perfilVistoComo(quien, String(req.headers?.['x-erp-ver-como'] || ''))
-  if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'método no permitido' })
+  if (!['GET', 'POST'].includes(req.method)) {
+    console.error('[erp] método no permitido:', req.method)
+    return res.status(405).json({ error: 'No se pudo: volvé a intentar.' })
+  }
 
   const body = req.body || {}
   // Permisos por rol (`puedeErp`, lib/permisos.core.js): cada vista y acción pide su permiso en SU marca;
@@ -2430,10 +2442,11 @@ export default async function handler(req, res) {
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
-    return res.status(400).json({ error: 'Acción inválida' })
+    console.error('[erp] acción desconocida:', body.accion)
+    return res.status(400).json({ error: 'Todavía no disponible.' })
   } catch (e) {
     // El texto crudo (de Postgres o de Supabase) puede traer valores de la fila: sólo lo ve el admin.
     console.error('[erp] 500', req.query.vista || body.accion || 'facturacion', e)
-    return res.status(500).json({ error: esAdmin(perfil) ? e.message : 'Algo falló en el servidor. Probá de nuevo y, si sigue, avisá.' })
+    return res.status(500).json({ error: 'No se pudo: volvé a intentar.', ...(esAdmin(perfil) ? { detalle: e.message } : {}) })
   }
 }

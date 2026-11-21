@@ -93,7 +93,7 @@ describe('el cambio (erp › Caja)', () => {
   })
 
   it('valida lo que manda la pantalla y arma lo nuevo con `renglones` de la Caja', () => {
-    expect(leerCambiar({ ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }] }).error).toMatch(/número del cambio/)
+    expect(leerCambiar({ ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }] }).error).toBe('Volvé a empezar el cambio.')
     expect(leerCambiar({ id, ventaId: venta, devueltas: [] }).error).toMatch(/devuelve/)
     expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 0 }] }).error).toBeTruthy()
     expect(leerCambiar({ id, ventaId: venta, devueltas: [{ lineaId: L1, cantidad: 1 }], items: [{ product_id: 5, size_id: 6, cantidad: 1, precio: 0 }] }).error).toMatch(/precio/)
@@ -137,7 +137,7 @@ describe('el cambio (erp › Caja)', () => {
     // Lo que queda a favor ⛔ se cobra.
     expect(cobroDelCambio({ diferencia: -10, pagos: [], reglas: R, nuevas: [] })).toEqual({ pagos: [], total: 0, espera: 0 })
     expect(() => cobroDelCambio({ diferencia: 5000, pagos: [], reglas: R, nuevas: [] })).toThrow(/forma de pago/)
-    expect(() => cobroDelCambio({ diferencia: 5000, pagos: [{ cuenta: 999 }], reglas: R, nuevas: [] })).toThrow(/no es una forma de pago/)
+    expect(() => cobroDelCambio({ diferencia: 5000, pagos: [{ cuenta: 999 }], reglas: R, nuevas: [] })).toThrow('Esa forma de pago no está en la Caja.')
     // Con saldo a favor: va primero, sin descuento; el resto con la forma de pago (Bruno, 14-oct).
     expect(cobroDelCambio({ diferencia: 5000, pagos: [{ cuenta: 12921 }], reglas: R, nuevas: [], saldo: 3000 }))
       .toEqual({ pagos: [{ cuenta: 'saldo', base: 3000, porcentaje: 0, descuento: 0, redondeo: 0, monto: 3000 }, { cuenta: 12921, base: 2000, porcentaje: 15, descuento: 300, redondeo: 0, monto: 1700 }], total: 4700, espera: 0 })

@@ -61,7 +61,7 @@ export function CorregirProductos({ marca, fila, ficha, abierto, onCerrar, onLis
   const agregar = async (p: PrendaEncontrada) => {
     const clave = `${p.producto}/${p.talle}`
     if (agregadas.some((a) => a.clave === clave)) { setAgregadas((x) => x.map((a) => (a.clave === clave ? { ...a, cantidad: a.cantidad + 1 } : a))); return }
-    setAgregadas((x) => [...x, { clave, producto: p.producto, talle: p.talle, nombre: p.nombre ?? p.sku ?? `Producto ${p.producto}`, talleNombre: p.talleNombre, cantidad: 1, precio: '' }])
+    setAgregadas((x) => [...x, { clave, producto: p.producto, talle: p.talle, nombre: p.nombre ?? p.sku ?? 'Sin nombre', talleNombre: p.talleNombre, cantidad: 1, precio: '' }])
     escribir('')
     try {
       const pr = await leerPrecioDeProducto(marca, p.producto)
@@ -88,7 +88,7 @@ export function CorregirProductos({ marca, fila, ficha, abierto, onCerrar, onLis
       })
       const d = r.correccion.diferencia
       const sinStock = r.avisos.filter((a) => a.codigo === 'SIN_STOCK_EN_LIBRO').map((a) => a.sku ?? 'un producto')
-      onListo(`Productos de la venta ${fila.ref} corregidos: total ${plata(r.correccion.total_despues)}.${d === 0 ? '' : d > 0 ? ` Faltan cobrar ${plata(d)}: registrá el cobro.` : ` Sobran ${plata(-d)}: hay que devolverlos.`} No se movió plata.${sinStock.length ? ` Sin stock en el sistema: ${sinStock.join(', ')} (queda en negativo).` : ''}`)
+      onListo(`${d === 0 ? 'Productos corregidos.' : d > 0 ? `Productos corregidos: faltan cobrar ${plata(d)}.` : `Productos corregidos: sobran ${plata(-d)}.`}${sinStock.length ? ` ${sinStock.join(', ')} ${sinStock.length === 1 ? 'queda' : 'quedan'} en negativo.` : ''}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudieron corregir los productos.')
     } finally {
@@ -115,15 +115,15 @@ export function CorregirProductos({ marca, fila, ficha, abierto, onCerrar, onLis
       </>}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-        <Notice tone="neutral">La venta sigue con el mismo número. Lo que sacás vuelve al stock y lo que agregás sale, del depósito de la venta. No mueve plata: el total nuevo se compara con lo cobrado y la diferencia queda a la vista. Con factura no se puede (va nota de crédito).</Notice>
+        {fila.facturada && <Notice tone="neutral">Con factura no se puede: va nota de crédito.</Notice>}
         {error && <Notice tone="danger">{error}</Notice>}
         <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
-          <b>Cuántas quedan de cada una</b>
+          <b>Cantidades</b>
           {lineas.map((l) => {
             const max = l.cantidad - l.cambiado
             return (
               <div key={l.id} style={fila2}>
-                <span>{l.nombre ?? l.sku ?? `Producto ${l.producto}`}{l.talleNombre ? ` · ${l.talleNombre}` : ''} <span style={chico}>{plata(l.cantidad ? l.importe / l.cantidad : 0)} c/u{l.cambiado ? ` · ${l.cambiado} ya cambiada${l.cambiado === 1 ? '' : 's'}` : ''}</span></span>
+                <span>{l.nombre ?? l.sku ?? 'Sin nombre'}{l.talleNombre ? ` · ${l.talleNombre}` : ''} <span style={chico}>{plata(l.cantidad ? l.importe / l.cantidad : 0)} c/u{l.cambiado ? ` · ${l.cambiado} ya cambiada${l.cambiado === 1 ? '' : 's'}` : ''}</span></span>
                 {max > 0 ? masMenos(quedan[l.id] ?? max, (n) => setQuedan({ ...quedan, [l.id]: n }), max) : <span style={chico}>ya cambiada</span>}
               </div>
             )
@@ -152,7 +152,7 @@ export function CorregirProductos({ marca, fila, ficha, abierto, onCerrar, onLis
           Total: {plata(ficha.venta.total)} → <b>{cuenta.error ? '—' : plata(cuenta.totalNuevo)}</b>
           {cuenta.error && <span style={{ color: color.danger }}> · {cuenta.error}</span>}
         </div>
-        <Field label="Motivo" required hint="Queda guardado con tu nombre.">
+        <Field label="Motivo" required>
           <textarea className="mo-input mo-input--multi" style={{ width: '100%', boxSizing: 'border-box' }} value={motivo} onChange={(e) => setMotivo(e.target.value)} />
         </Field>
       </div>

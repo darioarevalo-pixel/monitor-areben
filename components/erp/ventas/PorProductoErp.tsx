@@ -43,7 +43,7 @@ function bajarCsv(vista: Vista, filas: Array<Grupo | RenglonProducto>, marca: Ma
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
   const cab = vista === 'agrupado'
     ? ['Producto', 'Unidades', 'Ventas', 'Vendido', 'Precio promedio', ...(costos ? ['Margen'] : []), 'Variantes', 'Canales', 'Última venta', 'Línea']
-    : ['Fecha', 'Venta (Gestión Nube)', 'Producto', 'Variante', 'SKU', 'Cant.', 'Precio', 'Quedó en', ...(costos ? ['Margen'] : []), 'Origen', 'Cliente', 'Línea']
+    : ['Fecha', 'Venta', 'Producto', 'Variante', 'SKU', 'Cant.', 'Precio', 'Quedó en', ...(costos ? ['Margen'] : []), 'Origen', 'Cliente', 'Línea']
   const filasCsv = filas.map((f) => (vista === 'agrupado'
     ? (({ nombre, unidades, ventas, vendido, promedio, margen, talles, canales, ultimo, linea }: Grupo) => [nombre, unidades, ventas, vendido, promedio ?? '', ...(costos ? [margen ?? 'sin costo'] : []), talles, canales, ultimo.slice(0, 10), LINEA[linea] ?? linea])(f as Grupo)
     : (({ cuando, numero, nombre, talle, sku, cantidad, precio, total, costo, canal, cliente, linea }: RenglonProducto) => [cuando.slice(0, 10), numero ?? '', nombre, talle, sku ?? '', cantidad, precio, total, ...(costos ? [costo == null ? 'sin costo' : total - costo] : []), canal, cliente ?? '', LINEA[linea] ?? linea])(f as RenglonProducto)))
@@ -77,6 +77,8 @@ export function PorProductoErp() {
   const rolVisto = useRolVisto()
   const esAdmin = !!perfil?.admin && !rolVisto
   const [hoy] = useState(() => diaArgentino(Date.now()))
+  // El espejo llega al día siguiente: atrasado es cuando ⛔ llegó ni el de ayer.
+  const [ayer] = useState(() => diaArgentino(Date.now() - 86_400_000))
   const costos = !!datos?.costos
   // Las columnas de cada vista se guardan aparte (las del agrupado ⛔ son las del renglón).
   const lista = `erp-por-producto-${vista}-${marca}`
@@ -124,7 +126,7 @@ export function PorProductoErp() {
     return { key: k, titulo, ancho, ordena, derecha: ['u', 'n', 'v', 'prom', 'm', 'c', 'pr', 'tot'].includes(k), movil: MOVIL[k] ?? 'oculta' }
   })
   const num = (x: string, fuerte = false) => <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: fuerte ? 700 : 500, color: color.ink }}>{x}</span>
-  const sinCosto = <span style={{ color: color.mut2 }} title="El producto no tiene costo cargado en Areben Gestión">sin costo</span>
+  const sinCosto = <span style={{ color: color.mut2 }} title="Sin costo">sin costo</span>
 
   const celda = (f: Grupo | RenglonProducto, k: string): React.ReactNode => {
     if (k === 'p') {
@@ -164,9 +166,9 @@ export function PorProductoErp() {
     }
     const r = f as RenglonProducto
     if (k === 'f') return <span style={{ color: color.mut }}>{diaCorto(r.cuando)}</span>
-    if (k === 'venta') return <span style={{ color: color.ink2 }} title="El número de la venta en Gestión Nube">{r.numero ? `#${r.numero}` : '—'}</span>
+    if (k === 'venta') return <span style={{ color: color.ink2 }}>{r.numero ? `#${r.numero}` : '—'}</span>
     if (k === 't') return <span style={{ color: color.ink2 }}>{r.talle}</span>
-    if (k === 'c') return <span style={{ fontVariantNumeric: 'tabular-nums', color: r.cantidad < 0 ? 'var(--mo-danger-ink)' : color.ink }} title={r.cantidad < 0 ? 'Devuelta en Gestión Nube' : undefined}>{r.cantidad}</span>
+    if (k === 'c') return <span style={{ fontVariantNumeric: 'tabular-nums', color: r.cantidad < 0 ? 'var(--mo-danger-ink)' : color.ink }} title={r.cantidad < 0 ? 'Devuelta' : undefined}>{r.cantidad}</span>
     if (k === 'pr') return <span style={{ fontVariantNumeric: 'tabular-nums', color: color.mut }}>{plata(r.precio)}</span>
     if (k === 'tot') return num(plata(r.total), true)
     if (k === 'm') return r.costo == null ? sinCosto : num(plata(r.total - r.costo))
@@ -192,7 +194,7 @@ export function PorProductoErp() {
           ]}
           lateral={costos ? {
             titulo: 'Margen', valor: res.margen, tono: 'neutro',
-            nota: [res.vendidoConCosto ? `${margenPct(res.margen, res.vendidoConCosto)}% de lo vendido` : null, res.sinCosto ? `${res.sinCosto} sin costo no entran` : null].filter(Boolean).join(' · ') || undefined,
+            nota: [res.vendidoConCosto ? `${margenPct(res.margen, res.vendidoConCosto)}% de lo vendido` : null, res.sinCosto ? `sin contar ${res.sinCosto} sin costo` : null].filter(Boolean).join(' · ') || undefined,
           } : null}
         />
       )}
@@ -215,7 +217,7 @@ export function PorProductoErp() {
         <ListaTrabajo
           columnas={columnas} filas={filas.slice(0, mostrar)} claveDe={(f) => f.id} celda={celda} orden={orden} onOrden={setOrden}
           activa={ventana?.producto ?? null} onAbrir={(f) => (vista === 'agrupado' ? setVentana(f as Grupo) : setFicha(f.producto))} etiquetaFila={(f) => `el producto ${f.nombre}`}
-          vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={q || linea || canal ? 'No hay ventas con eso.' : 'No hay ventas en este período.'} /></div> : null}
+          vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={q ? `Ninguna venta coincide con «${q}».` : linea || canal ? 'Sin ventas.' : 'No hay ventas en este período.'} /></div> : null}
         />
         {filas.length > mostrar && (
           <div style={{ padding: 12, textAlign: 'center', borderTop: `1px solid ${color.bg2}` }}>
@@ -223,9 +225,8 @@ export function PorProductoErp() {
           </div>
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo las ventas…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')} ${vista === 'agrupado' ? 'productos' : 'renglones · uno por producto de cada venta (como Gestión Nube)'}`}
-          {datos?.gnHasta && <> · Gestión Nube llega hasta el {diaCorto(datos.gnHasta)}</>}
-          {costos && ' · el margen usa el costo de hoy'}
+          {cargando && !datos ? 'Leyendo las ventas…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
+          {datos?.gnHasta && diaArgentino(Date.parse(datos.gnHasta)) < ayer && <> · Ventas cargadas hasta el {diaCorto(datos.gnHasta)}</>}
         </div>
       </div>
 

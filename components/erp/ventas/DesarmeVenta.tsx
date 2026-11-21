@@ -2,7 +2,7 @@
 
 /**
  * El DESARME de una venta anulada con el paquete armado (o ya salido): se escanea cada prenda contra las de la venta y,
- * con todas contadas, «Confirmar que volvieron» llama a `confirmarVuelta` (contrato-venta.md §17, 37a). Recién ahí el
+ * con todas contadas, «Devolver al stock» llama a `confirmarVuelta` (contrato-venta.md §17, 37a). Recién ahí el
  * libro suma las prendas. La regla del escaneo vive en `lib/erp/desarme.core.js`.
  * Sin lector (una etiqueta que no lee), «+1» al lado de la prenda cuenta a mano.
  */
@@ -41,7 +41,8 @@ export function DesarmeVenta({ marca, ficha, refVenta, onListo }: {
     setTrabajando(true)
     try {
       const r = await confirmarVuelta(marca, ficha.venta.id)
-      onListo(`Venta ${refVenta}: ${r.movimientos ? `volvieron ${faltanEscanear(prendas, {})} productos al stock` : 'quedó confirmado el desarme'}.`)
+      const vueltos = faltanEscanear(prendas, {})
+      onListo(`Venta ${refVenta}: ${r.movimientos ? `${vueltos === 1 ? 'volvió 1 producto' : `volvieron ${vueltos} productos`} al stock` : 'quedó confirmado el desarme'}.`)
     } catch (x) {
       setError(x instanceof Error ? x.message : 'No se pudo confirmar el desarme.')
     } finally {
@@ -54,7 +55,7 @@ export function DesarmeVenta({ marca, ficha, refVenta, onListo }: {
       <div>
         <h3 style={{ margin: 0, fontSize: font.lg, fontWeight: weight.bold }}>{recibir ? 'Recibir los productos' : 'Desarmar el paquete'}</h3>
         <span style={{ fontSize: font.sm, color: color.ink2 }}>
-          {recibir ? 'El pedido ya había salido. Cuando lleguen, escaneá' : 'Abrí el paquete y escaneá'} cada producto: vuelven al stock recién al confirmar.
+          {recibir ? 'Escaneá cada producto.' : 'Abrí el paquete y escaneá cada producto.'}
         </span>
       </div>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
@@ -74,7 +75,7 @@ export function DesarmeVenta({ marca, ficha, refVenta, onListo }: {
           return (
             <div key={l.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[3], padding: '8px 0', borderBottom: `1px solid var(--mo-warning-border)` }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: weight.semibold }}>{l.nombre ?? `Producto ${l.producto}`}</div>
+                <div style={{ fontWeight: weight.semibold }}>{l.nombre ?? 'Sin nombre'}</div>
                 <div style={{ fontSize: font.sm, color: color.mut }}>Variante {l.talleNombre ?? l.talle}{l.sku ? ` · ${l.sku}` : ''}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flex: '0 0 auto' }}>
@@ -86,8 +87,8 @@ export function DesarmeVenta({ marca, ficha, refVenta, onListo }: {
         })}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
-        <span style={{ fontSize: font.sm, color: color.ink2 }}>{faltan ? `Faltan ${faltan} ${faltan === 1 ? 'producto' : 'productos'}` : 'Están todas'}</span>
-        <Button disabled={trabajando || faltan > 0} onClick={() => void confirmar()}>Confirmar que volvieron</Button>
+        <span style={{ fontSize: font.sm, color: color.ink2 }}>{faltan ? `Faltan ${faltan} ${faltan === 1 ? 'producto' : 'productos'}` : 'Están todos'}</span>
+        <Button disabled={trabajando || faltan > 0} onClick={() => void confirmar()}>Devolver al stock</Button>
       </div>
     </section>
   )

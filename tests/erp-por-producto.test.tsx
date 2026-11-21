@@ -64,8 +64,8 @@ describe('la pantalla', () => {
     expect(vistas).toEqual(['Resumen2', 'Detalle4'])
     expect(filas()[0].textContent).toContain('CORSET FRANK') // el más vendido primero
     expect(document.body.textContent).toContain('$ 49.990')
-    expect(document.body.textContent).toContain('1 sin costo no entran')
-    expect(document.body.textContent).toContain('llega hasta el 20/10')
+    expect(document.body.textContent).toContain('sin contar 1 sin costo')
+    expect(document.body.textContent).toContain('Ventas cargadas hasta el 20/10')
     // Darío 19-nov: el clic en Resumen abre las ventas del producto (por variante), ⛔ la ficha del catálogo.
     await clic(filas()[0].querySelectorAll('[role="cell"]')[0])
     const ventana = document.querySelector('[role="dialog"]')
@@ -95,6 +95,7 @@ describe('la pantalla', () => {
     await act(async () => {})
     expect(document.body.textContent).not.toContain('que es el que vende hoy')
     expect(document.body.textContent).not.toContain('Hacé clic en uno')
-    expect(document.body.textContent).toContain('el margen usa el costo de hoy')
+    expect(document.body.textContent).not.toContain('el margen usa el costo de hoy')
+    expect(document.body.textContent).toContain('2 de 2')
   })
 })

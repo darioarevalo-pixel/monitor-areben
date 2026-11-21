@@ -268,14 +268,17 @@ export async function queSabeElMotor() {
   }
 }
 
-export const ESPERA_AL_MOTOR = 'Todavía no está disponible: se prende cuando se publique.'
+export const ESPERA_AL_MOTOR = 'Todavía no disponible.'
 
 const PG_DE_MARCA = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
 
 /** La conexión del motor de la marca (como `conMotor` de `api/_erp.js`): sin la variable, 409 dicho. */
 async function conPg(marca, fn) {
   const conexion = process.env[PG_DE_MARCA[marca]]
-  if (!conexion) return { status: 409, error: 'Areben Gestión todavía no está conectado en este servidor.' }
+  if (!conexion) {
+    console.error(`[erp] ventas: falta ${PG_DE_MARCA[marca]} en este servidor`)
+    return { status: 409, error: 'Todavía no disponible.' }
+  }
   const { default: pg } = await import('pg')
   const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: 5000, statement_timeout: 15000 })
   try {
@@ -309,7 +312,7 @@ export async function editarVentaErp({ marca, body, usuario }, deps = {}) {
     // La pantalla elige al cliente por su documento (la ficha de `cliente`, §11): acá se vuelve su id, de la MISMA empresa.
     if (doc != null) {
       const [c] = (await db.query('select c.id::text from cliente c join venta v on v.empresa_id = c.empresa_id where v.id = $1 and c.doc = $2 limit 1', [body.ventaId, doc])).rows
-      if (!c) return { status: 409, error: 'Ese documento no tiene ficha de cliente en Areben Gestión (nace al hacer una factura A o en Clientes).' }
+      if (!c) return { status: 409, error: 'Ese documento no es de ningún cliente.' }
       cambios.cliente_id = c.id
     }
     const r = await m.editarVenta(db, { venta_id: body.ventaId, cambios, usuario })
@@ -417,11 +420,14 @@ export async function notaDeVentaErp({ marca, body, usuario }, deps = {}) {
 export async function cobrarVentaErp({ marca, body, usuario }, deps = {}) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   if (!UUID.test(String(body?.ventaId || ''))) return { status: 400, error: 'Venta inválida' }
-  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'La venta no tiene cliente de Areben Gestión: sin cliente no hay cuenta corriente.' }
+  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'La venta no tiene cliente.' }
   const monto = Math.round(Number(body?.monto) * 100) / 100
   if (!(monto > 0)) return { status: 400, error: 'Monto inválido' }
   if (!body?.cuenta) return { status: 400, error: 'Elegí la cuenta.' }
-  if (!/^[0-9a-f-]{8,}$/i.test(String(body?.ref || ''))) return { status: 400, error: 'Falta la clave del cobro.' }
+  if (!/^[0-9a-f-]{8,}$/i.test(String(body?.ref || ''))) {
+    console.error('[erp] cobro sin clave (ref):', body?.ref)
+    return { status: 400, error: 'No se pudo: volvé a intentar.' }
+  }
   if (body?.cuentaReal != null && !UUID.test(String(body.cuentaReal))) return { status: 400, error: 'La cuenta donde entró la plata no es válida.' }
   // El CHEQUE (sql/079): con la cuenta «Cheque», sus datos; el motor los valida (sólo admin: lo chequea `api/_erp.js`).
   const ch = chequeDelCobro(body)
@@ -453,7 +459,10 @@ export async function cobrarCuentaErp({ marca, body, usuario }, deps = {}) {
   const monto = Math.round(Number(body?.monto) * 100) / 100
   if (!(monto > 0)) return { status: 400, error: 'Monto inválido' }
   if (!body?.cuenta) return { status: 400, error: 'Elegí la cuenta.' }
-  if (!/^[0-9a-f-]{8,}$/i.test(String(body?.ref || ''))) return { status: 400, error: 'Falta la clave del cobro.' }
+  if (!/^[0-9a-f-]{8,}$/i.test(String(body?.ref || ''))) {
+    console.error('[erp] cobro sin clave (ref):', body?.ref)
+    return { status: 400, error: 'No se pudo: volvé a intentar.' }
+  }
   if (body?.cuentaReal != null && !UUID.test(String(body.cuentaReal))) return { status: 400, error: 'La cuenta donde entró la plata no es válida.' }
   const operacion = body?.operacion == null ? '' : String(body.operacion).trim()
   if (operacion.length > 60) return { status: 400, error: 'El número de operación es demasiado largo.' }

@@ -83,8 +83,8 @@ describe('leerMonto y validarGasto', () => {
     expect(validarGasto({ ...ok, tipo: 'envio_devolucion', detalle: 'Envío de devolución #295' }).gasto?.detalle).toBe('Envío de devolución #295')
   })
   it('dice qué falta, en palabras', () => {
-    expect(validarGasto({ ...ok, monto: '0' }).error).toMatch(/distinto de cero/)
-    expect(validarGasto({ ...ok, monto: '' }).error).toMatch(/distinto de cero/)
+    expect(validarGasto({ ...ok, monto: '0' }).error).toBe('El monto no puede ser 0.')
+    expect(validarGasto({ ...ok, monto: '' }).error).toBe('El monto no puede ser 0.')
     expect(validarGasto({ ...ok, detalle: '  ' }).error).toMatch(/de qué es/)
     expect(validarGasto({ ...ok, fecha: '' }).error).toMatch(/fecha/)
     expect(validarGasto({ ...ok, tipo: 'x' }).error).toMatch(/tipo/)

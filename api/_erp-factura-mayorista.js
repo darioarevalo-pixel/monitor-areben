@@ -24,7 +24,9 @@ import { pedirFacturaPorMail } from '../lib/mailer/factura.core.js'
 import { UMBRAL_IDENTIFICAR, ambienteSeguro, arcaDe, facturarVentaPropia, filaParaPdf } from './_erp.js'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const SIN_MIGRAR = 'Falta la migración de la facturación de mayoristas (sql/migrate-facturas-mayorista.sql).'
+/** El detalle técnico va al log (`console.error` donde se devuelve); en pantalla, el mensaje simple. */
+const SIN_MIGRAR_DETALLE = 'Falta la migración de la facturación de mayoristas (sql/migrate-facturas-mayorista.sql).'
+const SIN_MIGRAR = 'Todavía no disponible.'
 
 /**
  * El `repo` del lote, con los campos de la factura que el lote ⛔ conoce (clase, renglones, cliente, venta de la parte) puestos
@@ -122,7 +124,7 @@ export async function facturasDeClientePanel({ clienteId = '', usuario = null },
     condicion: opcionDeCondicionPanel(ficha.condicion_iva),
   }
   if (e) {
-    if (e.code === '42703') return { prendido: true, ambiente, fiscal, facturas: [], sinMigrar: SIN_MIGRAR }
+    if (e.code === '42703') { console.error('[erp]', SIN_MIGRAR_DETALLE); return { prendido: true, ambiente, fiscal, facturas: [], sinMigrar: SIN_MIGRAR } }
     throw new Error(`facturas: ${e.message}`)
   }
   const receptor = { nombre: ficha.razon_social || ficha.nombre, domicilio: ficha.domicilio ?? null }
@@ -292,7 +294,7 @@ export async function partePedidoPanel({ body, usuario, quien = usuario }, deps)
     if (frena) return { status: f ? 409 : 404, error: frena }
     const clave = claveDeFactura(f)
     const hechas = await (deps.facturasDeVenta || facturasDeVentaParte)(sb, { ambiente, clave, claves: clavesDeFactura(f) })
-    if (hechas.sinMigrar) return { status: 409, error: SIN_MIGRAR }
+    if (hechas.sinMigrar) { console.error('[erp]', SIN_MIGRAR_DETALLE); return { status: 409, error: SIN_MIGRAR } }
     if (hechas.entera) return { status: 409, error: 'La venta ya tiene la factura entera: no se factura por partes.' }
 
     // Lo vendido, de la VENTA (sus precios reales: importe ÷ cantidad), con los nombres de la hoja.
@@ -406,7 +408,10 @@ export async function enviarFacturaPanel({ body, quien = null }, deps) {
     marca: f.marca, para, comprobante, cliente: ficha?.razon_social || ficha?.nombre || '', total: Number(f.total), fecha: String(f.fecha).slice(0, 10),
     archivo: `Factura ${comprobante}.pdf`, pdf,
   })
-  if (!r.ok && !r.configurado) return { status: 503, error: 'Falta la conexión con Mailer (MAILER_URL / MAILER_TICKET_KEY) en Vercel.' }
+  if (!r.ok && !r.configurado) {
+    console.error('[erp] factura por mail: falta la conexión con Mailer (MAILER_URL / MAILER_TICKET_KEY) en Vercel')
+    return { status: 503, error: 'Todavía no disponible.' }
+  }
   if (!r.ok) return { status: 502, error: `No salió: ${r.motivo}` }
   return { ok: true, para, de: r.de, comprobante }
 }
@@ -435,7 +440,8 @@ export async function padronDelPanel({ cuit = '', usuario = null }, deps = {}) {
   } catch (e) {
     const m = String(e?.message || e)
     if (/arca_ta_servicio/.test(m) && /does not exist|schema cache|relation/i.test(m)) {
-      return { status: 409, error: 'Falta la migración del padrón de ARCA (sql/migrate-arca-ta-servicio.sql).' }
+      console.error('[erp] falta la migración del padrón de ARCA (sql/migrate-arca-ta-servicio.sql):', m)
+      return { status: 409, error: 'Todavía no disponible.' }
     }
     return { status: 502, error: /^Padrón de ARCA: /.test(m) ? `${m.replace(/^Padrón de ARCA: /, 'ARCA dice: ')}` : `No se pudo consultar ARCA (${m}).` }
   }

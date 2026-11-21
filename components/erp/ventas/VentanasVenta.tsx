@@ -26,7 +26,7 @@ import { CampoCuentaReal } from './CampoCuentaReal'
 import { pideCuentaReal } from '@/lib/erp/cobro-destino.core.js'
 import { useChequeDelCobro } from '@/components/erp/ventas/CamposCheque'
 
-const ESPERA = 'Todavía no está disponible: se prende cuando esté lista la ficha de la venta.'
+const ESPERA = 'Todavía no disponible.'
 
 /** Lee lo de afuera de la venta (cuentas, lo editable, la nota vigente) para la ventana. */
 function useExtra(marca: MarcaErp, id: string, activo: boolean) {
@@ -61,7 +61,7 @@ export function VentanaCobro({ marca, fila, puede, onCerrar, onHecho }: {
   const chq = useChequeDelCobro(marca, extra?.cuentas ?? [], cuenta)
   const cuentas = chq.cuentas
   const sinCliente = !fila.clienteId
-  const bloqueo = !puede.cobrar ? ESPERA : sinCliente ? 'La venta no tiene cliente de Areben Gestión: sin cliente no hay cuenta corriente.' : null
+  const bloqueo = !puede.cobrar ? ESPERA : sinCliente ? 'La venta no tiene cliente.' : null
   const resto = n != null && n > fila.saldo ? Math.round((n - fila.saldo) * 100) / 100 : 0
   const [cuentaReal, setCuentaReal] = useState('')
   const pide = pideCuentaReal({ cuenta: cuentas.find((c) => String(c.id) === cuenta), rutas: extra?.rutas, cuentasReales: extra?.cuentasReales, marca: fila.linea, canal: fila.canal, fecha })
@@ -97,7 +97,7 @@ export function VentanaCobro({ marca, fila, puede, onCerrar, onHecho }: {
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         <Field label="Monto"><Input inputMode="decimal" value={monto} onChange={(e) => setMonto(e.target.value)} /></Field>
         <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-          <Field label="Cuenta" hint="La forma de pago y la cuenta salen de «¿A qué cuenta va?» del día." style={{ flex: '1 1 220px' }}>
+          <Field label="Cuenta" style={{ flex: '1 1 220px' }}>
             <Select value={cuenta} onChange={(e) => setCuenta(e.target.value)}>
               <option value="">{extra ? 'Elegí la cuenta' : 'Leyendo…'}</option>
               {cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
@@ -110,7 +110,6 @@ export function VentanaCobro({ marca, fila, puede, onCerrar, onHecho }: {
         <div style={{ padding: '10px 12px', borderRadius: 9, background: color.bg, border: `1px solid ${color.line}`, display: 'flex', flexDirection: 'column', gap: 4, fontSize: font.base }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Saldo de la venta</span><b>{plata(fila.saldo)} → {plata(Math.max(0, fila.saldo - (n ?? 0)))}</b></div>
           {resto > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Lo que sobra ({plata(resto)})</span><span>a la venta más vieja que deba</span></div>}
-          <div style={{ color: color.mut }}>Si cobrás más que el saldo de esta venta, el resto va a la venta más vieja que tenga pendiente; sólo queda a favor si no debe nada.</div>
         </div>
       </div>
     </Modal>
@@ -178,7 +177,7 @@ function FormEditar({ marca, fila, puede, vendedores, onCerrar, onHecho, irACaja
     try {
       if (Object.keys(cambios).length || cambiaCliente) await editarVentaErp(marca, fila.id, cambios, cambiaCliente ? doc : null)
       if (cambiaNota) await guardarNotaDeVenta(marca, fila.id, nota.trim(), extra.nota?.id ?? null)
-      onHecho(`Venta ${fila.ref}: cambios guardados (quedan en el historial).`)
+      onHecho('Cambios guardados.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar.')
     } finally {
@@ -192,7 +191,7 @@ function FormEditar({ marca, fila, puede, vendedores, onCerrar, onHecho, irACaja
       abierto onCerrar={onCerrar} titulo={`Editar la venta ${fila.ref}`} ancho="ancho" cerrarConFondo={false}
       pie={<>
         <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-        <Button disabled={!hayAlgo || trabajando || faltaDireccion || !!bloqueoEditar || !!bloqueoNota} onClick={() => void guardar()}>Guardar cambios</Button>
+        <Button disabled={!hayAlgo || trabajando || faltaDireccion || !!bloqueoEditar || !!bloqueoNota} onClick={() => void guardar()}>Guardar</Button>
       </>}
     >
       <p style={{ marginTop: 0, color: color.mut }}>{fila.cliente} · {cuandoCorto(fila.pedidoEn)}</p>
@@ -200,7 +199,7 @@ function FormEditar({ marca, fila, puede, vendedores, onCerrar, onHecho, irACaja
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
         <div style={fila2}>
-          <Field label="Cliente" hint={`Hoy: ${fila.cliente}${fila.clienteDe === 'gn' ? ' (de Gestión Nube)' : ''}. Para cambiarlo, el DNI o CUIT de su ficha.`}>
+          <Field label="Cliente" hint={`Hoy: ${fila.cliente}.`}>
             <Input inputMode="numeric" value={doc} onChange={(e) => setDoc(e.target.value)} placeholder="DNI o CUIT" />
           </Field>
           <Field label="Vendió">
@@ -226,12 +225,11 @@ function FormEditar({ marca, fila, puede, vendedores, onCerrar, onHecho, irACaja
             </Select>
           </Field>
         </div>
-        <Field label="Nota de la venta" hint={extra.nota ? `La de hoy es de ${extra.nota.de}. Cambiarla deja la anterior en el historial.` : 'De dónde viene, si se importó, o algo a tener en cuenta.'}>
+        <Field label="Nota de la venta" hint={extra.nota ? `De ${extra.nota.de}.` : undefined}>
           <textarea className="mo-input mo-input--multi" style={{ width: '100%', boxSizing: 'border-box' }} value={nota} onChange={(e) => setNota(e.target.value)} />
         </Field>
         <div style={{ padding: '12px 14px', borderRadius: 10, background: color.bg, border: `1px dashed ${color.line2}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ fontWeight: weight.semibold }}>Productos, precios y cobros</span>
-          <span style={{ fontSize: font.base, color: color.mut }}>No se editan acá: mueven stock, plata o la factura. Para cambiarlos:</span>
+          <span style={{ fontWeight: weight.semibold }}>Para cambiar productos, precios o cobros:</span>
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
             {rol('cambiar') && <Button size="sm" variant="outline" onClick={() => irACaja('cambio')}>Cambiar producto</Button>}
             {rol('cobrar') && <Button size="sm" variant="outline" disabled={!(fila.saldo > 0)} onClick={abrirCobro}>Registrar cobro</Button>}

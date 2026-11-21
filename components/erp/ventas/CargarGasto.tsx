@@ -18,7 +18,7 @@ import {
   cargarGastoCaja, cargarGastoOficina, leerCajaAbiertaLiviana, leerMisGastos, leerPermisos, revisarGasto,
   type EstadoGasto, type GastoCaja, type MarcaErp, type NegocioGasto,
 } from '@/lib/erp/cliente'
-import { CATEGORIAS_GASTO, CATEGORIAS_OFICINA, NEGOCIOS_DASHBOARD, categoriaDelDashboard, nombreDeCategoria } from '@/lib/caja/gasto.core.js'
+import { CATEGORIAS_GASTO, CATEGORIAS_OFICINA, NEGOCIOS_DASHBOARD, nombreDeCategoria } from '@/lib/caja/gasto.core.js'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { aNumero } from '@/lib/caja/textos'
 import { plata } from '@/lib/caja/ticket'
@@ -30,7 +30,7 @@ type Origen = GastoCaja['origen']
 const fechaHora = (iso: string) => new Date(iso).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 const ESTADO: Record<EstadoGasto, { label: string; tone: Tone }> = {
   revisar: { label: 'Para revisar', tone: 'warning' },
-  aprobado: { label: 'En el dashboard', tone: 'success' },
+  aprobado: { label: 'Aprobado', tone: 'success' },
   rechazado: { label: 'Rechazado', tone: 'danger' },
   anulado: { label: 'Anulado', tone: 'neutral' },
 }
@@ -95,7 +95,7 @@ export function CargarGasto({ marca }: { marca: MarcaErp }) {
     try {
       if (enOficina) await cargarGastoOficina(marca, { monto: montoN as number, categoria, detalle: detalle.trim(), fecha })
       else await cargarGastoCaja(marca, { monto: montoN as number, categoria, detalle: detalle.trim() })
-      setListo(`Gasto cargado: ${plata(montoN as number)} · ${nombreDeCategoria(categoria)}. ${enOficina ? '' : 'Ya resta del efectivo de la caja. '}Queda para revisar.`)
+      setListo(`Gasto cargado: ${plata(montoN as number)}.`)
       setMonto('')
       setCategoria('')
       setDetalle('')
@@ -117,18 +117,14 @@ export function CargarGasto({ marca }: { marca: MarcaErp }) {
           <Tabs value={enOficina ? 'oficina' : 'caja'} onChange={cambiarOrigen}
             items={[{ key: 'caja', label: 'De la caja del local' }, { key: 'oficina', label: 'De la oficina' }]} />
         )}
-        <span style={{ color: color.mut, fontSize: font.sm }}>
-          {enOficina
-            ? 'Un gasto que no sale de la caja del local. Queda para revisar: Bruno o Darío lo aprueban y recién ahí pasa al dashboard.'
-            : 'El gasto se paga con el efectivo de la caja abierta: resta del cierre. Queda para revisar antes de pasar al dashboard.'}
-        </span>
-        {!enOficina && caja === undefined && !errorLectura && <span style={{ color: color.mut }}>Mirando la caja…</span>}
+        {!enOficina && <span style={{ color: color.mut, fontSize: font.sm }}>Sale del efectivo de la caja.</span>}
+        {!enOficina && caja === undefined && !errorLectura && <span style={{ color: color.mut }}>Leyendo…</span>}
         {sinCaja && (
           <Notice tone="warning">
             No hay una caja abierta. <Link href="/pos">Abrir la Caja ↗</Link>
           </Notice>
         )}
-        {deOtro && <Notice tone="warning">La caja la abrió {caja?.abierto_por || 'otra cuenta'}: el gasto lo carga esa cuenta o un admin.</Notice>}
+        {deOtro && <Notice tone="warning">Lo carga {caja?.abierto_por || 'quien abrió la caja'} o un admin.</Notice>}
         {!sinCaja && <>
         <Field label="Monto">
           <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" autoComplete="off" placeholder="$" data-foco />
@@ -218,7 +214,7 @@ function ParaRevisar({ marca, gasto: g, alTerminar }: { marca: MarcaErp; gasto: 
         <b>{plata(g.monto)}</b> · {g.detalle}
       </span>
       <span style={{ color: color.mut, fontSize: font.sm }}>
-        {g.origen === 'caja' ? 'Caja chica del local' : `Oficina · día ${g.fecha ?? '—'}`} · cargó {g.usuario ?? g.usuario_cuenta ?? '—'} el {fechaHora(g.creado_en)}
+        {g.origen === 'caja' ? 'Caja chica del local' : `Oficina · ${g.fecha ? `${g.fecha.slice(8, 10)}/${g.fecha.slice(5, 7)}` : '—'}`} · cargó {g.usuario ?? g.usuario_cuenta ?? '—'} el {fechaHora(g.creado_en)}
       </span>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
         <Field label="Qué es">
@@ -232,9 +228,6 @@ function ParaRevisar({ marca, gasto: g, alTerminar }: { marca: MarcaErp; gasto: 
           </Select>
         </Field>
       </div>
-      <span style={{ color: color.mut, fontSize: font.sm }}>
-        En el dashboard entra como «{categoriaDelDashboard(categoria)}», {g.origen === 'caja' ? 'pagado en efectivo' : 'pendiente de pago'}.
-      </span>
       {rechazando && (
         <Field label="Por qué se rechaza">
           <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} autoComplete="off" maxLength={160} />

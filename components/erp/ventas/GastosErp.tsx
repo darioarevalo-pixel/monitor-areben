@@ -34,7 +34,7 @@ const COLUMNAS: ColumnaLista[] = [
   { key: 'carga', titulo: 'Carga', ancho: '150px', movil: 'oculta' },
   { key: 'monto', titulo: 'Monto', ancho: '120px', derecha: true, movil: 'dato' },
 ]
-const TONO_TIPO = { comision: ['action', 'Comisión de plataforma'], impuesto: ['warning', 'Impuesto'], otro: ['neutral', 'Otro gasto'], plataforma: ['action', 'Costo de Tienda Nube'], envio: ['action', 'Costo de envío'] } as const
+const TONO_TIPO = { comision: ['action', 'Comisión'], impuesto: ['warning', 'Impuesto'], otro: ['neutral', 'Otro'], plataforma: ['action', 'Tienda Nube'], envio: ['action', 'Envío'] } as const
 const pesos = (n: number) => `${n < 0 ? '− ' : ''}$ ${Math.abs(n).toLocaleString('es-AR', { maximumFractionDigits: 2 })}`
 const dia = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 
@@ -100,31 +100,30 @@ export function GastosErp() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
-        <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Los gastos de vender: comisiones de las plataformas, impuestos y lo demás que cuesta cada venta. Los de estructura y los socios van aparte. Nada se borra.</p>
-        <div style={{ display: 'flex', gap: space[1] }}>
+        <div style={{ display: 'flex', gap: space[1], marginRight: 'auto' }}>
           <Button variant={prueba ? 'outline' : 'solid'} aria-pressed={!prueba} onClick={() => setPrueba(false)}>Reales</Button>
           <Button variant={prueba ? 'solid' : 'outline'} aria-pressed={prueba} onClick={() => setPrueba(true)}>De prueba</Button>
         </div>
         <Button disabled={!filas.length || !datos} onClick={() => datos && bajarCsv(filas, tienda, datos.desde, datos.hasta)}>Exportar</Button>
         <Button onClick={() => { setCargado(null); setNuevo(true) }}>Nuevo gasto</Button>
       </div>
-      {prueba && <Notice tone="warning">Estás mirando los gastos <b>de prueba</b>: salen de las ventas que Areben Gestión registra en paralelo con Gestión Nube hasta el corte. Lo que cargues acá queda anotado <b>de prueba</b>.</Notice>}
+      {prueba && <Notice tone="warning">Gastos <b>de prueba</b>.</Notice>}
       {res && res.sinComision > 0 && (
         <Notice tone="warning">
-          <b>{res.sinComision.toLocaleString('es-AR')} {res.sinComision === 1 ? 'cobro con tarjeta o Mercado Pago' : 'cobros con tarjeta o Mercado Pago'} no {res.sinComision === 1 ? 'tiene' : 'tienen'} comisión</b>: la forma de pago no tiene la tasa cargada. Esas comisiones <b>no están en el total</b>. La tasa se carga en Configuración › ¿A qué cuenta va?.
+          <b>{res.sinComision.toLocaleString('es-AR')} {res.sinComision === 1 ? 'cobro' : 'cobros'}</b> sin comisión cargada.
         </Notice>
       )}
-      {res && res.mlSinComision > 0 && <Notice tone="warning"><b>{res.mlSinComision.toLocaleString('es-AR')} {res.mlSinComision === 1 ? 'orden' : 'órdenes'} de Mercado Libre</b> sin lo que cobra: esa comisión <b>no está en el total</b>.</Notice>}
+      {res && res.mlSinComision > 0 && <Notice tone="warning"><b>{res.mlSinComision.toLocaleString('es-AR')} {res.mlSinComision === 1 ? 'orden' : 'órdenes'} de Mercado Libre</b> sin comisión.</Notice>}
       {cargado && <Notice tone="success" onClose={() => setCargado(null)}>{cargado}</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-        <TileResumen titulo="Gastos comerciales" valor={res ? pesos(res.total) : '…'} oscuro nota={`${nombrePeriodo.toLowerCase()} · ${libro} · restan en el resultado de Inicio`} />
-        <TileResumen titulo="Comisiones de plataformas" valor={res ? pesos(res.comision) : '…'} nota={res ? `${pesos(res.comisionAutomatica)} salen solas de los cobros${res.comisionAMano ? ` · ${pesos(res.comisionAMano)} a mano` : ''}` : undefined} />
-        <TileResumen titulo="Costo de Tienda Nube" valor={res ? pesos(res.plataforma) : '…'} nota="sale solo de cada cobro de la tienda (con Pago Nube no cobra)" />
-        <TileResumen titulo="Costo de envío" valor={res ? pesos(res.envio) : '…'} nota={res?.enviosSinCosto ? `falta el de ${res.enviosSinCosto.toLocaleString('es-AR')} ${res.enviosSinCosto === 1 ? 'pedido' : 'pedidos'}: Tienda Nube todavía no lo informó` : 'sale solo de cada pedido de la tienda (lo que paga el cliente es venta)'} />
-        <TileResumen titulo="Impuestos" valor={res ? pesos(res.impuesto) : '…'} nota="a mano: todavía no se calculan solos" />
-        <TileResumen titulo="Otros gastos" valor={res ? pesos(res.otro) : '…'} nota="logística y lo demás, a mano" />
+        <TileResumen titulo="Gastos comerciales" valor={res ? pesos(res.total) : '…'} oscuro nota={`${nombrePeriodo.toLowerCase()} · ${libro}`} />
+        <TileResumen titulo="Comisiones" valor={res ? pesos(res.comision) : '…'} nota={res ? (res.comisionAMano ? `${pesos(res.comisionAutomatica)} automático · ${pesos(res.comisionAMano)} a mano` : 'Automático') : undefined} />
+        <TileResumen titulo="Tienda Nube" valor={res ? pesos(res.plataforma) : '…'} nota="Automático" />
+        <TileResumen titulo="Envíos" valor={res ? pesos(res.envio) : '…'} nota={res?.enviosSinCosto ? `Automático · falta el de ${res.enviosSinCosto.toLocaleString('es-AR')} ${res.enviosSinCosto === 1 ? 'pedido' : 'pedidos'}` : 'Automático'} />
+        <TileResumen titulo="Impuestos" valor={res ? pesos(res.impuesto) : '…'} nota="A mano" />
+        <TileResumen titulo="Otros" valor={res ? pesos(res.otro) : '…'} nota="A mano" />
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
@@ -141,24 +140,24 @@ export function GastosErp() {
           vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={vista === 'a_mano' ? 'Ningún gasto cargado a mano en el período.' : 'No hay gastos en el período.'} /></div> : null}
         />
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo los gastos…' : `${nombrePeriodo}: ${res ? pesos(res.total) : '—'} en gastos comerciales`} · para corregir uno cargado de más, cargá otro con el monto en negativo
+          {cargando && !datos ? 'Leyendo los gastos…' : `${nombrePeriodo}: ${res ? pesos(res.total) : '—'}`}
         </div>
       </div>
 
       {nuevo && (
         <NuevoGasto
-          prueba={prueba} onCerrar={() => setNuevo(false)}
+          onCerrar={() => setNuevo(false)}
           onGuardar={async (g) => {
             const ok = await confirmar({
-              titulo: 'Cargar el gasto',
-              mensaje: <p>Vas a cargar <b>{pesos(g.monto)}</b> de «{g.detalle}» como gasto <b>{prueba ? 'de prueba' : 'real'}</b>. Un gasto <b>no se edita ni se borra</b>: si te equivocás, se corrige cargando otro con el monto en negativo.</p>,
+              titulo: `¿Cargar ${pesos(g.monto)} de ${g.detalle}?`,
+              mensaje: <p>No se puede editar ni borrar: para corregirlo, cargá otro en negativo.</p>,
               ok: 'Cargar',
             })
             if (!ok) return null
             try {
               await registrarGastoErp(marca, { ...g, tipo: g.tipo as TipoGasto, prueba })
               setNuevo(false)
-              setCargado(`Quedó anotado: ${pesos(g.monto)} · ${g.detalle}.`)
+              setCargado(`Gasto cargado: ${pesos(g.monto)}.`)
               setVuelta((n) => n + 1)
               return null
             } catch (e) { return e instanceof Error ? e.message : 'No se pudo cargar el gasto.' }
@@ -169,8 +168,8 @@ export function GastosErp() {
   )
 }
 
-function NuevoGasto({ prueba, onCerrar, onGuardar }: {
-  prueba: boolean; onCerrar: () => void
+function NuevoGasto({ onCerrar, onGuardar }: {
+  onCerrar: () => void
   onGuardar: (g: { linea?: string; fecha: string; tipo: string; monto: number; detalle: string; cuenta?: string }) => Promise<string | null>
 }) {
   // La línea del gasto es la del menú (Bruno, 28-oct: ⛔ opciones de otra marca adentro).
@@ -191,7 +190,6 @@ function NuevoGasto({ prueba, onCerrar, onGuardar }: {
     <Modal abierto onCerrar={onCerrar} titulo="Nuevo gasto"
       pie={<><Button variant="outline" onClick={onCerrar}>Cancelar</Button><Button disabled={guardando} onClick={() => void guardar()}>{guardando ? 'Cargando…' : 'Cargar gasto'}</Button></>}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-        <Notice tone={prueba ? 'warning' : 'neutral'}>Se anota como gasto <b>{prueba ? 'de prueba' : 'real'}</b>. Las comisiones de las plataformas salen solas de los cobros: acá van los impuestos y lo que no se calcula solo, como el <b>envío de vuelta de una devolución</b> (lo paga el vendedor).</Notice>
         {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
         <Field label="Tipo"><Select value={f.tipo} onChange={(e) => poner('tipo', e.target.value)}>{TIPOS_A_MANO.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select></Field>
         <Field label="Fecha"><Input type="date" value={f.fecha} onChange={(e) => poner('fecha', e.target.value)} /></Field>

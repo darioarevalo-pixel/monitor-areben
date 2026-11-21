@@ -126,7 +126,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     const r = await corregirPrecioDeVenta(marca, fila.id, motivoPrecio, cambian.map((x) => ({ n: x.n, precio: x.precio })))
     setCorrigiendo(false)
     const d = r.correccion.diferencia
-    onCambio(`Precio de la venta ${fila.ref} corregido: total ${plata(r.correccion.total_despues)}.${d === 0 ? '' : d > 0 ? ` Faltan cobrar ${plata(d)}: registrá el cobro.` : ` Sobran ${plata(-d)}: hay que devolverlos.`} No se movió plata.`)
+    onCambio(d === 0 ? 'Precio corregido.' : d > 0 ? `Precio corregido: faltan cobrar ${plata(d)}.` : `Precio corregido: sobran ${plata(-d)}.`)
   }, 'No se pudo corregir el precio.')
 
   // Adónde fue la plata: la cuenta REAL que dice la ruta de ERP › Cuentas para el medio en este canal (⛔ las cuentas de GN), u
@@ -139,13 +139,13 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const confirmarMedio = () => correr(async () => {
     const r = await corregirMedioDeVenta(marca, fila.id, { medio: medioNuevo, motivo: motivoMedio, ...(cuentaReal ? { cuentaReal } : {}) })
     setMedioAbierto(false)
-    onCambio(`Venta ${fila.ref}: el cobro de ${plata(r.correccion.monto)} pasó de ${r.correccion.cuenta_antes} a ${r.correccion.cuenta_despues}. No se movió plata.`)
+    onCambio(`Venta ${fila.ref}: el cobro de ${plata(r.correccion.monto)} pasó de ${r.correccion.cuenta_antes} a ${r.correccion.cuenta_despues}.`)
   }, 'No se pudo corregir la forma de pago.')
 
   async function hacerNC() {
     const ok = await confirmar({
-      titulo: `Nota de crédito de la venta ${fila.ref}`,
-      mensaje: 'Anula entera la factura de esta venta ante ARCA. Una nota de crédito con CAE no se elimina.',
+      titulo: `¿Hacer la nota de crédito de la venta ${fila.ref}?`,
+      mensaje: `Total ${plata(fila.total)}\nNo se puede eliminar.`,
       ok: 'Hacer nota de crédito', tono: 'danger',
     })
     if (!ok) return
@@ -162,15 +162,15 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     ...(puedeErp('facturar-venta') && ficha?.facturada && v?.estado === 'anulada' && !ficha.acreditadaEntera ? [{ key: 'nc', label: 'Hacer nota de crédito', icono: 'factura' as const, tone: 'danger' as const, onClick: () => void hacerNC() }] : []),
     ...(puedeErp('facturar-venta') && !fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura', fila.id) }] : []),
     ...(puede.corregir && puedeErp('corregir-precio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, onClick: abrirCorregir }] : []),
-    ...(puede.corregirProductos && puedeErp('corregir-precio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' && !['tn', 'ml', 'mayorista'].includes(fila.origen) ? [{ key: 'productos', label: 'Corregir productos…', icono: 'lapiz' as const, hint: 'Se cargó otro producto o cantidad: la venta sigue con el mismo número.', onClick: () => setCorrigiendoProductos(true) }] : []),
-    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir forma de pago…', icono: 'pesos' as const, hint: 'Pagó con otra forma de pago que la que figura (por ejemplo, eligió efectivo en la tienda y pagó con tarjeta).', onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
+    ...(puede.corregirProductos && puedeErp('corregir-precio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' && !['tn', 'ml', 'mayorista'].includes(fila.origen) ? [{ key: 'productos', label: 'Corregir productos…', icono: 'lapiz' as const, onClick: () => setCorrigiendoProductos(true) }] : []),
+    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir forma de pago…', icono: 'pesos' as const, onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
     ...(puedeErp('anular') ? [{ key: 'anular', label: 'Anular…', icono: 'anular' as const, tone: 'danger' as const, disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) }] : []),
   ]
   // 📱 En el celular los botones de arriba bajan al pie: la principal es cobrar; lo demás, al «⋯».
   const angosta = usePantallaAngosta()
   const verEnTn: AccionMenu[] = fila.link ? [{ key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir', onClick: () => window.open(fila.link!, '_blank', 'noopener') }] : []
   const pie: PieFicha = esPedido
-    ? { principal: { label: 'Cobrar en Cobros del monitor ↗', onClick: () => window.open('/cobranzas', '_blank', 'noopener') }, mas: verEnTn }
+    ? { principal: { label: 'Cobrar ↗', onClick: () => window.open('/cobranzas', '_blank', 'noopener') }, mas: verEnTn }
     : {
         principal: debe && puedeErp('cobrar') ? { label: 'Registrar cobro', onClick: () => abrirVentana('cobro') } : undefined,
         otra: puedeErp('editar-venta') ? { label: 'Editar', disabled: fila.anulada, onClick: () => abrirVentana('editar') } : undefined,
@@ -192,7 +192,6 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0 }}>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: weight.bold, overflowWrap: 'anywhere' }}>{fila.cliente}</h2>
-          {fila.clienteDe === 'gn' && <div style={{ fontSize: font.sm, color: color.mut }}>el nombre sale de Gestión Nube</div>}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
             <ChipEstado mapa={ESTADO} k={fila.estadoKey} /><ChipEstado mapa={COBRO} k={fila.cobroKey} />{fila.prueba && <ChipEstado mapa={{ p: ['warning', 'Prueba'] }} k="p" />}
           </div>
@@ -205,7 +204,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
 
       {!angosta && <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
         {debe && puedeErp('cobrar') && <Button onClick={() => abrirVentana('cobro')}>Registrar cobro</Button>}
-        {esPedido && <Button onClick={() => window.open('/cobranzas', '_blank', 'noopener')}>Cobrar en Cobros del monitor ↗</Button>}
+        {esPedido && <Button onClick={() => window.open('/cobranzas', '_blank', 'noopener')}>Cobrar ↗</Button>}
         {fila.link && <Button variant="outline" onClick={() => window.open(fila.link!, '_blank', 'noopener')}>Ver el pedido en Tienda Nube ↗</Button>}
         {!esPedido && puedeErp('editar-venta') && <Button variant="outline" disabled={fila.anulada} onClick={() => abrirVentana('editar')}>Editar</Button>}
         {!esPedido && puedeErp('cambiar') && <Button variant="outline" disabled={fila.anulada} onClick={() => irACaja('cambio')}>Cambiar producto</Button>}
@@ -214,10 +213,9 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
 
       {esPedido ? (
         <>
-          {fila.entregadoSinCobrar && <Notice tone="danger"><b>Entregado sin cobrar</b>: Tienda Nube lo cerró sin que se registrara el pago. Ya no reserva stock; queda acá hasta que se cobre o se cancele.</Notice>}
-          {fila.paraCancelar && <Notice tone="danger"><b>Para cancelar</b>: lleva {fila.dias} días sin pagar. Hay que cancelarlo en Tienda Nube. Los productos siguen reservados hasta que se cancele.</Notice>}
-          {fila.paraDesarmar && <Notice tone="danger"><b>Para desarmar</b>: el pago se anuló y el pedido ya estaba preparado. Los productos están en una bolsa, fuera del Físico, hasta que se desarme (lo marca Logística) o se cancele en Tienda Nube.</Notice>}
-          {!fila.paraDesarmar && <Notice tone="warning">Pedido de Tienda Nube <b>sin pagar</b>: todavía no es una venta{fila.entregadoSinCobrar ? '' : ' y tiene los productos reservados'}. Pasa a venta solo cuando Tienda Nube avisa que se pagó. Se cobra en Cobros del monitor (transferencia o efectivo) o se cancela en Tienda Nube.</Notice>}
+          {fila.entregadoSinCobrar && <Notice tone="danger"><b>Entregado sin cobrar</b>: ya no reserva stock.</Notice>}
+          {fila.paraCancelar && <Notice tone="danger"><b>{fila.dias} días sin pagar</b>: cancelalo en Tienda Nube.</Notice>}
+          {fila.paraDesarmar && <Notice tone="danger"><b>Pago anulado</b>: hay que desarmar el pedido.</Notice>}
           <DatosFicha>
             <DatoFicha titulo="Entró">{`${cuandoCorto(fila.pedidoEn)}${fila.dias != null ? ` · ${fila.dias === 0 ? 'hoy' : fila.dias === 1 ? 'hace 1 día' : `hace ${fila.dias} días`}` : ''}`}</DatoFicha>
             <DatoFicha titulo="Eligió pagar con">{fila.medio ?? '—'}</DatoFicha>
@@ -242,14 +240,14 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         <span style={{ color: color.mut }}>Leyendo la venta…</span>
       ) : (
         <>
-          {v?.prueba && <Notice tone="warning">De prueba: corre en paralelo con Gestión Nube y no movió el stock de Areben Gestión. La factura real sale de Gestión Nube.</Notice>}
-          {ficha?.sinCreditoGN && <Notice tone="neutral">Gestión Nube la vendió a cuenta a un cliente sin crédito marcado. Desde Areben Gestión, esta venta se habría frenado hasta que un admin la autorizara.</Notice>}
+          {v?.prueba && <Notice tone="warning">Venta de prueba: no mueve el stock.</Notice>}
+          {ficha?.sinCreditoGN && <Notice tone="neutral">Vendida a cuenta a un cliente sin crédito.</Notice>}
           {ficha.anulacion && <Notice tone="danger">Anulada el {cuandoCorto(ficha.anulacion.anuladaEn)} por {ficha.anulacion.usuario}: «{ficha.anulacion.motivo}».</Notice>}
           {ficha.anulacion && ficha.anulacion.vuelta !== 'ya' && dev && !dev.volvio && (
             <DesarmeVenta marca={marca} ficha={ficha} refVenta={fila.ref} onListo={onCambio} />
           )}
 
-          {extra?.cobroEnEntrega?.porVerificar && <Notice tone="warning">Lo cobró Logística al entregar con <b>transferencia</b>: falta validar que entró. Se cruza en el monitor, en Pagos recibidos.</Notice>}
+          {extra?.cobroEnEntrega?.porVerificar && <Notice tone="warning"><b>Transferencia</b> cobrada al entregar: falta validarla en Pagos recibidos.</Notice>}
           {/* Darío 19-nov: en la ventana, dos columnas. Izquierda lo que se vendió y cómo se pagó; derecha los datos y el historial. */}
           <div style={{ display: 'grid', gridTemplateColumns: angosta ? '1fr' : 'minmax(0, 1.25fr) minmax(0, 1fr)', gap: angosta ? space[5] : 32, alignItems: 'start' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: space[5], minWidth: 0 }}>
@@ -258,7 +256,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             {ficha.lineas.map((l) => (
               <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], padding: '10px 0', borderBottom: `1px solid ${color.bg2}` }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: weight.semibold }}>{l.nombre ?? `Producto ${l.producto}`}{l.devuelta && <span style={{ marginLeft: 6, color: 'var(--mo-warning-ink)', fontSize: font.sm }}>devuelta</span>}{l.agregada && <span style={{ marginLeft: 6, color: 'var(--mo-warning-ink)', fontSize: font.sm }}>agregada al corregir</span>}</div>
+                  <div style={{ fontWeight: weight.semibold }}>{l.nombre ?? 'Sin nombre'}{l.devuelta && <span style={{ marginLeft: 6, color: 'var(--mo-warning-ink)', fontSize: font.sm }}>devuelta</span>}{l.agregada && <span style={{ marginLeft: 6, color: 'var(--mo-warning-ink)', fontSize: font.sm }}>agregada al corregir</span>}</div>
                   <div style={{ fontSize: font.sm, color: color.mut }}>{l.talleNombre ?? l.talle} · {l.cantidad} u.{l.cantidadOriginal != null ? ` (eran ${l.cantidadOriginal})` : ''}{l.descuento || l.rebaja ? ` · descuento ${plata(l.descuento + l.rebaja)}` : ''}</div>
                 </div>
                 <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{plata(l.importe)}</span>
@@ -286,8 +284,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           {!!corr?.correcciones.length && (
             <Notice tone={corr.diferencia === 0 ? 'neutral' : 'warning'}>
               <b>Venta corregida</b>: total {plata(corr.total ?? v!.total)}{v?.totalOriginal != null && v.totalOriginal !== (corr.total ?? v.total) ? ` (era ${plata(v.totalOriginal)})` : ''} · cobrado {plata(corr.cobrado ?? 0)}.{' '}
-              {corr.diferencia > 0 ? `Faltan cobrar ${plata(corr.diferencia)}.` : corr.diferencia < 0 ? `Sobran ${plata(-corr.diferencia)}: hay que devolverlos.` : 'Lo cobrado coincide.'}{' '}
-              La plata no se movió sola; el detalle de cada corrección está en el historial.
+              {corr.diferencia > 0 ? `Faltan cobrar ${plata(corr.diferencia)}.` : corr.diferencia < 0 ? `Sobran ${plata(-corr.diferencia)}: hay que devolverlos.` : 'Lo cobrado coincide.'}
             </Notice>
           )}
 
@@ -312,7 +309,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           <section style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
             <h3 style={h3}>Historial</h3>
             <Historial hechos={hechos} cuandoTexto={cuandoCorto} />
-            {extra?.motor && <span style={{ fontSize: font.sm, color: color.mut2 }}>Las ediciones y las notas todavía no se leen: {extra.motor}</span>}
+            {extra?.motor && <span style={{ fontSize: font.sm, color: color.mut2 }}>No se pudo leer el historial.</span>}
             {!puede.editar && !extra?.motor && <span style={{ fontSize: font.sm, color: color.mut2 }}>Editar todavía no está disponible.</span>}
           </section>
           </div>
@@ -332,7 +329,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             <DatoFicha titulo="Los productos">{textoDeVuelta(dev.vueltaSiAnula, { deposito: NOMBRE_DEPOSITO[v!.deposito as keyof typeof NOMBRE_DEPOSITO] ?? v!.deposito, prueba: !!v?.prueba })}</DatoFicha>
             {hayQueElegir ? (
               <div role="radiogroup" aria-label="Cómo se devuelve lo pagado" style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
-                <span style={{ fontSize: font.sm, color: color.mut }}>Lo pagado · elegí cómo vuelve</span>
+                <span style={{ fontSize: font.sm, color: color.mut }}>Devolución</span>
                 {([
                   ['plata', `Devolver la plata · ${plata(dev.pagadoEnPlata)}`, `Por la misma forma de pago con que pagó (${ficha!.pagos.filter((p) => p.medio !== 'cuenta' && p.medio !== 'saldo').map((p) => p.cuenta ?? p.medio).join(', ')}).`],
                   ['saldo', `Dejar saldo a favor · ${plata(dev.aLista)}`, 'A precio de lista, para usar en otra compra.'],
@@ -353,10 +350,10 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
                 <Field label="Nombre" required><input className="mo-input" value={cliNombre} onChange={(e) => setCliNombre(e.target.value)} /></Field>
               </div>
             )}
-            <span style={{ fontSize: font.sm, color: color.ink2 }}>Una venta anulada no se puede volver a confirmar.{ficha?.facturada && ' Tiene factura: después hay que hacer la nota de crédito.'}</span>
+            <span style={{ fontSize: font.sm, color: color.ink2 }}>No se deshace.{ficha?.facturada && ' Tiene factura: después va la nota de crédito.'}</span>
           </div>
         )}
-        <Field label="Motivo" required hint="Queda guardado con tu nombre.">
+        <Field label="Motivo" required>
           <textarea className="mo-input mo-input--multi" style={{ width: '100%', boxSizing: 'border-box' }} value={motivo} onChange={(e) => setMotivo(e.target.value)} />
         </Field>
       </Modal>
@@ -368,14 +365,14 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         </>}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[3], marginBottom: space[3] }}>
-          <Notice tone="neutral">No mueve plata: el total nuevo se compara con lo cobrado y la diferencia queda a la vista para resolverla con una devolución o un cobro. Con factura no se puede (va nota de crédito).</Notice>
+          {fila.facturada && <Notice tone="neutral">Con factura no se puede: va nota de crédito.</Notice>}
           {(ficha?.lineas ?? []).filter((l) => !l.devuelta).map((l) => (
-            <Field key={l.id} label={`${l.nombre ?? `Producto ${l.producto}`} · variante ${l.talleNombre ?? l.talle} · ${l.cantidad} u.`} hint={`Precio por unidad. Ahora: ${plata(vigente(l.n, l.precio))}`}>
+            <Field key={l.id} label={`${l.nombre ?? 'Sin nombre'} · variante ${l.talleNombre ?? l.talle} · ${l.cantidad} u.`} hint={`Ahora: ${plata(vigente(l.n, l.precio))}`}>
               <input className="mo-input" inputMode="decimal" value={precios[l.n] ?? ''} onChange={(e) => setPrecios({ ...precios, [l.n]: e.target.value })} />
             </Field>
           ))}
         </div>
-        <Field label="Motivo" required hint="Queda guardado con tu nombre.">
+        <Field label="Motivo" required>
           <textarea className="mo-input mo-input--multi" style={{ width: '100%', boxSizing: 'border-box' }} value={motivoPrecio} onChange={(e) => setMotivoPrecio(e.target.value)} />
         </Field>
       </Modal>
@@ -393,16 +390,16 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[3], marginBottom: space[3] }}>
           <Notice tone="neutral">
             Figura: {(ficha?.pagos ?? []).filter((p) => p.medio !== 'cuenta' && p.medio !== 'saldo').map((p) => `${p.cuenta ?? p.medio ?? 'pago'} ${plata(p.monto)}`).join(' · ') || '—'}.
-            {' '}No mueve plata ni cambia el monto: cambia por dónde entró. Si era efectivo, deja de sumar al cierre de caja.
+            {(ficha?.pagos ?? []).some((p) => p.medio === 'efectivo') && ' Deja de sumar al efectivo de la caja.'}
           </Notice>
-          <Field label="Con qué pagó de verdad" required>
+          <Field label="Forma de pago" required>
             <Select value={medioNuevo} onChange={(e) => { setMedioNuevo(e.target.value); setCuentaReal('') }}>
               <option value="">Elegí la forma de pago…</option>
               {MEDIOS_CORREGIR.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
             </Select>
           </Field>
           {medioNuevo && cuentasReales.length > 0 && (
-            <Field label="Adónde entró la plata" required hint={deLaRuta?.cuenta_real_id ? 'La que dice Configuración › ¿A qué cuenta va? para esta forma de pago. Elegí otra sólo si fue a otra cuenta.' : 'Esta forma de pago no tiene una cuenta fija en Configuración › ¿A qué cuenta va?: elegí cuál.'}>
+            <Field label="Cuenta" required>
               <Select value={cuentaReal} onChange={(e) => setCuentaReal(e.target.value)}>
                 <option value="">{deLaRuta?.cuenta_real_id ? `${nombreReal(deLaRuta.cuenta_real_id) ?? 'La de la forma de pago'} (la de siempre)` : 'Elegí la cuenta…'}</option>
                 {cuentasReales.filter((c) => c.id !== deLaRuta?.cuenta_real_id).map((c) => <option key={c.id} value={c.id}>{nombreReal(c.id)}{deLaRuta?.cuenta_real_id ? ' (excepción)' : ''}</option>)}
@@ -410,7 +407,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             </Field>
           )}
         </div>
-        <Field label="Motivo" required hint="Queda guardado con tu nombre.">
+        <Field label="Motivo" required>
           <textarea className="mo-input mo-input--multi" style={{ width: '100%', boxSizing: 'border-box' }} value={motivoMedio} onChange={(e) => setMotivoMedio(e.target.value)} />
         </Field>
       </Modal>

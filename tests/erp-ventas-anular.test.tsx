@@ -130,10 +130,10 @@ describe('el desarme', () => {
     await contar('RBT-0151'); await contar('XXX')
     expect(todo()).toContain('Ese producto no es de esta venta.')
     await contar('rbt0151')
-    expect(boton('Confirmar que volvieron').disabled).toBe(true)
+    expect(boton('Devolver al stock').disabled).toBe(true)
     expect(todo()).toContain('Faltan 1 producto')
     await clic([...document.querySelectorAll('button')].find((b) => b.textContent === '+1' && !b.disabled)!) // la del Short, sin código
-    await clic(boton('Confirmar que volvieron'))
+    await clic(boton('Devolver al stock'))
     expect(confirmarVuelta).toHaveBeenCalledWith('zattia', ficha.venta.id)
     expect(onCambio.mock.calls[0][0]).toContain('volvieron 3 productos al stock')
   })

@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 
 /**
  * **ERP › Ventas › «Nueva venta» (Bruno 10-nov, maqueta aprobada).** Las formas de pago de la Caja con su %, editables; un «Sale de»
- * para toda la venta; «Entra a» editable; el cartel «de prueba» sólo si la línea ⛔ cortó; «Corregir una venta pasada» con motivo.
+ * para toda la venta; «Entra a» editable; el cartel «de prueba» sólo si la línea ⛔ cortó; «Venta atrasada» con motivo.
  */
 const datos = {
   lineas: ['zattia'], cuentas: [], canales: ['local', 'online'], depositos: ['local', 'deposito'], manualHabilitado: true,
@@ -95,26 +95,26 @@ describe('Nueva venta', () => {
 
   it('«Más» trae Queda debiendo y las cuentas sueltas; queda debiendo pide el cliente', async () => {
     await conJean()
-    await act(async () => { boton('Más:')!.click() })
+    await act(async () => { boton('Más formas de pago')!.click() })
     await act(async () => { [...document.querySelectorAll('button')].find((x) => x.textContent === 'Queda debiendo')!.click() })
-    expect(document.body.textContent).toContain('Para que quede debiendo hace falta el cliente')
+    expect(document.body.textContent).toContain('Para dejar a cuenta, cargá el cliente.')
     expect(boton('Guardar venta')!.disabled).toBe(true)
   })
 
   it('dice «de prueba» sólo si la línea todavía no vende por el ERP, y que no suma a la caja', async () => {
     await montar()
-    expect(document.body.textContent).toContain('queda de prueba')
+    expect(document.body.textContent).toContain('venta de prueba, no mueve el stock')
     expect(document.body.textContent).toContain('no suma a la caja')
     datos.enErp.zattia = true
     act(() => root?.unmount()); root = null
     await montar()
-    expect(document.body.textContent).not.toContain('queda de prueba')
+    expect(document.body.textContent).not.toContain('venta de prueba, no mueve el stock')
     datos.enErp.zattia = false
   })
 
-  it('«Corregir una venta pasada» pide el motivo y manda fecha y motivo; sin permiso ⛔ aparece', async () => {
+  it('«Venta atrasada» pide el motivo y manda fecha y motivo; sin permiso ⛔ aparece', async () => {
     await conJean()
-    await act(async () => { boton('Corregir una venta pasada')!.click() })
+    await act(async () => { boton('Venta atrasada')!.click() })
     await act(async () => { boton('Efectivo')!.click() })
     expect(boton('Guardar venta')!.disabled).toBe(true)
     await escribir(document.querySelector('input[placeholder^="Ej.:"]')!, 'se olvidó en la caja')
@@ -124,7 +124,7 @@ describe('Nueva venta', () => {
     act(() => root?.unmount()); root = null
     permisos['venta-pasada'] = false
     await montar()
-    expect(boton('Corregir una venta pasada')).toBeUndefined()
+    expect(boton('Venta atrasada')).toBeUndefined()
     permisos['venta-pasada'] = true
   })
 
@@ -140,7 +140,7 @@ describe('Nueva venta', () => {
   it('el frenado por crédito pide el PIN y el reintento lo manda', async () => {
     cargarVenta.mockImplementationOnce(async () => { throw Object.assign(new Error('No tiene crédito'), { codigo: 'SIN_CREDITO' }) })
     await conJean()
-    await act(async () => { boton('Más:')!.click() })
+    await act(async () => { boton('Más formas de pago')!.click() })
     await act(async () => { [...document.querySelectorAll('button')].find((x) => x.textContent === 'Queda debiendo')!.click() })
     await act(async () => { boton('Crear cliente')!.click() })
     await escribir(document.querySelector('input[inputmode="numeric"]')!, '30111222')

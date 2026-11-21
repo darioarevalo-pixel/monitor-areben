@@ -214,9 +214,8 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
     if (k === 'h') return <span style={{ color: color.mut }}>{cuandoCorto(f.pedidoEn)}</span>
     if (k === 'c') {
       return (
-        <span title={`${f.cliente}${f.clienteDe === 'gn' ? ' · el nombre sale de Gestión Nube (la venta todavía no tiene cliente de Areben Gestión)' : f.clienteDe === 'falta' ? (f.kind === 'pedido' ? ' · un pedido sin pagar todavía no llegó a Gestión Nube: el nombre aparece cuando se cobra' : ' · el nombre llega de Gestión Nube, al otro día') : ''}`}>
+        <span title={f.clienteDe === 'falta' ? (f.kind === 'pedido' ? 'El nombre aparece al cobrarse.' : 'El nombre aparece al día siguiente.') : f.cliente}>
           <span style={{ color: f.clienteDe === 'falta' ? color.mut2 : color.ink, fontStyle: f.clienteDe === 'falta' ? 'italic' : undefined }}>{f.cliente}</span>
-          {f.clienteDe === 'gn' && <span style={{ marginLeft: 6, fontSize: font.xs, color: color.mut2 }}>de Gestión Nube</span>}
         </span>
       )
     }
@@ -230,10 +229,10 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
       return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <ChipEstado mapa={ESTADO} k={f.estadoKey} />
-          {f.entregadoSinCobrar && <span title="Tienda Nube lo cerró sin que se cobrara: ya no reserva stock" style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-danger-ink)', whiteSpace: 'nowrap' }}>entregado</span>}
-          {f.paraCancelar && <span title={`Entró hace ${f.dias} días y sigue sin pagar: hay que cancelarlo en Tienda Nube`} style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-danger-ink)', whiteSpace: 'nowrap' }}>para cancelar</span>}
-          {f.paraDesarmar && <span title="El pago se anuló y el pedido ya estaba preparado: está en una bolsa. Desarmarlo o cancelarlo en Tienda Nube" style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-danger-ink)', whiteSpace: 'nowrap' }}>para desarmar</span>}
-          {viejo && !f.entregadoSinCobrar && !f.paraCancelar && !f.paraDesarmar && <span title={`Entró hace ${f.dias} días y sigue sin pagar`} style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-warning-ink)', whiteSpace: 'nowrap' }}>{f.dias} días</span>}
+          {f.entregadoSinCobrar && <span title="Entregado sin cobrar." style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-danger-ink)', whiteSpace: 'nowrap' }}>entregado</span>}
+          {f.paraCancelar && <span title={`${f.dias} días sin pagar.`} style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-danger-ink)', whiteSpace: 'nowrap' }}>para cancelar</span>}
+          {f.paraDesarmar && <span title="Pago anulado con el pedido preparado." style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-danger-ink)', whiteSpace: 'nowrap' }}>para desarmar</span>}
+          {viejo && !f.entregadoSinCobrar && !f.paraCancelar && !f.paraDesarmar && <span title={`${f.dias} días sin pagar.`} style={{ fontSize: font.xs, fontWeight: weight.semibold, color: 'var(--mo-warning-ink)', whiteSpace: 'nowrap' }}>{f.dias} días</span>}
         </span>
       )
     }
@@ -257,24 +256,24 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
     const cobra = rol('cobrar'), edita = rol('editar-venta')
     const menu: AccionMenu[] = f.kind === 'pedido'
       ? [
-          { key: 'ficha', label: 'Abrir la ficha', icono: 'abrir', onClick: () => abrirFicha(f) },
-          { key: 'cobrar', label: 'Cobrar en Cobros del monitor ↗', icono: 'pesos', onClick: irACobranzas, hint: 'Transferencia o efectivo: se registra en Cobros del monitor.' },
-          { key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir', onClick: () => f.link && window.open(f.link, '_blank', 'noopener'), disabled: !f.link, hint: 'Para cancelarlo, en Tienda Nube.' },
+          { key: 'ficha', label: 'Ver venta', icono: 'abrir', onClick: () => abrirFicha(f) },
+          { key: 'cobrar', label: 'Cobrar ↗', icono: 'pesos', onClick: irACobranzas },
+          { key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir', onClick: () => f.link && window.open(f.link, '_blank', 'noopener'), disabled: !f.link },
         ]
       : [
-          { key: 'ficha', label: 'Abrir la ficha', icono: 'abrir', onClick: () => abrirFicha(f) },
+          { key: 'ficha', label: 'Ver venta', icono: 'abrir', onClick: () => abrirFicha(f) },
           ...(cobra ? [{ key: 'cobro', label: 'Registrar cobro', icono: 'pesos' as const, onClick: () => abrirVentana('cobro', f, false), disabled: !(f.saldo > 0), hint: f.saldo > 0 ? undefined : 'No tiene saldo.' }] : []),
           ...(edita ? [{ key: 'editar', label: 'Editar', icono: 'lapiz' as const, onClick: () => abrirVentana('editar', f, false), disabled: f.anulada }] : []),
-          { key: 'imprimir', label: 'Imprimir el ticket', icono: 'impresora', onClick: () => imprimir(f) },
-          ...(rol('cambiar') ? [{ key: 'cambio', label: 'Cambiar producto', icono: 'cambios' as const, onClick: () => irACaja('cambio'), disabled: f.anulada, hint: 'Abre la Caja de Areben Gestión en Cambio.' }] : []),
+          { key: 'imprimir', label: 'Imprimir ticket', icono: 'impresora', onClick: () => imprimir(f) },
+          ...(rol('cambiar') ? [{ key: 'cambio', label: 'Cambiar producto', icono: 'cambios' as const, onClick: () => irACaja('cambio'), disabled: f.anulada }] : []),
           ...(f.link ? [{ key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir' as const, onClick: () => window.open(f.link!, '_blank', 'noopener') }] : []),
           ...(rol('anular') ? [{ key: 'anular', label: 'Anular…', icono: 'anular' as const, tone: 'danger' as const, onClick: () => abrirFicha(f, 'anular'), disabled: f.anulada }] : []),
         ]
     return (
       <>
         <IconoFila label={a.cobro.label} verde={a.cobro.verde} apagado={!a.cobro.activo} onClick={() => (f.kind === 'pedido' ? irACobranzas() : f.saldo > 0 && cobra ? abrirVentana('cobro', f, false) : abrirFicha(f))}><Icono nombre="pesos" size={16} /></IconoFila>
-        <IconoFila label={edita ? a.editar.label : 'Tu rol no edita ventas'} apagado={!a.editar.activo || !edita} onClick={() => edita && abrirVentana('editar', f, false)}><Icono nombre="lapiz" size={16} /></IconoFila>
-        <IconoFila label={f.kind === 'pedido' ? 'Un pedido sin pagar no tiene ticket' : 'Imprimir el ticket'} apagado={f.kind === 'pedido'} onClick={() => imprimir(f)}><Icono nombre="impresora" size={16} /></IconoFila>
+        <IconoFila label={edita ? a.editar.label : 'Sin permiso para editar.'} apagado={!a.editar.activo || !edita} onClick={() => edita && abrirVentana('editar', f, false)}><Icono nombre="lapiz" size={16} /></IconoFila>
+        <IconoFila label={f.kind === 'pedido' ? 'Un pedido sin pagar no tiene ticket' : 'Imprimir ticket'} apagado={f.kind === 'pedido'} onClick={() => imprimir(f)}><Icono nombre="impresora" size={16} /></IconoFila>
         <MenuAcciones acciones={menu} etiqueta={`Más acciones de la venta ${f.ref}`} vertical alinear="izquierda" />
       </>
     )
@@ -332,7 +331,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
           activa={ficha?.fila.id ?? null} onAbrir={(f) => abrirFicha(f)} etiquetaFila={(f) => `la venta ${f.ref}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={vista === 'todas' ? 'No hay ventas en este período.' : 'No hay ventas en esta vista.'} />
+              <EmptyState title={vista === 'todas' ? 'Sin ventas en este período.' : 'Sin ventas.'} />
               {vista !== 'todas' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todas')}>Ver todas</Button></div>}
             </div>
           ) : null}
@@ -343,14 +342,14 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
           </div>
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo las ventas…' : `${filas.length.toLocaleString('es-AR')} de ${(conteo.todas ?? 0).toLocaleString('es-AR')} · ${nombrePeriodo.toLowerCase()}`}
-          {' · '}los pedidos sin pagar son los abiertos hoy, de cualquier fecha{datos?.tnLeidaEn ? ` (Tienda Nube leída ${cuandoCorto(datos.tnLeidaEn)})` : ''}.
+          {cargando && !datos ? 'Leyendo las ventas…' : `${filas.length.toLocaleString('es-AR')} de ${(conteo.todas ?? 0).toLocaleString('es-AR')}`}
+          {filas.some((f) => f.kind === 'pedido') && ' · Pedidos sin pagar: todos los abiertos, de cualquier fecha.'}
         </div>
       </div>
 
       <BarraSeleccion cuantas={elegidas.length} onSoltar={() => setSeleccion(new Set())}>
         <span style={{ color: '#cbd5e1', fontVariantNumeric: 'tabular-nums' }}>{plata(elegidas.reduce((a, f) => a + f.total, 0))}</span>
-        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas)}>Exportar las elegidas</AccionSeleccion>
+        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas)}>Exportar</AccionSeleccion>
       </BarraSeleccion>
 
       {ficha && (

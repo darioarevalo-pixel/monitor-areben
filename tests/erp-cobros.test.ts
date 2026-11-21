@@ -69,7 +69,7 @@ describe('Areben Gestión › Cobros', () => {
     const e = (o: Record<string, unknown>) => ({ id: 'ent-1', linea: 'bdi', numero: '4512', forma_pago: 'transferencia', monto: null, entrego: 'Ger', entregada_en: '2026-10-25T15:00:00.000Z', avisos: [], motivo: 'sin_cuenta', intento_en: '2026-10-26T09:00:00.000Z', intentos: '2', ...o })
     const sin = [e({}), e({ id: 'ent-2', numero: '4513', forma_pago: 'efectivo', monto: 12500.5, motivo: null, entregada_en: '2026-10-24T10:00:00.000Z' })].map(armarEntregaSinCobrar)
     expect(sin[0]).toMatchObject({ id: 'sin_cobrar:ent-1', que: 'Pedido 4512 · entregó Ger', medioTexto: 'Transferencia', clase: 'sin_cobrar', montoDicho: false, motivo: 'sin_cuenta', intentos: 2 })
-    expect(sin[1]).toMatchObject({ montoDicho: true, monto: 12500.5, medioTexto: 'Efectivo', motivo: 'Areben Gestión no dejó el motivo.' })
+    expect(sin[1]).toMatchObject({ montoDicho: true, monto: 12500.5, medioTexto: 'Efectivo', motivo: 'Sin motivo.' })
     const todas = [...filas, ...sin]
     expect(contarVistas(todas)).toMatchObject({ todos: 6, sin_cobrar: 2 })
     expect(filtrar(todas, { vista: 'sin_cobrar', q: '4513' }).map((f) => f.id)).toEqual(['sin_cobrar:ent-2'])
@@ -80,10 +80,10 @@ describe('Areben Gestión › Cobros', () => {
 
 describe('textoDelReintento', () => {
   it('dice cuántas se cobraron y por qué siguen las otras', () => {
-    expect(textoDelReintento({ revisadas: 0, registradas: 0, siguen: [] })).toBe('No había entregas sin cobrar para reintentar.')
-    expect(textoDelReintento({ revisadas: 2, registradas: 2, siguen: [] })).toBe('Se revisaron 2 entregas. Se anotó el cobro de 2 entregas.')
+    expect(textoDelReintento({ revisadas: 0, registradas: 0, siguen: [] })).toBe('Sin entregas para reintentar.')
+    expect(textoDelReintento({ revisadas: 2, registradas: 2, siguen: [] })).toBe('Cobradas: 2.')
     expect(textoDelReintento({ revisadas: 3, registradas: 1, siguen: [{ motivo: 'sin_venta' }, { motivo: null }] }))
-      .toContain('2 siguen sin cobrar: La venta de ese pedido ya existe')
-    expect(textoDelReintento({ revisadas: 1, registradas: 0, siguen: [{ motivo: 'x' }] })).toBe('Se revisaron 1 entrega. No se pudo anotar ningún cobro. 1 sigue sin cobrar: x')
+      .toBe('Cobradas: 1. Sin cobrar: 2 (Esa venta ya existe · Sin motivo).')
+    expect(textoDelReintento({ revisadas: 1, registradas: 0, siguen: [{ motivo: 'x' }] })).toBe('Cobradas: 0. Sin cobrar: 1 (x).')
   })
 })

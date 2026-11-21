@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client'
 /**
  * 🧾 **Arqueo de caja, la pantalla** (Bruno, 30-oct; ERP › Ventas › Cajas): sólo un admin ve el campo «Código de la caja» y
  * el botón «Revisar»; el resto ve el estado. Escaneada la caja, se abre DIRECTO la revisión: cada billete con lo esperado,
- * el ✓ («Igual al esperado») carga lo esperado y ⛔ mueve el foco; todos coinciden ⇒ «Listo» guarda y cierra el panel;
+ * el ✓ («Igual al esperado») carga lo esperado y ⛔ mueve el foco; todos coinciden ⇒ «Guardar» guarda y cierra el panel;
  * alguno ⛔ coincide ⇒ nota y «Guardar con diferencia». La caja es el sobre real Z-0040 (30-oct).
  */
 const CERRADA = {
@@ -60,10 +60,10 @@ describe('ERP › Cajas › Arqueo de caja', () => {
     for (const b of ['20.000', '10.000', '2.000', '1.000', '200']) expect(verificado(b)).not.toBeNull()
     expect(t.replace(/\s/g, ' ')).toMatch(/357\.600/)
     expect(t).toContain('0 de 5 revisados')
-    expect((boton('Listo') as HTMLButtonElement).disabled).toBe(true)
+    expect((boton('Guardar') as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('el ✓ carga lo esperado y ⛔ mueve el foco; todos coinciden ⇒ Listo guarda los billetes y cierra el panel', async () => {
+  it('el ✓ carga lo esperado y ⛔ mueve el foco; todos coinciden ⇒ Guardar guarda los billetes y cierra el panel', async () => {
     m.arquearSobre.mockResolvedValue({ turno: { ...CERRADA, arqueo: { estado: 'bien', esperado: 357600, contado: 357600, diferencia: 0, nota: null, por: 'bruno', en: '2026-10-30T23:00:00Z' } } })
     await montar(true)
     await escanear()
@@ -74,7 +74,7 @@ describe('ERP › Cajas › Arqueo de caja', () => {
     expect(document.activeElement === antes || document.activeElement === document.body || (document.activeElement as HTMLElement)?.getAttribute('aria-label') === 'Igual al esperado').toBe(true)
     for (const b of tildes().slice(1)) await act(async () => { b.click() })
     expect(document.body.textContent).toContain('Coincide')
-    await act(async () => { boton('Listo')!.click() })
+    await act(async () => { boton('Guardar')!.click() })
     expect(m.arquearSobre).toHaveBeenCalledWith('zattia', expect.objectContaining({ id: 't40', verificados: { 20000: 10, 10000: 12, 2000: 18, 1000: 1, 200: 3 }, nota: null, corregir: false }))
     expect(document.body.textContent).not.toContain('Revisión · Caja Z-0040')
   })

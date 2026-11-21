@@ -171,14 +171,14 @@ describe('partePedidoPanel · emitir', () => {
     expect(arca.emitidos).toEqual([])
   })
   it('sin migrar ⇒ 409 que lo dice', async () => {
-    expect(await correr({ paso: 'proponer' }, {}, { sinMigrar: true }).r).toMatchObject({ status: 409, error: expect.stringMatching(/migración/) })
+    expect(await correr({ paso: 'proponer' }, {}, { sinMigrar: true }).r).toMatchObject({ status: 409, error: 'Todavía no disponible.' })
   })
   it('venta de PRUEBA en producción ⇒ 409 antes de leer las facturas', async () => {
     process.env.ARCA_AMBIENTE = 'produccion'
     process.env.ARCA_PRODUCCION_HABILITADA = 'si'
     try {
       const { r, pedidas } = correr({ paso: 'emitir', renglones }, { venta: { ...venta, prueba: true } })
-      expect(await r).toMatchObject({ status: 409, error: expect.stringMatching(/PRUEBA/) })
+      expect(await r).toMatchObject({ status: 409, error: expect.stringMatching(/Venta de prueba: se factura en Gestión Nube/) })
       expect(pedidas).toEqual([])
     } finally { delete process.env.ARCA_PRODUCCION_HABILITADA }
   })

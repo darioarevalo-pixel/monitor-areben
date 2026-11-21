@@ -78,8 +78,8 @@ describe('Ventas: el «⋯» de la fila y la ficha, según el rol', () => {
     permisos = SOLO_VER
     await montarVentas()
     await clic(boton(/^Más acciones de la venta #301$/)!)
-    expect(todo()).toContain('Abrir la ficha')
-    expect(todo()).toContain('Imprimir el ticket')
+    expect(todo()).toContain('Ver venta')
+    expect(todo()).toContain('Imprimir ticket')
     for (const t of ['Registrar cobro', 'Cambiar producto', 'Anular…']) expect(todo()).not.toContain(t)
     expect(boton(/^Editar$/)).toBeUndefined()
   })

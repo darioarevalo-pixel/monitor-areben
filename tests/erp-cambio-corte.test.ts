@@ -199,7 +199,7 @@ describe('🔴 cambio contra una venta de Areben Gestión DE PRUEBA (revisión 1
   it('con la línea cortada, la copia de prueba ⛔ se cambia (dejaba el cambio de prueba y el stock sin mover)', async () => {
     cortes = [STUNNED, BDI]
     ventaOriginal = { prueba: true, marca: 'bdi' }
-    expect(await desdeErp('bdi')).toMatchObject({ status: 409, error: expect.stringMatching(/copia de prueba.*Gestión Nube/) })
+    expect(await desdeErp('bdi')).toMatchObject({ status: 409, error: 'Venta de prueba: buscala con su número de Gestión Nube.' })
     expect(registrarCambio).not.toHaveBeenCalled()
   })
 

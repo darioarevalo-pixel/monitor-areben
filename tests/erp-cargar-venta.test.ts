@@ -27,7 +27,7 @@ describe('ERP › Cargar venta: la entrada del motor (§19)', () => {
     expect(e({ deposito: 'deposito_mayorista', linea: 'bdi' }, 'bdi')).toMatch(/sale/) // apagado (Darío 18-nov)
     expect(e({ lineas: [] })).toMatch(/producto/)
     expect(e({ lineas: [{ ...ok.lineas[0], cantidad: 1.5 }] })).toMatch(/cantidad/)
-    expect(e({ pagos: [{ cuenta: 'x', monto: 10 }] })).toMatch(/no suma/)
+    expect(e({ pagos: [{ cuenta: 'x', monto: 10 }] })).toMatch(/Los pagos suman \$ 10 y la venta es de \$/)
     expect(e({ ocurrida_en: '2099-01-01T00:00:00Z' })).toMatch(/futura/)
   })
 

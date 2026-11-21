@@ -90,7 +90,10 @@ export async function reintentarEntregasErp({ marca, linea }, deps) {
   const { reintentarEntregas } = await import('../motor/tn/entrega.mjs')
   return deps.conMotor(marca, 'El reintento de las entregas', async (pg) => {
     const [{ hay }] = (await pg.query(`select to_regclass('public.entrega_cobro') is not null as hay`)).rows
-    if (!hay) return { status: 409, error: 'Las entregas de Logística todavía no están disponibles: falta actualizar la base (039).' }
+    if (!hay) {
+      console.error('[erp] entregas de Logística: falta actualizar la base (039)', marca)
+      return { status: 409, error: 'Todavía no disponible.' }
+    }
     let revisadas = 0
     let registradas = 0
     /** @type {{ id: string, linea: string, motivo: string | null }[]} */

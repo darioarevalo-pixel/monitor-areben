@@ -109,7 +109,7 @@ export function entradaManual(b, marca, usuario, { cortes, ahora = new Date() })
     pagos: pagosIn.map((p, i) => ({ base: legado(p) ? pesos(p.monto) : (p.base == null || p.base === '' ? (i === pagosIn.length - 1 ? null : NaN) : pesos(p.base)), porcentaje: legado(p) ? 0 : Number(p.porcentaje ?? 0), redondear: !legado(p) && !!p.redondear })),
     paso: b.paso,
   })
-  if (!c.ok) return { error: /cubren/.test(c.error) ? `Lo que paga no suma el total. ${c.error}` : c.error }
+  if (!c.ok) return { error: c.error }
   const lineas = prendas.map((l, i) => ({
     product_id: Number(l.producto), size_id: Number(l.talle), cantidad: c.lineas[i].cantidad, precio: c.lineas[i].precio, descuento: c.lineas[i].descuento, rebaja: 0, importe: c.lineas[i].importe,
     ...(l.sku ? { sku: String(l.sku) } : {}), ...(l.barcode ? { barcode: String(l.barcode) } : {}),

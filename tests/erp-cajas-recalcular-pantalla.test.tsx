@@ -46,7 +46,7 @@ const texto = () => (document.body.textContent ?? '').replace(/\s/g, ' ')
 describe('Areben Gestión › Cajas › Recalcular el cierre', () => {
   it('la ficha muestra el efectivo de los pedidos web de Areben Gestión', async () => {
     await abrirFicha(true)
-    expect(texto()).toContain('Pedidos web (Areben Gestión)')
+    expect(texto()).toContain('Pedidos web')
   })
 
   it('admin: muestra qué cambia y «Guardar» lo escribe', async () => {
@@ -56,8 +56,8 @@ describe('Areben Gestión › Cajas › Recalcular el cierre', () => {
     await abrirFicha(true)
     await act(async () => { boton('Recalcular el cierre')!.click() })
     expect(m.recalcularCierre).toHaveBeenLastCalledWith('zattia', { id: 't38', guardar: false })
-    expect(texto()).toContain('Con lo de hoy')
-    expect(texto()).toMatch(/Pedidos web \(Areben Gestión\)\$ 43\.795 → \$ 0/)
+    expect([...document.querySelectorAll('h3')].some((h) => h.textContent === 'Recalculado')).toBe(true)
+    expect(texto()).toMatch(/Pedidos web\$ 43\.795 → \$ 0/)
     expect(texto()).toMatch(/Diferencia− \$ 43\.795 → \$ 0/)
     await act(async () => { boton('Guardar')!.click() })
     expect(m.recalcularCierre).toHaveBeenLastCalledWith('zattia', { id: 't38', guardar: true })

@@ -111,7 +111,7 @@ describe('la ficha y las ventanas', () => {
       await clic(filaDe('#293').querySelectorAll('[role="cell"]')[3])
       const aside = document.querySelector('aside[aria-label="Ficha de la venta #293"]')!
       expect(aside.textContent).toContain('ContraentregaTransferencia · Ger')
-      expect(aside.textContent).toContain('falta validar que entró')
+      expect(aside.textContent).toContain('falta validarla en Pagos recibidos')
     } finally { delete extra.cobroEnEntrega }
   })
 
@@ -120,7 +120,7 @@ describe('la ficha y las ventanas', () => {
     await clic(boton(/^Registrar cobro \(todavía no disponible\)/, filaDe('#293')))
     expect(document.querySelector('aside')).toBeNull()
     expect(todo()).toContain('Venta #293 · Mayorista Norte · saldo $ 93.200')
-    expect(todo()).toContain('Todavía no está disponible')
+    expect(todo()).toContain('Todavía no disponible.')
     expect((boton(/^Registrar \$ 93\.200/) as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -141,8 +141,8 @@ describe('la ficha y las ventanas', () => {
     await clic(boton('Editar', filaDe('#301')))
     await act(async () => {})
     expect(todo()).toContain('Editar la venta #301')
-    expect(todo()).toContain('No se editan acá: mueven stock, plata o la factura.')
-    expect((boton('Guardar cambios') as HTMLButtonElement).disabled).toBe(true)
+    expect(todo()).toContain('Para cambiar productos, precios o cobros:')
+    expect((boton('Guardar') as HTMLButtonElement).disabled).toBe(true)
     await clic(boton('Cambiar producto'))
     expect(irACaja).toHaveBeenCalledWith('cambio')
   })

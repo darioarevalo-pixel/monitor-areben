@@ -46,10 +46,9 @@ describe('la pantalla de Gastos', () => {
     expect(leer.mock.calls[0][4]).toBe(true)
     const t = host.textContent ?? ''
     expect(t).toContain('1.010.000')
-    expect(t).toContain('412.000 salen solas de los cobros')
-    expect(t).toContain('3 cobros con tarjeta o Mercado Pago no tienen comisión')
-    expect(t).toContain('no están en el total')
-    expect(t).toContain('Comisiones de plataformas de todos los cobros del período')
+    expect(t).toContain('412.000 automático · $ 38.000 a mano')
+    expect(t).toContain('3 cobros sin comisión cargada.')
+    expect(t).toContain('Comisiones de los cobros')
     expect(t).toContain('Cadete · 6 envíos')
     await clic(boton('Reales'))
     expect(leer.mock.calls.at(-1)![4]).toBe(false)
@@ -59,7 +58,7 @@ describe('la pantalla de Gastos', () => {
     await montar()
     await clic(boton('Nuevo gasto'))
     await clic(boton('Cargar gasto'))
-    expect(document.body.textContent).toContain('El monto es distinto de cero')
+    expect(document.body.textContent).toContain('El monto no puede ser 0.')
     expect(registrar).not.toHaveBeenCalled()
     const campos = [...document.querySelectorAll('input')]
     const monto = campos.find((i) => i.getAttribute('inputmode') === 'decimal')!
@@ -70,6 +69,6 @@ describe('la pantalla de Gastos', () => {
     await clic(boton('Cargar'))
     expect(registrar).toHaveBeenCalledTimes(1)
     expect(registrar.mock.calls[0]).toMatchObject(['zattia', { tipo: 'otro', monto: -21000, detalle: 'Cadete cargado de más', prueba: true, linea: 'zattia' }])
-    expect(document.body.textContent).toContain('Quedó anotado')
+    expect(document.body.textContent).toContain('Gasto cargado: − $ 21.000.')
   })
 })

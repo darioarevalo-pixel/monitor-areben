@@ -28,6 +28,10 @@ const NOMBRE_MARCA: Record<MarcaErp | 'stunned', string> = { zattia: 'Zattia', b
 const mesActual = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 7)
 const pesos = (n: number) => n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 })
 const pesosCortos = (n: number) => n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+/** «2026-11» → «noviembre» (con el año si no es el de hoy). */
+const nombreMes = (m: string) => `${MESES[Number(m.slice(5, 7)) - 1] ?? m}${m.slice(0, 4) === mesActual().slice(0, 4) ? '' : ` ${m.slice(0, 4)}`}`
+const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`
 const dia = (iso: string | null) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '—')
 /** Más de ~300 filas ⇒ de a tandas: `ListaTrabajo` ⛔ es virtual (BDI tuvo 355 sin factura en octubre). */
 const TANDA = 300
@@ -126,7 +130,7 @@ export function Facturacion() {
   const pv = datos?.puntosDeVenta[tienda] ?? null
   // Por qué ⛔ se puede facturar lo elegido (null = se puede). Lo vuelve a frenar el servidor: esto es para decirlo antes.
   const freno = !datos ? 'Leyendo el mes…'
-    : !datos.ambiente ? 'La facturación está apagada en este servidor.'
+    : !datos.ambiente ? 'Facturación no disponible.'
       : sumaElegidas > datos.pendiente + 0.005 ? `Pasa lo pendiente del mes (${pesosCortos(datos.pendiente)}).`
         : elegidasDeMarca.length > datos.porPedido ? `Hasta ${datos.porPedido} ventas por vez.`
           : null
@@ -142,7 +146,7 @@ export function Facturacion() {
   async function mandar() {
     if (!datos || !elegidasDeMarca.length || freno) return
     const ok = await confirmar({
-      titulo: prueba ? 'Facturar en el modo de prueba de ARCA' : 'Facturar con ARCA',
+      titulo: `¿Facturar ${plural(elegidasDeMarca.length, 'venta', 'ventas')}?`,
       mensaje: (
         <div>
           <ConfirmDetalle label="Marca" valor={NOMBRE_MARCA[tienda]} />
@@ -150,9 +154,7 @@ export function Facturacion() {
           <ConfirmDetalle label="Total" valor={pesos(sumaElegidas)} />
           <ConfirmDetalle label="Punto de venta" valor={pv ?? '—'} />
           <p style={{ marginTop: space[3] }}>
-            {prueba
-              ? 'Son facturas de PRUEBA (modo de prueba de ARCA): no tienen validez fiscal.'
-              : 'Son facturas REALES: una vez autorizadas no se pueden eliminar, sólo anular con nota de crédito.'}
+            {prueba ? 'De prueba: sin validez fiscal.' : 'No se pueden eliminar.'}
           </p>
         </div>
       ),
@@ -183,7 +185,7 @@ export function Facturacion() {
           <ConfirmDetalle label="Anula la factura" valor={numeroComprobante(f)} />
           <ConfirmDetalle label="Total" valor={pesos(f.total)} />
           <p style={{ marginTop: space[3] }}>
-            {deVerdad ? 'Es REAL: una vez autorizada no se puede eliminar.' : 'Es de PRUEBA (modo de prueba de ARCA): no tiene validez fiscal.'}
+            {deVerdad ? 'No se puede eliminar.' : 'De prueba: sin validez fiscal.'}
           </p>
         </div>
       ),
@@ -205,10 +207,10 @@ export function Facturacion() {
 
   /** La nota de DÉBITO suma un importe a la factura (un recargo, una diferencia): pide el importe y confirma con el mismo aviso que la NC. */
   async function sumarConND(f: FacturaEmitida) {
-    const texto = await pedirTexto(`Importe a sumar a la factura ${numeroComprobante(f)} (IVA incluido, en pesos)`, '', { titulo: 'Nota de débito', placeholder: 'Ej.: 1500', ok: 'Seguir' })
+    const texto = await pedirTexto('Importe con IVA', '', { titulo: 'Nota de débito', placeholder: 'Ej.: 1500', ok: 'Seguir' })
     if (texto === null) return
     const monto = Math.round(Number(texto.replace(/\./g, '').replace(',', '.')) * 100) / 100
-    if (!(monto > 0)) { setError('Poné un importe mayor a 0.'); return }
+    if (!(monto > 0)) { setError('Importe inválido.'); return }
     const deVerdad = f.ambiente === 'produccion'
     const ok = await confirmar({
       titulo: deVerdad ? 'Nota de débito con ARCA' : 'Nota de débito en el modo de prueba de ARCA',
@@ -217,7 +219,7 @@ export function Facturacion() {
           <ConfirmDetalle label="Se suma a la factura" valor={numeroComprobante(f)} />
           <ConfirmDetalle label="Importe" valor={pesos(monto)} />
           <p style={{ marginTop: space[3] }}>
-            {deVerdad ? 'Es REAL: una vez autorizada no se puede eliminar; un error se corrige con una nota de crédito.' : 'Es de PRUEBA (modo de prueba de ARCA): no tiene validez fiscal.'}
+            {deVerdad ? 'No se puede eliminar.' : 'De prueba: sin validez fiscal.'}
           </p>
         </div>
       ),
@@ -248,14 +250,11 @@ export function Facturacion() {
   async function cerrar() {
     if (!datos) return
     const ok = await confirmar({
-      titulo: `Cerrar ${mes}`,
+      titulo: `¿Cerrar ${nombreMes(mes)}?`,
       mensaje: (
         <div>
           <ConfirmDetalle label="Tope que queda fijo" valor={pesos(datos.techoCalculado)} />
-          <p style={{ marginTop: space[3] }}>
-            Desde que se cierra, el tope ya no cambia aunque se reclasifique una cuenta o Gestión Nube anule una venta. Se sigue
-            facturando contra ese número.
-          </p>
+          <p style={{ marginTop: space[3] }}>El tope queda fijo.</p>
         </div>
       ),
       ok: 'Cerrar mes',
@@ -280,9 +279,14 @@ export function Facturacion() {
     })
   }
 
+  /** La venta de un resultado, por su número (⛔ la clave interna). */
+  const ventaDe = (id: string) => {
+    const f = [...grupos.sin, ...grupos.facturas].find((x) => x.ventaId === id)
+    return f?.numero ? `venta #${f.numero}` : 'venta sin número'
+  }
   const nombreVenta = (f: Fila) => (f.numero ? `#${f.numero}` : f.ventaId)
   const celda = (f: Fila, k: string): React.ReactNode => {
-    if (k === 'nro') return <span style={{ color: color.ink2, fontVariantNumeric: 'tabular-nums' }} title={`Venta ${f.ventaId} en Gestión Nube`}>{nombreVenta(f)}</span>
+    if (k === 'nro') return <span style={{ color: color.ink2, fontVariantNumeric: 'tabular-nums' }}>{nombreVenta(f)}</span>
     if (k === 'cliente') return f.cliente ? <b style={{ color: color.ink }} title={f.cliente}>{f.cliente}</b> : <span style={{ color: color.mut2 }}>Consumidor final</span>
     if (k === 'fecha') return <span style={{ color: color.ink2 }}>{dia(f.fecha)}</span>
     if (k === 'cuentas') return <span style={{ color: color.ink2 }} title={(f.cuentas ?? []).join(', ')}>{(f.cuentas ?? []).join(', ')}</span>
@@ -308,7 +312,7 @@ export function Facturacion() {
     }]
     if (f.vista === 'facturas' && !conNC.has(`${e.marca}:${e.venta_id}`)) {
       menu.push(esDeVentaPropia(e.venta_id)
-        ? { key: 'nc', label: 'Nota de crédito desde Ventas', icono: 'anular', onClick: () => undefined, disabled: true, hint: 'Una venta de Areben Gestión se anula desde su ficha en Ventas, y la nota de crédito sale sola.' }
+        ? { key: 'nc', label: 'Nota de crédito desde Ventas', icono: 'anular', onClick: () => undefined, disabled: true, hint: 'Se hace desde la venta.' }
         : { key: 'nc', label: 'Hacer nota de crédito', icono: 'anular', tone: 'danger', onClick: () => void anularConNC(e), disabled: trabajando, hint: 'Anula la factura entera con ARCA.' })
     }
     if (f.vista === 'facturas' && !esDeVentaPropia(e.venta_id)) {
@@ -328,15 +332,15 @@ export function Facturacion() {
         {datos && datos.estado !== 'cerrado' && <Button variant="outline" onClick={cerrar}>Cerrar mes</Button>}
       </div>
 
-      {datos?.ambiente === 'homologacion' && <Notice tone="warning">Facturación de PRUEBA (modo de prueba de ARCA): las facturas que salen de acá no tienen validez fiscal.</Notice>}
-      {datos && !datos.ambiente && <Notice tone="warning">{datos.errorAmbiente} Mientras tanto se factura en Gestión Nube: acá se ve el tope, lo facturado y lo que falta.</Notice>}
+      {datos?.ambiente === 'homologacion' && <Notice tone="warning">Facturación de prueba: sin validez fiscal.</Notice>}
+      {datos && !datos.ambiente && <Notice tone="warning">{datos.errorAmbiente}</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {aviso && <Notice tone="success" onClose={() => setAviso(null)}>{aviso}</Notice>}
       {resultado && (
         <Notice tone={resultado.rechazadas.length || resultado.noSalen.length || resultado.sinAtar?.length ? 'warning' : 'success'} onClose={() => setResultado(null)}>
-          {resultado.autorizadas.length} factura(s) autorizada(s) en el punto de venta {resultado.ptoVta}
-          {resultado.rechazadas.length > 0 && ` · ${resultado.rechazadas.length} rechazada(s): ${resultado.rechazadas.map((r) => `${r.ventaId} (${r.motivos.join(', ')})`).join('; ')}`}
-          {resultado.noSalen.length > 0 && ` · ${resultado.noSalen.length} sin facturar: ${resultado.noSalen.map((r) => `${r.ventaId} (${r.motivos.join(', ')})`).join('; ')}`}
+          {plural(resultado.autorizadas.length, 'factura autorizada', 'facturas autorizadas')}
+          {resultado.rechazadas.length > 0 && ` · ${plural(resultado.rechazadas.length, 'rechazada', 'rechazadas')}: ${resultado.rechazadas.map((r) => `${ventaDe(r.ventaId)} (${r.motivos.join(', ')})`).join('; ')}`}
+          {resultado.noSalen.length > 0 && ` · ${resultado.noSalen.length} sin facturar: ${resultado.noSalen.map((r) => `${ventaDe(r.ventaId)} (${r.motivos.join(', ')})`).join('; ')}`}
           {(resultado.sinAtar?.length ?? 0) > 0 && ` · ${resultado.sinAtar?.join(' · ')}`}
         </Notice>
       )}
@@ -345,7 +349,7 @@ export function Facturacion() {
       {datos && (
         <>
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-            <TileResumen oscuro titulo="Tope del mes de Areben" valor={pesosCortos(datos.techo)} nota={datos.estado === 'cerrado' ? 'fijo desde el cierre · las dos marcas' : 'lo cobrado en cuentas de Areben, las dos marcas; cambia hasta cerrar el mes'} />
+            <TileResumen oscuro titulo="Tope del mes de Areben" valor={pesosCortos(datos.techo)} nota={datos.estado === 'cerrado' ? 'Fijo desde el cierre' : 'Cambia hasta cerrar el mes'} />
             <TileResumen titulo="Facturado" valor={pesosCortos(datos.facturado)} nota={`${pctTope != null ? `${pctTope} % del tope · ` : ''}Gestión Nube ${pesosCortos(datos.facturadoGN)} · Areben Gestión ${pesosCortos(datos.facturadoMonitor)}`} />
             <TileResumen titulo="Pendiente de facturar" valor={pesosCortos(datos.pendiente)} nota={datos.pendiente < 0 ? 'se facturó de más' : 'las dos marcas'} />
             <TileResumen tono={tonoDeConteo(grupos.sin.length)} titulo={`Sin factura en ${NOMBRE_MARCA[tienda]}`} valor={grupos.sin.length.toLocaleString('es-AR')} nota={`ventas · ${pesosCortos(sumaSin)}`} />
@@ -364,11 +368,8 @@ export function Facturacion() {
             </div>
             {enVista === 'sin' && (
               <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>
-                Cobradas este mes en cuentas de Areben y sin factura de Gestión Nube ni de Areben Gestión. «A facturar» es lo cobrado en esas cuentas, no el total de la venta.
+                «A facturar» = lo cobrado, no el total.
               </div>
-            )}
-            {enVista === 'notas' && !facturas && (
-              <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>Las notas de crédito de Areben Gestión se ven cuando la facturación esté prendida. Las de Gestión Nube no llegan al monitor.</div>
             )}
             <ListaTrabajo
               columnas={enVista === 'sin' ? COLUMNAS_SIN : COLUMNAS_FACT} filas={filas} claveDe={(f) => f.id} celda={celda}
@@ -378,7 +379,7 @@ export function Facturacion() {
               orden={orden} onOrden={setOrden}
               onAbrir={enVista === 'sin' ? alternar : undefined}
               etiquetaFila={(f) => (f.vista === 'sin' ? `la venta ${nombreVenta(f)}` : `${f.comprobante}`)}
-              vacio={<div style={{ padding: space[6] }}><EmptyState title={q ? 'Nada con esa búsqueda.' : enVista === 'sin' ? 'No quedan ventas sin factura este mes.' : enVista === 'facturas' ? 'Ninguna factura este mes.' : 'Ninguna nota de crédito este mes.'} /></div>}
+              vacio={<div style={{ padding: space[6] }}><EmptyState title={q ? `${enVista === 'sin' ? 'Ninguna venta coincide' : 'Ningún comprobante coincide'} con «${q}».` : enVista === 'sin' ? 'No quedan ventas sin factura este mes.' : enVista === 'facturas' ? 'Ninguna factura este mes.' : 'Ninguna nota de crédito este mes.'} /></div>}
             />
             {todas.length > filas.length && (
               <div style={{ padding: 12, textAlign: 'center', borderTop: `1px solid ${color.bg2}` }}>
@@ -386,7 +387,7 @@ export function Facturacion() {
               </div>
             )}
             <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-              {NOMBRE_MARCA[tienda]} factura con el punto de venta {pv ?? (datos.ambiente ? 'sin cargar' : 'de Gestión Nube')} · las facturas de Gestión Nube van por el día de la venta
+              Punto de venta {pv ?? 'sin cargar'}
             </div>
           </div>
 

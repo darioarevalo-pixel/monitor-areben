@@ -115,7 +115,7 @@ describe('la fila, las vistas y el resumen', () => {
     expect(p.entregadoSinCobrar).toBe(false)
     expect(armarFila({ kind: 'pedido', tienda: 'bdi', tnId: '2', tnNumero: 2, creadaEn: '2026-10-19T12:00:00Z', total: 1, entregadoSinCobrar: true }).entregadoSinCobrar).toBe(true)
     // Se cobra en Cobranzas (el ícono $ lleva ahí, ⛔ a una ventana del ERP).
-    expect(accionesDeFila(p).cobro).toMatchObject({ activo: true, label: 'Pedido sin pagar: se cobra en Cobros del monitor ↗' })
+    expect(accionesDeFila(p).cobro).toMatchObject({ activo: true, label: 'Cobrar ↗' })
   })
   it('un pedido para cancelar entra en su vista y en Sin pagar', () => {
     const p = armarFila({ kind: 'pedido', tienda: 'zattia', tnId: '1', tnNumero: 7, creadaEn: '2026-10-01T00:00:00Z', total: 100, dias: 15, paraCancelar: true })

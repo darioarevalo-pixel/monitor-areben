@@ -106,19 +106,18 @@ export function ChequesErp() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
-        <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Los cheques que pagaron los clientes. El cheque baja la deuda al recibirlo; se carga con «Cobrar» eligiendo la cuenta «Cheque». Si rebota, la deuda vuelve.</p>
         <div style={{ display: 'flex', gap: space[1] }}>
           <Button variant={prueba ? 'outline' : 'solid'} aria-pressed={!prueba} onClick={() => setPrueba(false)}>Reales</Button>
           <Button variant={prueba ? 'solid' : 'outline'} aria-pressed={prueba} onClick={() => setPrueba(true)}>De prueba</Button>
         </div>
       </div>
-      {prueba && <Notice tone="warning">Estás mirando los cheques <b>de prueba</b>: los que se cargaron en cobros de prueba hasta el corte.</Notice>}
+      {prueba && <Notice tone="warning">Cheques <b>de prueba</b>.</Notice>}
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
         <TileResumen titulo="En cartera" valor={t ? pesos(t.en_cartera.monto) : '…'} oscuro nota={t ? `${t.en_cartera.cantidad} ${t.en_cartera.cantidad === 1 ? 'cheque' : 'cheques'} · ${libro}` : undefined} />
-        <TileResumen titulo="Depositados" valor={t ? pesos(t.depositado.monto) : '…'} nota={t ? `${t.depositado.cantidad} esperando que se acrediten` : undefined} />
+        <TileResumen titulo="Depositados" valor={t ? pesos(t.depositado.monto) : '…'} nota={t ? `${t.depositado.cantidad} esperando acreditarse` : undefined} />
         <TileResumen titulo="Acreditados" valor={t ? pesos(t.acreditado.monto) : '…'} nota={t ? `${t.acreditado.cantidad} ya en la cuenta` : undefined} />
         <TileResumen titulo="Rechazados" valor={t ? pesos(t.rechazado.monto) : '…'} nota={t ? `${t.rechazado.cantidad} · la deuda volvió al cliente` : undefined} />
       </div>
@@ -143,7 +142,7 @@ export function ChequesErp() {
             await accionDeCheque(marca, { linea: tienda, chequeId: abierta.cheque.id, ...a })
             const c = abierta.cheque
             setAbierta(null)
-            setHecho(a.accion === 'cheque-depositar' ? `Cheque ${c.numero} depositado.` : a.accion === 'cheque-acreditar' ? `Cheque ${c.numero} acreditado.` : `Cheque ${c.numero} rechazado: ${pesos(c.monto)} volvieron a la cuenta de ${c.cliente ?? 'el cliente'}.`)
+            setHecho(a.accion === 'cheque-depositar' ? `Cheque ${c.numero} depositado.` : a.accion === 'cheque-acreditar' ? `Cheque ${c.numero} acreditado.` : `Cheque ${c.numero} rechazado: ${pesos(c.monto)} volvieron a la cuenta ${c.cliente ? `de ${c.cliente}` : 'del cliente'}.`)
             setVuelta((n) => n + 1)
           }}
         />
@@ -171,8 +170,8 @@ function VentanaCheque({ abierta, hoy, cuentas, onCerrar, onHecho }: {
     if (falta) return setError(falta)
     if (tipo === 'rechazar') {
       const ok = await confirmar({
-        titulo: 'Marcar el cheque rechazado',
-        mensaje: <p>Los <b>{pesos(c.monto)}</b> del cheque {c.numero} <b>vuelven a la cuenta de {c.cliente ?? 'el cliente'}</b>: vuelve a deberlos. No se deshace.</p>,
+        titulo: `¿Marcar rechazado el cheque ${c.numero}?`,
+        mensaje: <p>{c.cliente ?? 'El cliente'} vuelve a deber <b>{pesos(c.monto)}</b>.</p>,
         ok: 'Marcar rechazado',
       })
       if (!ok) return
@@ -197,7 +196,7 @@ function VentanaCheque({ abierta, hoy, cuentas, onCerrar, onHecho }: {
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         {tipo === 'depositar' && (
-          <Field label="¿En qué cuenta se deposita?" hint={c.tipo === 'echeq' ? 'El eCheq se acepta y se cobra desde el home banking de esa cuenta.' : 'Si se cobró por ventanilla, elegí la caja.'}>
+          <Field label="¿En qué cuenta se deposita?" hint={c.tipo === 'echeq' ? 'El eCheq se cobra desde el home banking.' : 'Si se cobró por ventanilla, elegí la caja.'}>
             <Select value={cuenta} aria-label="Cuenta del depósito" onChange={(e) => setCuenta(e.target.value)}>
               <option value="">{cuentas.length ? 'Elegí la cuenta' : 'No hay cuentas activas'}</option>
               {cuentas.map((x) => <option key={x.id} value={x.id}>{nombreCuentaReal(x)}</option>)}
@@ -205,7 +204,7 @@ function VentanaCheque({ abierta, hoy, cuentas, onCerrar, onHecho }: {
           </Field>
         )}
         {tipo === 'rechazar' && (
-          <Field label="¿Por qué se rechazó?" hint="Sin fondos, firma, fecha… Queda en la cuenta del cliente.">
+          <Field label="¿Por qué se rechazó?">
             <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Sin fondos" autoFocus />
           </Field>
         )}

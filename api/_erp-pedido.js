@@ -117,7 +117,10 @@ export async function pedidoDelPanel({ pedidoId = '', usuario = null }, deps) {
   // Las reglas de la tienda se piden ANTES de la base, en paralelo (1 min en memoria).
   const reglas = leerReglas(deps)
   return deps.conMotor('bdi', 'El pedido', async (pg) => {
-    if (!(await hay064(pg))) return { status: 409, error: 'Falta la migración del pedido en la base (sql/064).' }
+    if (!(await hay064(pg))) {
+      console.error('[erp] pedido: falta la migración sql/064 en la base')
+      return { status: 409, error: 'Todavía no disponible.' }
+    }
     return fichaConConexion(pg, String(pedidoId), escribir, { reglas: await reglas, precioManual: !!deps.precioManual })
   })
 }
@@ -355,7 +358,7 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
       if (!Array.isArray(body.lineas)) return { status: 400, error: 'Faltan los renglones' }
       // Los precios los decide ESTA puerta con las reglas de la tienda, recién leídas (Darío 18-nov): ⛔ el navegador.
       const R = await leerReglas(deps, true)
-      if (!R) return { status: 503, error: 'No pude leer los precios de la tienda. Probá de nuevo en un minuto.' }
+      if (!R) return { status: 503, error: 'No se pudieron leer los precios de la tienda.' }
       const actual = await pv.fichaDePedidoMayorista(pg, { pedido_id })
       if (!actual.ok) return { status: statusDe(actual.error?.codigo), error: actual.error?.mensaje ?? 'No se pudo leer el pedido.' }
       const ids = [...actual.lineas, ...body.lineas.map((l) => ({ product_id: l?.productId })), ...(Array.isArray(body.packs) ? body.packs.map((x) => ({ product_id: x?.productId })) : [])]

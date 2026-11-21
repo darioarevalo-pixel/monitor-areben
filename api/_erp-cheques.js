@@ -15,7 +15,11 @@ const MARCAS = ['bdi', 'zattia']
 const LINEAS = { bdi: ['bdi'], zattia: ['zattia', 'stunned'] }
 const UUID = /^[0-9a-f-]{36}$/i
 const FECHA = /^\d{4}-\d{2}-\d{2}$/
-const SIN_079 = { status: 409, error: 'Los cheques todavía no están en la base de Areben Gestión (falta la migración 079).' }
+/** La base sin la migración 079 (cheques): en pantalla, el mensaje simple; el detalle, al log. */
+const sin079 = () => {
+  console.error('[erp] cheques: falta la migración 079 en esta base')
+  return { status: 409, error: 'Todavía no disponible.' }
+}
 const TIPOS_DEPOSITO = ['banco', 'billetera', 'caja']
 
 const hay079 = async (pg) => (await pg.query(`select to_regclass('public.cheque') is not null as hay`)).rows[0].hay
@@ -29,10 +33,13 @@ export async function carteraDeCheques({ marca, linea, prueba = false }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   if (!LINEAS[marca].includes(linea)) return { status: 400, error: 'Falta la línea (Zattia o Stunned).' }
   return deps.conMotor(marca, 'Los cheques', async (pg) => {
-    if (!(await hay079(pg))) return SIN_079
+    if (!(await hay079(pg))) return sin079()
     const { chequesDe } = await import('../motor/cuenta/cheque.mjs')
     const [m] = (await pg.query('select empresa_id::text from marca where id = $1', [linea])).rows
-    if (!m) return { status: 400, error: 'Línea desconocida' }
+    if (!m) {
+      console.error('[erp] cheques: línea desconocida', linea)
+      return { status: 400, error: 'Todavía no disponible.' }
+    }
     const r = await chequesDe(pg, { empresa_id: m.empresa_id, marca: linea, prueba })
     if (!r.ok) return errorDe(r.error)
     const cuentas = (await pg.query(
@@ -60,7 +67,7 @@ export async function accionDeCheque({ accion, marca, body, usuario }, deps) {
   // El día elegido a las 12 de Argentina (⛔ la hora: el banco trabaja por día).
   const ocurrida_en = body?.fecha ? `${body.fecha}T15:00:00.000Z` : undefined
   return deps.conMotor(marca, 'El cheque', async (pg) => {
-    if (!(await hay079(pg))) return SIN_079
+    if (!(await hay079(pg))) return sin079()
     const m = deps.cheque || await import('../motor/cuenta/cheque.mjs')
     const [ch] = (await pg.query('select empresa_id::text from cheque where id = $1 and marca = $2', [body.chequeId, linea])).rows
     if (!ch) return { status: 404, error: 'Ese cheque no está en esta línea.' }
@@ -69,7 +76,10 @@ export async function accionDeCheque({ accion, marca, body, usuario }, deps) {
       : accion === 'cheque-acreditar' ? await m.acreditarCheque(pg, base)
       : accion === 'cheque-rechazar' ? await m.rechazarCheque(pg, { ...base, motivo })
       : null
-    if (!r) return { status: 400, error: 'Acción desconocida' }
+    if (!r) {
+      console.error('[erp] cheques: acción desconocida', accion)
+      return { status: 400, error: 'Todavía no disponible.' }
+    }
     return r.ok ? { ok: true, cheque: r.cheque, ...(r.cuenta != null ? { cuenta: r.cuenta } : {}) } : errorDe(r.error)
   })
 }

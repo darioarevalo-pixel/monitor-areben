@@ -99,7 +99,7 @@ describe('ERP › Facturación con el molde', () => {
     await clic(boton(/^Facturar$/)!)
     expect(confirmar).toHaveBeenCalledOnce()
     expect(facturar).toHaveBeenCalledWith('2026-10', 'zattia', 'zattia', ['501'])
-    expect(texto()).toMatch(/1 factura\(s\) autorizada\(s\)/)
+    expect(texto()).toContain('1 factura autorizada')
   })
 
   it('lo elegido que pasa lo pendiente ⛔ ofrece Facturar: dice por qué', async () => {
@@ -114,10 +114,10 @@ describe('ERP › Facturación con el molde', () => {
     mes = { ...base, ambiente: null, errorAmbiente: 'Facturación real APAGADA.' }
     await montar()
     expect(texto()).toContain('Facturación real APAGADA.')
-    expect(texto()).toContain('se factura en Gestión Nube')
+    expect(texto()).not.toContain('se factura en Gestión Nube')
     const fila = [...host.querySelectorAll('[role="row"]')].find((r) => r.textContent?.includes('#7001'))!
     await clic(fila)
-    expect(texto()).toContain('La facturación está apagada')
+    expect(texto()).toContain('Facturación no disponible.')
     expect(boton(/^Facturar$/)).toBeUndefined()
   })
 
