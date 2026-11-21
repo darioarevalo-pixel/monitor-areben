@@ -62,8 +62,8 @@ describe('la pantalla', () => {
     await act(async () => {})
     const t = host.textContent ?? ''
     expect(host.querySelector('section[aria-label="Resultado comercial del mes"]')).toBeNull()
-    for (const no of ['Stock a costo', 'Margen bruto', 'Resultado comercial', 'Ver como']) expect(t).not.toContain(no)
-    expect(t).toContain('Viendo como Local')
+    for (const no of ['Stock valorizado', 'Margen bruto', 'Resultado comercial', 'Ver como']) expect(t).not.toContain(no)
+    expect(t).toContain('Ventas a preparar')
     expect(leerResultadoDelMes).not.toHaveBeenCalled()
     perfil = { name: 'bruno', admin: true }
   })
@@ -76,8 +76,8 @@ describe('la pantalla', () => {
     const t = host.textContent ?? ''
     expect(host.querySelector('section[aria-label="Resultado comercial del mes"]')).not.toBeNull()
     expect(t).toContain('Resultado comercial')
-    expect(t).toMatch(/Stock a costo\$\s50\.000/) // stock a costo: 10 u. × $ 5.000 (la de sin costo ⛔ suma: se avisa)
-    expect(t).toContain('1 producto con stock sin costo (1 unidad)')
+    expect(t).toMatch(/Stock valorizado\$\s50\.000/) // stock a costo: 10 u. × $ 5.000 (la de sin costo ⛔ suma: se avisa)
+    expect(t).toContain('1 producto sin costo (1 unidad)')
     expect(t).toContain('Funda Roja') // lo que más deja: la de sin costo ⛔ entra
     expect(t).not.toContain('Funda Azul')
     expect(t).toContain('-18%') // 29,5 M contra 36,0 M
@@ -86,7 +86,7 @@ describe('la pantalla', () => {
     expect(fila('Ventas a preparar').textContent).toMatch(/1$/)
     expect(fila('Ventas a preparar').getAttribute('href')).toBe('/erp/ventas/ventas')
     expect(fila('Pedidos sin pagar').textContent).toMatch(/1$/)
-    expect(fila('Productos sin costo').textContent).toMatch(/1$/)
+    expect(fila('Sin costo').textContent).toMatch(/1$/)
     expect(fila('Productos en negativo').textContent).toContain('no se pudo')
   })
 })

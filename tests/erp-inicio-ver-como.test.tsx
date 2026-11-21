@@ -65,16 +65,15 @@ describe('Ver como — la pantalla', () => {
   it('Admin lo ve todo; con «Depósito» cambian las tarjetas y desaparece el resultado', async () => {
     const host = await montar()
     expect(host.textContent).toContain('Margen bruto')
-    expect(host.textContent).toContain('Productos sin costo')
+    expect(host.textContent).toContain('Sin proveedor')
     expect(rol(host, 'Depósito')).toBeUndefined()
     await act(async () => { boton(host)!.click() })
     await act(async () => { rol(host, 'Depósito').click() })
     expect(boton(host)!.textContent).toContain('Depósito')
     expect(rol(host, 'Depósito')).toBeUndefined()
     expect(host.textContent).not.toContain('Margen bruto')
-    expect(host.textContent).not.toContain('Productos sin costo')
+    expect(host.textContent).not.toContain('Sin proveedor')
     expect(host.textContent).toContain('Ventas a desarmar')
-    expect(host.textContent).toContain('Depósito: lo que hay que preparar')
   })
   it('⛔ el selector es sólo de admin', async () => {
     admin = false

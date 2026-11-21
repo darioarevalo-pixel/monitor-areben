@@ -52,6 +52,14 @@ function Globo({ active, payload, label, titulo: t }: { active?: boolean; payloa
 
 const eje = { fontSize: 11, fill: chartColor.axis }
 
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+/** `['2026-08', '2026-09']` → «Agosto y septiembre» (mayúscula sólo la primera palabra). */
+const mesesEnTexto = (claves: string[]) => {
+  const n = claves.map((k) => MESES[Number(k.slice(5, 7)) - 1])
+  const t = n.length > 1 ? `${n.slice(0, -1).join(', ')} y ${n[n.length - 1]}` : n[0]
+  return t[0].toUpperCase() + t.slice(1)
+}
+
 /**
  * La tarjeta grande: lo vendido del mes, lo de AYER y la línea día a día (lo vendido CADA día, ⛔ acumulado).
  * 🔴 «Ayer», ⛔ «Hoy»: la copia de GN llega tarde en el día (30-oct 16 h: Zattia tenía 1 venta de hoy, ~30 de un día común).
@@ -89,11 +97,11 @@ export function TarjetaVendido({ mesNombre, vendido, ayer, anterior, variacion, 
 /** «Ventas y margen, mes a mes»: 12 meses, el de hoy marcado «en curso». */
 export function MesAMes({ meses }: { meses: Array<{ mes: string; nombre: string; vendido: number; margen: number | null; enCurso: boolean }> }) {
   const rayas = rayasRedondas(Math.max(...meses.map((m) => m.vendido)))
-  const sinCosto = meses.filter((m) => m.margen == null && m.vendido > 0).map((m) => m.nombre)
+  const sinCosto = meses.filter((m) => m.margen == null && m.vendido > 0).map((m) => m.mes)
   return (
     <div style={{ ...tarjeta, gap: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[2], flexWrap: 'wrap' }}>
-        <h3 style={titulo}>Ventas y margen, mes a mes</h3>
+        <h3 style={titulo}>Últimos 12 meses</h3>
         <Leyenda items={[['Vendido', chartColor.brand], ['Margen', MARGEN]]} />
       </div>
       <div style={{ height: 220 }}>
@@ -108,7 +116,7 @@ export function MesAMes({ meses }: { meses: Array<{ mes: string; nombre: string;
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <div style={{ fontSize: font.sm, color: color.mut }}>El último mes va hasta hoy (en curso).{sinCosto.length ? ` ${sinCosto.join(', ')}: sin margen, porque Gestión Nube no tiene el costo de esas ventas.` : ''}</div>
+      <div style={{ fontSize: font.sm, color: color.mut }}>{sinCosto.length ? `${mesesEnTexto(sinCosto)}: sin margen (ventas sin costo).` : null}</div>
     </div>
   )
 }
@@ -121,7 +129,7 @@ export function ComoViene({ filas, ahora, antes }: { filas: Array<{ dia: number;
   return (
     <div style={{ ...tarjeta, gap: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[2], flexWrap: 'wrap' }}>
-        <h3 style={titulo}>Cómo viene el mes</h3>
+        <h3 style={titulo}>Acumulado del mes</h3>
         <Leyenda items={[[ahora, chartColor.brand, true], [antes, ANTES, true]]} />
       </div>
       <div style={{ height: 220 }}>
@@ -158,8 +166,8 @@ function FilaBarra({ nombre, parte, monto, extra, c }: { nombre: string; parte: 
 export function PorCanal({ canales }: { canales: Array<{ nombre: string; ventas: number; vendido: number; parte: number; margen: number | null }> }) {
   return (
     <div style={{ ...tarjeta, gap: 12 }}>
-      <h3 style={titulo}>Por canal</h3>
-      {canales.length === 0 && <div style={{ fontSize: font.sm, color: color.mut }}>Todavía no hay ventas este mes.</div>}
+      <h3 style={titulo}>Ventas por canal</h3>
+      {canales.length === 0 && <div style={{ fontSize: font.sm, color: color.mut }}>Sin ventas este mes.</div>}
       {canales.map((c) => (
         <FilaBarra key={c.nombre} nombre={c.nombre} parte={c.parte} c={chartColor.brand} monto={plataCorta(c.vendido)}
           extra={`${Math.round(c.parte * 100)}% · ${c.ventas.toLocaleString('es-AR')} ventas`} />
@@ -176,13 +184,13 @@ export function MasDejan({ productos, href, estado }: { productos: Array<{ id: s
   const max = Math.max(1, ...productos.map((p) => p.margen ?? 0))
   return (
     <div style={{ ...tarjeta, gap: 12 }}>
-      <h3 style={titulo}>Lo que más deja margen del mes</h3>
+      <h3 style={titulo}>Mayor margen</h3>
       {estado && <div style={{ fontSize: font.sm, color: estado === '…' ? color.mut : 'var(--mo-danger-ink)' }}>{estado}</div>}
-      {!estado && productos.length === 0 && <div style={{ fontSize: font.sm, color: color.mut }}>Ningún producto vendido este mes tiene costo cargado.</div>}
+      {!estado && productos.length === 0 && <div style={{ fontSize: font.sm, color: color.mut }}>Sin productos con costo.</div>}
       {productos.map((p) => (
         <FilaBarra key={p.id} nombre={p.nombre} parte={(p.margen ?? 0) / max} c={MARGEN} monto={formatMoney(p.margen ?? 0)} extra={`${p.unidades.toLocaleString('es-AR')} u.`} />
       ))}
-      <Link href={href} style={{ fontSize: font.sm, fontWeight: weight.semibold, marginTop: 'auto' }}>Ver por producto ›</Link>
+      <Link href={href} style={{ fontSize: font.sm, fontWeight: weight.semibold, marginTop: 'auto' }}>Ver todos ›</Link>
     </div>
   )
 }

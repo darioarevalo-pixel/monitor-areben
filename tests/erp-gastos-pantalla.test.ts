@@ -56,7 +56,7 @@ describe('el costo de envío (motor sql/067)', () => {
   })
   it('el Resultado de Inicio: cada gasto en su renglón, también los que dan 0, y suman el total', () => {
     const rs = renglonesDelResultado(d)
-    expect(rs.map(([k]) => k)).toEqual(['Comisión de los cobros', 'Costo de Tienda Nube', 'Costo de envío', 'Impuestos', 'Otros gastos'])
+    expect(rs.map(([k]) => k)).toEqual(['Comisiones', 'Tienda Nube', 'Envíos', 'Impuestos', 'Otros'])
     expect(rs.reduce((s, [, v]) => s + v, 0)).toBe(450_000 + 242 + 6904 + 200_000 + 360_000)
     expect(renglonesDelResultado({ por_tipo: { comision: 5 } }).map(([, v]) => v)).toEqual([5, 0, 0, 0, 0])
   })

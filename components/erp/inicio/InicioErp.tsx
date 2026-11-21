@@ -19,11 +19,10 @@ import { contarVistas as vistasDeVentas, filtrar as filtrarVentas, rangoDePeriod
 import { contarVistas as vistasDeStock, filtrar as filtrarStock } from '@/lib/erp/stock-lista.core.js'
 import { contarVistas as vistasDeProductos, filtrar as filtrarProductos } from '@/lib/erp/productos-lista.core.js'
 import { useLineaErp, useTiendaErp } from '@/lib/erp/linea-erp'
-import { useLineaEnErp } from '@/lib/erp/prueba-corte'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
 import { renglonesDelResultado } from '@/lib/erp/gastos.core.js'
 import { elegirRolVisto, useRolVisto } from '@/lib/erp/ver-como'
-import { ROLES, VISTA, paraHacerDe, rolDe, subtituloDe, verResultado } from '@/lib/erp/inicio-roles.core.js'
+import { ROLES, paraHacerDe, rolDe, verResultado } from '@/lib/erp/inicio-roles.core.js'
 import { esAdmin } from '@/lib/permisos'
 import { agrupar as agruparPorProducto, filtrar as filtrarPorProducto } from '@/lib/erp/ventas-producto.core.js'
 import { comoVieneElMes, doceMeses, masDejan, porCanal, stockACosto, vendidoDelDia } from '@/lib/erp/inicio-panel.core.js'
@@ -34,8 +33,6 @@ import { MESES_ATRAS, correrMes, ultimoDiaDelMes } from '@/lib/erp/meses.core.js
 type Conteo = Record<string, number> | string | null
 /** Stock y Productos se guardan CRUDOS y se cuentan sobre la línea elegida (como las pantallas a las que llevan). */
 type Crudo = { filas: unknown[] } | string | null
-
-const TITULO: Record<string, string> = { ventas: 'Ventas', stock: 'Stock', productos: 'Productos', facturacion: 'Facturación' }
 
 /** `2026-10-30` → `2026-10-29`. */
 const diaAnterior = (d: string) => new Date(Date.parse(`${d}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10)
@@ -98,7 +95,6 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   // La tienda del menú: los gastos (y el resultado) son de ESA línea, ⛔ de Zattia + Stunned (Bruno, 30-oct).
   const tienda = useTiendaErp()
-  const enErp = useLineaEnErp(tienda) === true
   const [resultado, setResultado] = useState<{ marca: string; mes: string; r: ResultadoDelMes | null; error: string | null } | null>(null)
   // Los gastos comerciales REALES del mismo mes (⛔ los de prueba: son de ventas que Gestión Nube no tiene).
   const [gastos, setGastos] = useState<{ marca: string; mes: string; g: GastosDelPeriodo | null; error: string | null } | null>(null)
@@ -162,12 +158,12 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
   const ppm = pp?.marca === marca && pp.mes === mes ? pp : null
   const top = ppm?.renglones ? masDejan(agruparPorProducto(filtrarPorProducto(ppm.renglones as never, { linea }))) : null
   const avisos = [
-    gs?.g && gs.g.cobrosSinComision > 0 ? `${cuantos(gs.g.cobrosSinComision, 'cobro', 'cobros')} con tarjeta o Mercado Pago sin tasa cargada: esas comisiones no están en los gastos.` : null,
-    gs?.g?.ordenesMlSinComision ? `${cuantos(gs.g.ordenesMlSinComision, 'orden', 'órdenes')} de Mercado Libre sin lo que cobra: esa comisión no está en los gastos.` : null,
-    gs?.g?.enviosSinCosto ? `${cuantos(gs.g.enviosSinCosto, 'pedido', 'pedidos')} de Tienda Nube sin el costo de envío: ese costo no está en los gastos.` : null,
-    m?.sinCosto ? `${cuantos(m.sinCosto, 'venta', 'ventas')} sin costo en Gestión Nube: suman su precio sin restar nada.` : null,
-    stock?.productosSinCosto ? `${cuantos(stock.productosSinCosto, 'producto', 'productos')} con stock sin costo (${cuantos(stock.sinCosto, 'unidad', 'unidades')}): no suman al stock a costo.` : null,
-    r?.gnHasta && m && r.gnHasta < m.hasta ? `Gestión Nube llega hasta el ${fecha(r.gnHasta)}: lo de después todavía no está.` : null,
+    gs?.g && gs.g.cobrosSinComision > 0 ? `${cuantos(gs.g.cobrosSinComision, 'cobro', 'cobros')} sin comisión cargada.` : null,
+    gs?.g?.ordenesMlSinComision ? `${cuantos(gs.g.ordenesMlSinComision, 'orden', 'órdenes')} de Mercado Libre sin comisión.` : null,
+    gs?.g?.enviosSinCosto ? `${cuantos(gs.g.enviosSinCosto, 'pedido', 'pedidos')} de Tienda Nube sin costo de envío.` : null,
+    m?.sinCosto ? `${cuantos(m.sinCosto, 'venta', 'ventas')} sin costo: el margen queda más alto.` : null,
+    stock?.productosSinCosto ? `${cuantos(stock.productosSinCosto, 'producto', 'productos')} sin costo (${cuantos(stock.sinCosto, 'unidad', 'unidades')}): no suman al stock valorizado.` : null,
+    r?.gnHasta && m && r.gnHasta < m.hasta ? `Ventas cargadas hasta el ${fecha(r.gnHasta)}.` : null,
   ].filter((t): t is string => !!t)
 
   return (
@@ -180,7 +176,7 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
             <h1 style={{ margin: 0, fontSize: 30, fontWeight: weight.bold, letterSpacing: '-0.02em', color: color.ink }}>{tituloDelMes(verResultado(rol) ? finDelMes : hoy)}</h1>
             {verResultado(rol) && <Button size="sm" variant="ghost" aria-label="Mes siguiente" disabled={!pasado} onClick={() => setMes((x) => correrMes(x, 1))}>›</Button>}
           </div>
-          <div style={{ fontSize: font.sm, color: color.mut }}>{rol === 'admin' ? (pasado ? <>mes completo · <button type="button" onClick={() => setMes(hoy.slice(0, 7))} style={{ height: 'auto', padding: 0, border: 0, background: 'none', color: 'var(--mo-accent, inherit)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}>Volver a {MESES[Number(hoy.slice(5, 7)) - 1]}</button></> : `al ${Number(hoy.slice(8, 10))} de ${MESES[Number(hoy.slice(5, 7)) - 1]}`) : `Viendo como ${ROLES.find(([k]) => k === rol)?.[1]}`}</div>
+          <div style={{ fontSize: font.sm, color: color.mut }}>{rol === 'admin' ? (pasado ? <><button type="button" onClick={() => setMes(hoy.slice(0, 7))} style={{ height: 'auto', padding: 0, border: 0, background: 'none', color: 'var(--mo-accent, inherit)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}>Volver a {MESES[Number(hoy.slice(5, 7)) - 1]}</button></> : `al ${Number(hoy.slice(8, 10))} de ${MESES[Number(hoy.slice(5, 7)) - 1]}`) : null}</div>
         </div>
         {(esAdmin(perfil) || visto) && <VerComo rol={rol} setRol={elegirRolVisto} />}
       </header>
@@ -192,25 +188,25 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
           <div style={tarjeta}>
             <span style={rotulo}>Margen bruto</span>
             <span style={grande}>{m ? formatMoney(m.margen) : '…'}</span>
-            {m && <span style={nota}>{m.vendido ? Math.round((m.margen / m.vendido) * 100) : 0}% de lo vendido{a ? <> · <Variacion ahora={m.margen} antes={a.margen} /> contra {pasado ? 'el mes anterior' : 'el mes pasado'}</> : null}</span>}
+            {m && <span style={nota}>{m.vendido ? Math.round((m.margen / m.vendido) * 100) : 0}% de lo vendido{a ? <> · <Variacion ahora={m.margen} antes={a.margen} /> contra {MESES[Number(a.desde.slice(5, 7)) - 1]}</> : null}</span>}
           </div>
           <div style={tarjeta}>
             <span style={rotulo}>Resultado comercial</span>
             <span style={grande}>{m && gTotal != null ? formatMoney(m.margen - gTotal) : '…'}</span>
-            <span style={nota}>{gs?.error ? gs.error : gTotal == null ? 'margen menos gastos comerciales' : gTotal ? `margen menos gastos comerciales (${formatMoney(gTotal)}, reales de Areben Gestión)` : 'margen menos gastos comerciales: todavía no hay gastos reales en Areben Gestión'}</span>
+            <span style={nota}>{gs?.error ? gs.error : gTotal == null ? 'Margen menos gastos' : gTotal ? `Margen menos gastos (${formatMoney(gTotal)})` : 'Sin gastos cargados.'}</span>
             {gs?.g && <div aria-label="Gastos del resultado" style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
               {renglonesDelResultado(gs.g).map(([k, v]) => <span key={k} style={{ ...nota, display: 'flex', justifyContent: 'space-between', gap: space[2] }}><span>{k}</span><span>{formatMoney(v)}</span></span>)}
             </div>}
           </div>
           <div style={tarjeta}>
-            <span style={rotulo}>Ventas</span>
+            <span style={rotulo}>Cantidad de ventas</span>
             <span style={grande}>{m ? m.ventas.toLocaleString('es-AR') : '…'}</span>
-            {m && <span style={nota}>ticket promedio {formatMoney(m.ventas ? m.vendido / m.ventas : 0)}{a ? ` · ${m.ventas.toLocaleString('es-AR')} contra ${a.ventas.toLocaleString('es-AR')} del ${pasado ? 'mes anterior' : 'mes pasado'}` : ''}</span>}
+            {m && <span style={nota}>Ticket promedio {formatMoney(m.ventas ? m.vendido / m.ventas : 0)}{a ? ` · ${a.ventas.toLocaleString('es-AR')} en ${MESES[Number(a.desde.slice(5, 7)) - 1]}` : ''}</span>}
           </div>
           <div style={tarjeta}>
-            <span style={rotulo}>Stock a costo</span>
-            <span style={grande}>{stock ? formatMoney(stock.costo) : typeof crudos.productos === 'string' ? 'No se pudo' : '…'}</span>
-            {stock && <span style={nota}>{stock.unidades.toLocaleString('es-AR')} unidades disponibles{m && m.costo > 0 && linea !== 'stunned' ? ` · ≈ ${(stock.costo / m.costo * (Number(m.hasta.slice(8, 10)) / 30)).toLocaleString('es-AR', { maximumFractionDigits: 1 })} meses de venta al costo` : ''}</span>}
+            <span style={rotulo}>Stock valorizado</span>
+            <span style={grande}>{stock ? formatMoney(stock.costo) : typeof crudos.productos === 'string' ? 'No se pudo leer' : '…'}</span>
+            {stock && <span style={nota}>{stock.unidades.toLocaleString('es-AR')} unidades{m && m.costo > 0 && linea !== 'stunned' ? ` · Cobertura: ${(stock.costo / m.costo * (Number(m.hasta.slice(8, 10)) / 30)).toLocaleString('es-AR', { maximumFractionDigits: 1 })} meses` : ''}</span>}
           </div>
         </div>
         {avisos.length > 0 && (
@@ -227,14 +223,13 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
           <MasDejan productos={top ?? []} estado={top ? null : pp?.error ?? '…'} href={href('ventas', 'por-producto')} />
         </div>
         <div style={{ fontSize: font.sm, color: color.mut }}>
-          {m && a ? `Del ${fecha(m.desde)} al ${fecha(m.hasta)}, contra el ${fecha(a.desde)} al ${fecha(a.hasta)}` : 'Este mes'} · lo vendido, el margen y los canales son de Gestión Nube y, desde que la marca pasó a Areben Gestión, de Areben Gestión, con su costo. Lo que más deja usa el costo vigente de Areben Gestión, como Ventas › Por producto. El stock a costo es el disponible de Stock por el costo de cada producto.
+          {m && a ? `Del ${fecha(m.desde)} al ${fecha(m.hasta)}, contra el ${fecha(a.desde)} al ${fecha(a.hasta)}.` : null}
         </div>
       </section>}
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
         <div>
-          <h2 style={h2}>Para hacer</h2>
-          <div style={{ fontSize: font.sm, color: color.mut }}>{rol === 'admin' ? 'por rol, con el número de cada lista' : `${ROLES.find(([k]) => k === rol)?.[1]}: ${subtituloDe(rol)}`}</div>
+          <h2 style={h2}>Pendientes</h2>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: space[3] }}>
           {paraHacerDe(rol).map(([tarjeta, items]) => (
@@ -244,9 +239,9 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
                 const c = de[lista as 'ventas' | 'stock' | 'productos']
                 const nro = typeof c === 'object' && c ? c[vista] ?? 0 : null
                 return (
-                  <Link key={vista} href={href(seccion, pestania)} title={typeof c === 'string' ? c : `${TITULO[pestania]} › vista «${VISTA[vista]}»`}
+                  <Link key={vista} href={href(seccion, pestania)} title={typeof c === 'string' ? c : undefined}
                     style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: space[2], padding: '7px 0', borderTop: `1px solid ${color.bg2}`, color: color.ink, textDecoration: 'none' }}>
-                    <span style={{ minWidth: 0 }}>{que}<span style={{ display: 'block', fontSize: font.sm, color: color.mut }}>{TITULO[pestania]} › {VISTA[vista]}</span></span>
+                    <span style={{ minWidth: 0 }}>{que}</span>
                     <span style={{ fontSize: 20, fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums', color: nro ? color.ink : color.mut2 }}>
                       {typeof c === 'string' ? <span style={{ fontSize: font.sm, color: 'var(--mo-danger-ink)' }}>no se pudo</span> : nro == null ? '…' : nro.toLocaleString('es-AR')}
                     </span>
@@ -256,7 +251,6 @@ export function InicioErp({ href }: { href: (seccion: string, pestania?: string)
             </div>
           ))}
         </div>
-        <div style={{ fontSize: font.sm, color: color.mut }}>Ventas cuenta las de este mes de Areben Gestión{enErp ? '' : ' (en paralelo con Gestión Nube)'}. Lo que se hace afuera —conteos, transferencias, preparación— sigue en el monitor.</div>
       </section>
     </div>
   )
