@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "9a928d08e154d282776fe4ae1e45f4409412ccb4",
-  "traido_en": "2026-11-19T13:57:10.294Z",
+  "commit": "50b042262ac85ebce7dd85ba5fe0e72cab3b0260",
+  "traido_en": "2026-11-22T18:24:49.444Z",
   "archivos": {
     "alerta.mjs": "8c4ea3f813cdd8d8644e9ed0a426d7c6202618971249eca0b41f780e40d904f6",
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
@@ -57,7 +57,7 @@
     "tn/orden.mjs": "e3d77bb1841090ee88fa1c8827a324b6f2554f030568b70a87d15608c620643d",
     "tn/pedido-stock.mjs": "c522d367bec1862818282835809b203bb378e6332352123478a7b70ac816aef4",
     "tn/precio.mjs": "06eb27e549f135fa69d3dbbc8749acccaea87a34cc7d3d65a1e52453c414ac9e",
-    "tn/stock.mjs": "a6e9e3d6fe5d8b8713f16569f2c8f98c8a9e2271ff64e5e5d98ba13d38fe17e3",
+    "tn/stock.mjs": "983dc87df1d6004a5fd779dd63c8ec7e58a674a7136896ecbd5db4a2ee97c619",
     "tn/venta.mjs": "a2b9ef46b74b34d88dd1e61a41816fe502ccb7dc295c551dbcecf5b55a136512",
     "tn/vinculo-db.mjs": "5a1a3deab44d7da433f5c3d809715fb6b434766d9e420b7ce446f38c6713d460",
     "tn/vinculo.mjs": "cde453304aff70dd1493ee5d47c77945cf9ccfbff73d408b45df359e44d65eef",
