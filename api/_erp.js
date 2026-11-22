@@ -56,7 +56,7 @@
  *   POST {recurso:'erp', accion:'cambiar', marca, id, ventaId, devueltas, items, pagos, total, desde?, pago?, comprobante?, cliente?}
  *        el cambio en el local: cobra la diferencia con el descuento de la forma de pago y, con transferencia,
  *        contesta `esperando` hasta que llega el pago (la pantalla repite el MISMO pedido)
- *   POST {recurso:'erp', accion:'facturar-venta', marca, ventaId, clase:'A'|'B', doc?, condicion?, razonSocial?, domicilio?, reimprimir?}
+ *   POST {recurso:'erp', accion:'facturar-venta', marca, ventaId, clase:'A'|'B', doc?, nombre?, condicion?, razonSocial?, domicilio?, reimprimir?}
  *   POST {recurso:'erp', accion:'facturar-cambio', marca, ventaId, simular?}   NC por lo devuelto + factura por lo nuevo
  *        la factura A PEDIDO de una venta propia (la Caja): una, con su CAE, y atada a la venta en el motor
  *   POST {recurso:'erp', accion:'nota-credito-venta', marca, ventaId}  la NC de una venta propia ANULADA con factura
@@ -774,11 +774,19 @@ export async function buscarVentas({ marca, q, desde, hasta, propias = false }) 
 }
 
 /** La ficha de una venta propia (`venta_ficha`), con el nombre de cada prenda y sus cambios. */
-export async function fichaDeVenta({ marca, id }) {
+export async function fichaDeVenta({ marca, id, deCaja = false }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   if (!/^[0-9a-f-]{36}$/i.test(String(id || ''))) return { status: 400, error: 'Venta inválida' }
   const { url, key } = cfgDeMarca(marca)
   const sb = createClient(url, key)
+  // Desde la Caja (Facturar en la última venta o en Ventas, 22-nov): `id` es el de `caja_venta` ⇒ la venta que anotó en Areben
+  // Gestión (`origen_ref`). La real primero: antes del corte la Caja mandaba además una copia de prueba.
+  if (deCaja) {
+    const r = await sb.from('venta').select('id').eq('origen', 'caja').eq('origen_ref', String(id)).eq('tipo', 'venta').order('prueba').limit(1)
+    if (r.error) throw new Error(`venta: ${r.error.message}`)
+    if (!r.data?.length) return { status: 404, error: 'Esa venta todavía no está en Areben Gestión.' }
+    id = r.data[0].id
+  }
   const { data: f, error } = await sb.from('venta_ficha').select('*').eq('id', id).maybeSingle()
   if (error) throw new Error(`venta_ficha: ${error.message}`)
   if (!f) return { status: 404, error: 'La venta no existe.' }
@@ -1182,6 +1190,11 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
       if (gn.data.length) return { status: 409, error: 'Esa venta ya está facturada en Gestión Nube.' }
     }
 
+    // 🔑 La clienta se guarda y la venta queda a su nombre ANTES de pedir el CAE (Bruno, 22-nov: «crear cliente, asociar la
+    // factura al cliente y emitirle la factura, todo desde el POS»). Si la ficha ⛔ se guarda, ⛔ sale la factura: todavía no
+    // hay nada que no se pueda deshacer. Sólo la primera vez: la que ya tiene factura se devuelve como está.
+    const antes = !ya && !body?.reimprimir && !deps.receptorPdf && p.cliente ? await fichaDeLaClienta(db, { venta: f, pedida: p, usuario }) : null
+    if (antes?.error) return { status: 409, error: antes.error }
     let factura = ya
     if (!factura) {
       const arca = arcaDe(deps, sb)
@@ -1205,7 +1218,9 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
     const sinAtar = await atarFactura(db, { venta: f, facturaId: factura.id, tipo: 'factura' })
     const { receptor, sinFicha } = deps.receptorPdf
       ? { receptor: deps.receptorPdf, sinFicha: null }
-      : p.cliente
+      : antes
+      ? { receptor: antes.receptor, sinFicha: antes.aviso }
+      : p.cliente && p.tipo === CBTE.FACTURA_A
       ? await guardarFichaA(db, { venta: f, doc: p.receptor.docNro, condicionIva: p.receptor.condicionIva, ...p.cliente })
       : { receptor: await receptorDeFicha(db, { empresaId: f.empresa_id, factura }), sinFicha: null }
     const nombres = await nombresDeVariantes(b, (f.lineas || []).map((l) => l.product_id))
@@ -1252,6 +1267,32 @@ async function guardarFichaA(db, { venta, doc, condicionIva, razonSocial, domici
   // ⛔ el documento ni el mensaje (puede traerlo) en el log: la venta alcanza para encontrarla (auditoría 20-oct).
   console.error(`[erp] ficha de la clienta de la venta ${venta.id} sin guardar: ${r.error.codigo}`)
   return { receptor, sinFicha: `La factura salió, pero la ficha de la clienta no se guardó: ${r.error.mensaje}` }
+}
+
+/**
+ * La FICHA de la clienta que pidió la factura (contrato §11, `guardarCliente`, una por empresa y documento) y la venta A SU
+ * NOMBRE (`editarVenta` del motor, `cliente_id`, con su historial). A: CUIT, razón social, condición y domicilio. B: el documento
+ * y el nombre que cargó la cajera. Devuelve el receptor del PDF, o `error` si la ficha ⛔ se guardó (la factura ⛔ sale). Que la
+ * venta ⛔ quede a su nombre (movió la cuenta de otra clienta) es un aviso: la factura sale igual.
+ * @param {any} db @param {{ venta: any, pedida: any, usuario: string | null }} a
+ */
+async function fichaDeLaClienta(db, { venta, pedida, usuario }) {
+  const { guardarCliente } = await import('../motor/venta/registrar.mjs')
+  const esA = pedida.tipo === CBTE.FACTURA_A
+  const datos = esA
+    ? { nombre: pedida.cliente.razonSocial, razon_social: pedida.cliente.razonSocial, condicion_iva: pedida.receptor.condicionIva, domicilio: pedida.cliente.domicilio }
+    : { nombre: pedida.cliente.nombre }
+  const r = await guardarCliente(db, { empresa_id: venta.empresa_id, doc: String(pedida.receptor.docNro), ...datos })
+  if (!r.ok) {
+    // ⛔ el documento en el log (auditoría 20-oct): la venta alcanza para encontrarla.
+    console.error(`[erp] ficha de la clienta de la venta ${venta.id} sin guardar: ${r.error.codigo}`)
+    return { error: `No se pudo guardar la clienta: ${r.error.mensaje}. La factura no salió.` }
+  }
+  const receptor = { nombre: r.cliente.razon_social || r.cliente.nombre, domicilio: r.cliente.domicilio || null }
+  if (String(venta.cliente_id ?? '') === String(r.cliente.id)) return { receptor, aviso: null }
+  const { editarVenta } = await import('../motor/venta/ficha.mjs')
+  const e = await editarVenta(db, { venta_id: venta.id, cambios: { cliente_id: r.cliente.id }, usuario: usuario || 'caja' })
+  return { receptor, aviso: e.ok ? null : `La factura sale, pero la venta no quedó a nombre de la clienta: ${e.error.mensaje}` }
 }
 
 /** El receptor de una factura A ya hecha (reimprimir), de la ficha por su CUIT. null si ⛔ es A o ⛔ hay ficha. */
@@ -2309,7 +2350,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET' && req.query.vista === 'venta') {
-      const r = await fichaDeVenta({ marca: String(req.query.marca || ''), id: req.query.id })
+      const r = await fichaDeVenta({ marca: String(req.query.marca || ''), id: req.query.id, deCaja: req.query.caja === '1' })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 

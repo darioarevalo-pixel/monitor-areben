@@ -61,4 +61,19 @@ describe('UltimaVenta · de qué sistema es el número', () => {
     pintar({ ...(VENTA as object), estado: 'error', gn_number: null, ultimo_error: 'sin respuesta' })
     expect(caja.textContent).toContain('pendiente en Gestión Nube')
   })
+
+  // Bruno, 22-nov: «Facturar» desde la Caja, sólo para la venta que ya está en Areben Gestión (⛔ un cambio, ⛔ la de Gestión Nube).
+  it('«Facturar»: en una venta de Areben Gestión sí; en la de Gestión Nube, en un cambio o sin permiso, ⛔', () => {
+    const facturar = vi.fn()
+    const enErp = { ...(VENTA as object), estado: 'en_erp', erp_numero: 4127 } as never
+    act(() => raiz.render(<UltimaVenta venta={enErp} onFacturar={facturar} />))
+    act(() => [...caja.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Facturar')!.click())
+    expect(facturar).toHaveBeenCalledTimes(1)
+    act(() => raiz.render(<UltimaVenta venta={VENTA} onFacturar={facturar} />))
+    expect(botones()).not.toContain('Facturar')
+    act(() => raiz.render(<UltimaVenta venta={enErp} cambio={{ aFavor: 0 }} onFacturar={facturar} />))
+    expect(botones()).not.toContain('Facturar')
+    act(() => raiz.render(<UltimaVenta venta={enErp} />))
+    expect(botones()).not.toContain('Facturar')
+  })
 })

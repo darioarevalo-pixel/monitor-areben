@@ -68,6 +68,12 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   qué cuenta como pago allá cambia qué confirma una venta acá.
 
 ## Reglas que el código no dice
+- 🔑 **FACTURAR DESDE LA CAJA (Bruno, 22-nov; maqueta aprobada https://claude.ai/artifact/R6Pgxdw9h62d7E6QvzYsV8)**: «Facturar» en la
+  tarjeta de la última venta y en Ventas (lista y resumen), SÓLO con la venta `en_erp` y ⛔ en un cambio, con el permiso `facturar-venta`
+  (`usePuedeErp`). Abre `components/caja/FacturarVenta.tsx` = la MISMA factura a pedido de Areben Gestión (`FacturaCaja` con
+  `cajaInicial`: la ficha se lee por `caja_venta.id`, `vista=venta&caja=1`), ⛔ una copia. 🔑 **Primero se vende, después se factura.**
+  🔑 **La clienta ANTES del CAE**: B con DNI/CUIT + nombre, o A ⇒ `guardarCliente` + `editarVenta(cliente_id)` (`fichaDeLaClienta` en
+  `api/_erp.js`); si la ficha ⛔ se guarda, la factura ⛔ sale. Tests `caja-facturar-clienta`, `caja-ultima-venta`.
 - 🔑 **El CAMBIO en el POS (modo «⇄ Cambios», Bruno, 27-oct; nació para Stunned)**: botón en la cabecera (con alguna línea en `erp_lineas`), banda con
   «1 Lo que devuelve ▸ 2 Lo que se lleva». **Todo el estado y las cuentas viven en `components/caja/useCambio.ts`**, el MISMO que usa
   erp › Caja › Cambio (`CambioCaja.tsx`): ⛔ copiar reglas ahí. Tres orígenes de lo devuelto: venta del ERP, venta de Gestión Nube

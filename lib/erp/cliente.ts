@@ -292,8 +292,9 @@ export type FichaDeVenta = {
 export const buscarVentas = (marca: MarcaErp, f: { q: string; desde: string; hasta: string; propias?: boolean }) =>
   pedir<{ ventas: VentaPropia[]; cortado: boolean }>(null, `&vista=ventas&marca=${marca}&q=${encodeURIComponent(f.q)}&desde=${f.desde}&hasta=${f.hasta}${f.propias ? '&propias=1' : ''}&nc=${Date.now()}`, 'No se pudo buscar.')
 
-export const leerFichaDeVenta = (marca: MarcaErp, id: string) =>
-  pedir<FichaDeVenta>(null, `&vista=venta&marca=${marca}&id=${id}&nc=${Date.now()}`, 'No se pudo leer la venta.')
+/** `deCaja`: `id` es el de la venta de la Caja (`caja_venta.id`), ⛔ el de Areben Gestión. */
+export const leerFichaDeVenta = (marca: MarcaErp, id: string, { deCaja = false }: { deCaja?: boolean } = {}) =>
+  pedir<FichaDeVenta>(null, `&vista=venta&marca=${marca}&id=${id}${deCaja ? '&caja=1' : ''}&nc=${Date.now()}`, 'No se pudo leer la venta.')
 /** Para REIMPRIMIR desde ERP › Ventas (29-oct): la fila de la Caja si la venta es de ahí, y de qué venta salió un cambio. */
 export type TicketDeVentaErp = { cajaVenta: import('@/lib/caja/cliente').Venta | null; cambioDe: { sin_ticket?: boolean; numero?: string | number; gn_venta?: string | number; venta_id?: string } | null }
 export const leerTicketDeVenta = (marca: MarcaErp, id: string) =>
@@ -380,7 +381,7 @@ export const cambiarVenta = (marca: MarcaErp, c: {
 
 /** La factura a pedido de una venta propia (`erp › Caja`). B sin documento = consumidor final sin identificar. */
 export type PedidoFactura = {
-  ventaId: string; clase: 'A' | 'B'; doc?: string; condicion?: 'ri' | 'monotributo'; razonSocial?: string; domicilio?: string; reimprimir?: boolean
+  ventaId: string; clase: 'A' | 'B'; doc?: string; /** B con documento: guarda la clienta y la venta a su nombre. */ nombre?: string; condicion?: 'ri' | 'monotributo'; razonSocial?: string; domicilio?: string; reimprimir?: boolean
 }
 export const facturarVenta = (marca: MarcaErp, p: PedidoFactura) =>
   pedir<{ ok: true; yaEstaba: boolean; sinAtar: string | null; sinFicha?: string | null; factura: FacturaEmitida }>(post({ accion: 'facturar-venta', marca, ...p }), '', 'No se pudo facturar.')

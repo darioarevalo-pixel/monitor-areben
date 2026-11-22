@@ -25,9 +25,15 @@ import { buscarClientas, buscarVentas, facturarCambio, facturarVenta, leerCorteD
 import { NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
 import { seOfreceParaFacturar } from '@/lib/erp/factura.core.js'
 
-export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar» en la ficha de la venta: abre con ella cargada (Bruno, 9-nov). */ ventaInicial?: string | null }) {
+export function FacturaCaja({ ventaInicial = null, cajaInicial = null, store: storeDado, alCambiar }: {
+  /** Viene de «Facturar» en la ficha de la venta: abre con ella cargada (Bruno, 9-nov). */ ventaInicial?: string | null
+  /** Viene de «Facturar» en la Caja (Bruno, 22-nov): el id de la venta de la CAJA (`caja_venta.id`); abre sólo esa, sin buscador. */ cajaInicial?: string | null
+  /** La tienda de la Caja que abrió la ventana (fuera del ERP ⛔ hay marca del menú). */ store?: MarcaErp
+  /** Se facturó (o se trajo la que ya estaba): la Caja marca la venta. */ alCambiar?: () => void
+}) {
   const { marca: delShell } = useSesion()
-  const store = marcaParaPOS(null, delShell) as MarcaErp
+  const store = storeDado ?? (marcaParaPOS(null, delShell) as MarcaErp)
+  const desdeCaja = !!cajaInicial
   // Las ventas de la tienda del menú: mirando Stunned, ⛔ las de Zattia (Bruno, 30-oct).
   const tienda = useTiendaErp()
   usarMarcaCaja(store)
@@ -46,6 +52,8 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
   const [ficha, setFicha] = useState<FichaDeVenta | null>(null)
   const [clase, setClase] = useState<'A' | 'B'>('B')
   const [doc, setDoc] = useState('')
+  // B con documento: el nombre deja la ficha de la clienta y la venta a su nombre (Bruno, 22-nov).
+  const [nombre, setNombre] = useState('')
   const [condicion, setCondicion] = useState<'' | 'ri' | 'monotributo'>('')
   const [razonSocial, setRazonSocial] = useState('')
   const [domicilio, setDomicilio] = useState('')
@@ -71,7 +79,7 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
   }
 
   const limpiarA = () => { setCondicion(''); setRazonSocial(''); setDomicilio(''); setBuscaClienta(''); setClientas([]); setDeFicha(null) }
-  const limpiar = () => { setFicha(null); setClase('B'); setDoc(''); limpiarA(); setHecha(null); setPlanCambio(null); setCambioHecho(null) }
+  const limpiar = () => { setFicha(null); setClase('B'); setDoc(''); setNombre(''); limpiarA(); setHecha(null); setPlanCambio(null); setCambioHecho(null) }
 
   /** Completa la A con la ficha elegida (lo que la ficha ⛔ tiene queda como estaba). */
   const usarFicha = (c: Clienta) => {
@@ -115,12 +123,13 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
     setVentas((await buscarVentas(store, { q, desde: '', hasta: '', propias: true })).ventas.filter((v) => seOfreceParaFacturar(v) && (tienda === 'bdi' || v.marca === tienda)))
   }, 'No se pudo buscar.')
 
-  const abrir = (id: string) => correr(async () => {
+  const abrir = (id: string, deCaja = false) => correr(async () => {
     limpiar()
-    const f = await leerFichaDeVenta(store, id)
+    const f = await leerFichaDeVenta(store, id, { deCaja })
     setFicha(f)
-    // Si la venta ya tiene cliente identificado, su documento viene puesto.
+    // Si la venta ya tiene cliente identificado, su documento y su nombre vienen puestos.
     if (f.cliente?.doc) setDoc(f.cliente.doc)
+    if (f.cliente?.nombre && f.cliente?.doc) setNombre(f.cliente.nombre)
     // Un cambio: cuánto saldría de nota de crédito y de factura (⛔ pide nada a ARCA). Si ⛔ se puede, dice por qué.
     if (f.venta.tipo === 'cambio') {
       const r = await facturarCambio(store, id, true)
@@ -158,28 +167,41 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
 
   // Desde la ficha: la venta ya está elegida, ⛔ se busca de nuevo.
   useEffect(() => {
-    if (!ventaInicial) return
-    const t = setTimeout(() => void abrir(ventaInicial), 0)
+    if (!ventaInicial && !cajaInicial) return
+    const t = setTimeout(() => void (cajaInicial ? abrir(cajaInicial, true) : abrir(ventaInicial!)), 0)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ventaInicial])
+  }, [ventaInicial, cajaInicial])
+
+  // B: un DNI o CUIT completo que ya tiene ficha trae el nombre (⛔ pisa lo que la cajera ya escribió).
+  const docB = clase === 'B' ? doc.replace(/\D/g, '') : ''
+  useEffect(() => {
+    if (![7, 8, 11].includes(docB.length)) return
+    let vivo = true
+    buscarClientas(store, docB).then(({ clientas: [c] }) => {
+      if (vivo && c && c.doc === docB) setNombre((x) => x || c.nombre)
+    }).catch(() => {})
+    return () => { vivo = false }
+  }, [docB, store])
 
   const docLimpio = doc.replace(/\D/g, '')
   const faltaDato = clase === 'A' ? docLimpio.length !== 11 || !condicion || razonSocial.trim().length < 2 || domicilio.trim().length < 3 : !!docLimpio && ![7, 8, 11].includes(docLimpio.length)
+  const nombreB = clase === 'B' && docLimpio ? nombre.trim() : ''
 
   async function facturar() {
     if (!ficha) return
     const pedido: PedidoFactura = {
-      ventaId: ficha.venta.id, clase, ...(docLimpio ? { doc: docLimpio } : {}),
+      ventaId: ficha.venta.id, clase, ...(docLimpio ? { doc: docLimpio } : {}), ...(nombreB ? { nombre: nombreB } : {}),
       ...(clase === 'A' ? { condicion: condicion || undefined, razonSocial: razonSocial.trim(), domicilio: domicilio.trim() } : {}),
     }
     const ok = await confirmar({
       titulo: `¿Facturar la venta #${ficha.venta.numero}?`,
       mensaje: (
         <div>
-          <ConfirmDetalle label="Factura" valor={clase} />
+          <ConfirmDetalle label="Tipo" valor={`Factura ${clase}`} />
           <ConfirmDetalle label="Total" valor={<MoneyText value={ficha.venta.total} />} />
-          <ConfirmDetalle label="Para" valor={clase === 'A' ? `${razonSocial.trim()} · CUIT ${docLimpio} · ${condicion === 'ri' ? 'Responsable inscripto' : 'Monotributista'}` : docLimpio ? `Consumidor final · ${docLimpio}` : 'Consumidor final'} />
+          <ConfirmDetalle label="Para" valor={clase === 'A' ? `${razonSocial.trim()} · CUIT ${docLimpio} · ${condicion === 'ri' ? 'Responsable inscripto' : 'Monotributista'}` : docLimpio ? `${nombreB || 'Consumidor final'} · ${docLimpio}` : 'Consumidor final sin identificar'} />
+          {(clase === 'A' || nombreB) && <p style={{ marginTop: space[2] }}>La clienta queda guardada y la venta, a su nombre.</p>}
           {clase === 'A' && <ConfirmDetalle label="Domicilio" valor={domicilio.trim()} />}
           <p style={{ marginTop: space[3] }}>No se puede eliminar.</p>
         </div>
@@ -194,6 +216,7 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
       const avisos = [r.sinAtar, r.sinFicha].filter(Boolean)
       if (avisos.length) setError(avisos.join(' · '))
       setFicha(await leerFichaDeVenta(store, ficha.venta.id))
+      alCambiar?.()
     }, 'No se pudo facturar.')
   }
 
@@ -209,6 +232,7 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
+      {desdeCaja ? (sinCortar && <Notice tone="warning">{NOMBRE_MARCA[tienda] ?? tienda}: solo facturas de prueba.</Notice>) : (
       <SectionCard title={`Factura · ${NOMBRE_MARCA[tienda] ?? tienda}`}>
         {sinCortar && <Notice tone="warning">{NOMBRE_MARCA[tienda] ?? tienda}: solo facturas de prueba.</Notice>}
         <form onSubmit={(e) => { e.preventDefault(); void buscar() }} style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -218,6 +242,7 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
           <Button type="submit" disabled={trabajando}>Buscar</Button>
         </form>
       </SectionCard>
+      )}
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecha && (
@@ -262,9 +287,11 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
 
       {ficha && (
         <SectionCard title={`Venta #${ficha.venta.numero}`} subtitle={`${cuandoCorto(ficha.venta.ocurridaEn)} · ${ficha.cliente?.nombre ?? 'Consumidor final'}`}>
+          {!desdeCaja && (
           <div style={{ marginBottom: space[3] }}>
             <Button variant="outline" onClick={limpiar}>Volver a las ventas</Button>
           </div>
+          )}
           <TableWrap>
             <table>
               <THead><Tr><Th>Producto</Th><Th style={{ textAlign: 'right' }}>Cant.</Th><Th style={{ textAlign: 'right' }}>Importe</Th></Tr></THead>
@@ -328,6 +355,11 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
             <Field label={clase === 'A' ? 'CUIT' : 'DNI o CUIT (opcional)'} style={{ flex: '1 1 180px' }}>
               <Input value={doc} onChange={(e) => { setDoc(e.target.value); setDeFicha(null) }} inputMode="numeric" placeholder={clase === 'A' ? '30-12345678-9' : 'Vacío = sin identificar'} />
             </Field>
+            {clase === 'B' && (
+              <Field label="Nombre y apellido (opcional)" hint="Con el DNI o CUIT, la clienta queda guardada y la venta a su nombre." style={{ flex: '2 1 220px' }}>
+                <Input value={nombre} onChange={(e) => setNombre(e.target.value)} maxLength={120} disabled={!docLimpio} placeholder={docLimpio ? '' : 'Primero el DNI o CUIT'} />
+              </Field>
+            )}
             {clase === 'A' && (
               <Field label="Razón social" style={{ flex: '2 1 220px' }}>
                 <Input value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} placeholder="Como figura en ARCA" />
