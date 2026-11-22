@@ -258,6 +258,7 @@ export async function conjuntosDeCaja(store) {
           // Lo que vale UNA unidad de la parte (las bikinis 2027 llevan 1 de cada una).
           precio: Math.round((partes[i] / (Number(r.cantidad) || 1)) * 100) / 100,
           nombre: r.product_name ? `${r.product_name}${r.size_name ? ` · ${r.size_name}` : ''}` : null,
+          producto: r.product_name ?? null, talle: r.size_name ?? null,
         })),
       })
     }

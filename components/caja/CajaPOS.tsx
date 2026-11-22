@@ -93,7 +93,7 @@ import {
   numeroDeLaVenta,
   puestoCaja,
 } from '@/lib/caja/cliente'
-import { BandaCambio, ModalCobroCambio, ModalEncargada, ModalVentaOriginal, PedidoCambio } from '@/components/caja/partesCambio'
+import { BandaCambio, ModalCobroCambio, ModalEncargada, ModalVentaOriginal, PedidoCambio, PreguntaBikiniCambio } from '@/components/caja/partesCambio'
 import { useCambio } from '@/components/caja/useCambio'
 import { FranjaPuesto } from '@/components/caja/FranjaPuesto'
 import { ModalSinStock } from '@/components/caja/ModalSinStock'
@@ -473,7 +473,7 @@ function POS() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- una vez por cambio registrado
   }, [cambioHecho])
   // Es un CAMBIO, ⛔ una devolución (Bruno, 27-oct): para seguir al cobro hay que llevarse algo; lo que sobra queda a favor.
-  const cambioListoParaCobrar = enCambio && pasoCambio === 2 && cambio.unidadesNuevas > 0 && !cambio.sinPrecio && cambio.devueltas.length > 0
+  const cambioListoParaCobrar = enCambio && pasoCambio === 2 && cambio.unidadesNuevas > 0 && !cambio.sinPrecio && cambio.devueltas.length > 0 && !cambio.problemaBikini
   /** «Siguiente →»: sin venta pide el PIN de la encargada; con venta pasa directo a lo que se lleva. */
   const siguienteDelCambio = () => {
     if (!cambio.devueltas.length) return
@@ -1653,6 +1653,7 @@ pendientes
         />
       )}
       {cobrandoCambio && <ModalCobroCambio c={cambio} onCerrar={() => setCobrandoCambio(false)} />}
+      <PreguntaBikiniCambio c={cambio} onListo={enfocar} />
     </>
   )
 

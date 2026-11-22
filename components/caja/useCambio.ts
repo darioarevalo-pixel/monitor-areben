@@ -16,8 +16,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { cuentaDeMedio, renglones } from '@/lib/caja/core.core.js'
 import { exigirDevolucion } from '@/lib/caja/repetida.core.js'
+import { conjuntoIncompleto, conjuntosConPieza, piezasSueltas, precioDeParte, type ConjuntoCaja } from '@/lib/caja/conjuntos.core.js'
 import type { Config, Variante } from '@/lib/caja/cliente'
-import { buscarVentas, cambiarVenta, leerFichaDeVenta, leerSaldo, leerVentaGnCambio, verificarPin, type CruceCambio, type FichaDeVenta, type MarcaErp, type PagoMp, type VentaGnCambio } from '@/lib/erp/cliente'
+import { buscarVentas, cambiarVenta, leerFichaDeVenta, leerSaldo, leerVentaGnCambio, verificarPin, type ConjuntoDeVenta, type CruceCambio, type FichaDeVenta, type MarcaErp, type PagoMp, type VentaGnCambio } from '@/lib/erp/cliente'
 import { cobroDelCambio, diferenciaDeCambio, diferenciaDeCambioSuelto } from '@/lib/erp/venta.core.js'
 import type { ComprobanteCambio } from '@/lib/caja/ticket'
 import { ETIQUETA_LINEA, esStunned as skuEsStunned, type Linea } from '@/lib/lineas'
@@ -34,14 +35,21 @@ export type Vendida = {
   lineaId?: string; importe?: number
   /** Sólo en una venta de Gestión Nube: la marca del producto (la pone el servidor). */
   linea?: string
+  /** 🩱 La bikini de la que es parte (venta del ERP): sus partes van juntas en el cambio. */
+  bikini?: { indice: number; nombre: string | null } | null
 }
 export type Origen =
   | { tipo: 'gn'; id: string; numero: string | number; fecha: string | null; cliente: string | null; prueba: boolean }
   | { tipo: 'erp'; ventaId: string; numero: number; cliente: string | null; prueba: boolean; gnSaleId: string | null; marca: string }
   | { tipo: 'suelto' }
-export type VentaOriginal = { origen: Origen; vendidas: Vendida[] }
+export type VentaOriginal = { origen: Origen; vendidas: Vendida[]; /** 🩱 Las bikinis de la venta (sólo la del ERP). */ conjuntos?: ConjuntoDeVenta[] }
 export type Devuelta = { clave: string; productId: number; sizeId: number; sku: string | null; nombre: string; talle: string; cantidad: number; precio: number | ''; lineaId?: string; /** La marca (cambio suelto). */ linea?: string }
-export type Nueva = { variante: Variante; cantidad: number; precio: number | '' }
+/** `conjunto`: la parte de una bikini que se lleva entera; `parte`: la parte que sale SOLA en otro talle. En las dos, el precio es el de la bikini. */
+export type Nueva = { variante: Variante; cantidad: number; precio: number | ''; conjunto?: { variant_id: number; n: number; nombre: string } | null; parte?: boolean }
+/** 🩱 Lo que la pantalla pregunta de una bikini: qué cambia de la que devuelve, o con qué otra parte se lleva una. */
+export type PreguntaBikini =
+  | { tipo: 'devuelve'; indice: number; nombre: string; clave: string; parte: string }
+  | { tipo: 'lleva'; variante: Variante; opciones: ConjuntoCaja[] }
 export type Hecho = { numero: number; cobrado: number; aFavor: number; /** Lo que la clienta dejó (desestimado con PIN). */ desestimado: number; saldo: number | null; ncPendiente: boolean; /** Para imprimir (y reimprimir) el comprobante del cambio. */ comprobante: ComprobanteCambio }
 export type Espera = { desde: string; monto: number; cruce: CruceCambio; recientes: PagoMp[] }
 
@@ -59,9 +67,15 @@ export function ventaDeGn(g: VentaGnCambio): VentaOriginal & { total: number } {
 
 /** Una venta del ERP (su ficha): cada línea con su importe exacto y cuántas unidades ya se cambiaron. */
 export function ventaDeFicha(f: FichaDeVenta): VentaOriginal & { total: number } {
+  const conjuntos = f.conjuntos ?? []
+  const bikiniDe = (pid: number, sid: number) => {
+    const i = conjuntos.findIndex((c) => c.piezas.some((pz) => pz.product_id === pid && pz.size_id === sid))
+    return i >= 0 ? { indice: i, nombre: conjuntos[i].nombre } : null
+  }
   return {
     origen: { tipo: 'erp', ventaId: f.venta.id, numero: f.venta.numero, cliente: f.cliente?.nombre ?? null, prueba: f.venta.prueba, gnSaleId: f.venta.gnSaleId, marca: f.venta.marca },
-    vendidas: f.lineas.filter((l) => l.cantidad > 0 && !l.devuelta).map((l) => ({ clave: l.id, productId: Number(l.producto), sizeId: Number(l.talle), sku: l.sku, nombre: l.nombre ?? `Producto ${l.producto}`, talle: l.talleNombre ?? l.talle, cantidad: l.cantidad, precio: Math.round((l.importe / l.cantidad) * 100) / 100, cambiado: l.cambiado, lineaId: l.id, importe: l.importe })),
+    vendidas: f.lineas.filter((l) => l.cantidad > 0 && !l.devuelta).map((l) => ({ clave: l.id, productId: Number(l.producto), sizeId: Number(l.talle), sku: l.sku, nombre: l.nombre ?? `Producto ${l.producto}`, talle: l.talleNombre ?? l.talle, cantidad: l.cantidad, precio: Math.round((l.importe / l.cantidad) * 100) / 100, cambiado: l.cambiado, lineaId: l.id, importe: l.importe, bikini: bikiniDe(Number(l.producto), Number(l.talle)) })),
+    conjuntos,
     total: f.venta.total,
   }
 }
@@ -135,6 +149,9 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
   /** Bruno (14-nov): la clienta DEJA lo que queda a favor ⇒ ⛔ se guarda saldo ni se pide la clienta, pero sí el PIN de la encargada. */
   const [desestima, setDesestima] = useState(false)
   const [id, setId] = useState(nuevoId)
+  /** 🩱 La pregunta abierta de una bikini, y lo que ya se contestó de cada bikini de la venta («completa» o «otro talle»). */
+  const [preguntaBikini, setPreguntaBikini] = useState<PreguntaBikini | null>(null)
+  const [decididas, setDecididas] = useState<Record<number, 'completa' | 'talle'>>({})
   const [hecho, setHecho] = useState<Hecho | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Cada sondeo fallido suma una vuelta: el MISMO error no cambia el estado y el efecto no se volvería a armar.
@@ -144,6 +161,8 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
   const origen = venta?.origen ?? null
   const tipo = origen?.tipo ?? null
   const vendidas = useMemo(() => venta?.vendidas ?? [], [venta])
+  /** 🩱 Las partes que vuelven sueltas (de una bikini a medias): las que pueden salir en otro talle. Regla de `conjuntos.core.js`. */
+  const sueltas = useMemo(() => piezasSueltas(venta?.origen.tipo === 'erp' ? venta.conjuntos ?? [] : null, devueltas.map((d) => ({ product_id: d.productId, size_id: d.sizeId, cantidad: d.cantidad })), config?.conjuntos), [venta, devueltas, config])
   /** La marca del cambio: la de la venta del ERP o, suelto, la de lo que devuelve (el saldo de la clienta es de esa marca). */
   const lineaDelCambio: string | null = origen?.tipo === 'erp' ? origen.marca : devueltas.find((d) => d.linea)?.linea ?? null
 
@@ -171,6 +190,8 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
     setUsaSaldo(false)
     setEncargada({ persona: '', pin: '' })
     setDesestima(false)
+    setPreguntaBikini(null)
+    setDecididas({})
     setId(nuevoId())
   }
 
@@ -191,7 +212,62 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
   function elegirVenta(v: VentaOriginal) {
     setDevueltas([])
     setNuevas([])
+    setDecididas({})
+    setPreguntaBikini(null)
     setVenta(v)
+  }
+
+  /**
+   * 🩱 Bruno 21/22-nov: de una bikini, una parte sola vuelve SÓLO por otro talle de la misma parte; si no, vuelve la bikini completa.
+   * Cuando lo devuelto deja una bikini a medias y todavía no se contestó, se pregunta cuál de las dos es.
+   */
+  function preguntarBikini(v: VentaOriginal | null, lista: Devuelta[], ya: Record<number, 'completa' | 'talle'> = decididas) {
+    if (!v || v.origen.tipo !== 'erp' || !v.conjuntos?.length) return
+    for (const [i, c] of v.conjuntos.entries()) {
+      if (ya[i]) continue
+      const vuelve = c.piezas.map((pz) => lista.filter((d) => d.productId === pz.product_id && d.sizeId === pz.size_id).reduce((s, d) => s + d.cantidad, 0) / (pz.cantidad || 1))
+      if (!vuelve.some((k) => k > 0) || vuelve.every((k) => k === vuelve[0])) continue
+      const d = lista.find((x) => x.cantidad > 0 && c.piezas.some((pz) => pz.product_id === x.productId && pz.size_id === x.sizeId))
+      if (!d) continue
+      setPreguntaBikini({ tipo: 'devuelve', indice: i, nombre: c.nombre ?? 'La bikini', clave: d.clave, parte: `${d.nombre} · ${d.talle}` })
+      return
+    }
+  }
+
+  /** «Devuelve la bikini completa»: suma las otras partes de esa bikini, en la misma cantidad que la parte que más vuelve. */
+  function devolverBikiniCompleta() {
+    const p = preguntaBikini
+    if (!p || p.tipo !== 'devuelve' || !venta?.conjuntos) return
+    const c = venta.conjuntos[p.indice]
+    const cuanto = (pz: { product_id: number; size_id: number }) => devueltas.filter((d) => d.productId === pz.product_id && d.sizeId === pz.size_id).reduce((s, d) => s + d.cantidad, 0)
+    const kits = Math.max(...c.piezas.map((pz) => Math.ceil(cuanto(pz) / (pz.cantidad || 1))))
+    let lista = devueltas
+    for (const pz of c.piezas) {
+      const falta = kits * (pz.cantidad || 1) - cuanto(pz)
+      if (falta <= 0) continue
+      const l = vendidas.find((x) => x.productId === pz.product_id && x.sizeId === pz.size_id)
+      if (!l) throw new Error(`No está en la venta la otra parte de ${c.nombre ?? 'la bikini'}.`)
+      const actual = lista.find((d) => d.clave === l.clave)
+      lista = actual
+        ? lista.map((d) => (d.clave === l.clave ? { ...d, cantidad: d.cantidad + falta } : d))
+        : [...lista, { clave: l.clave, productId: l.productId, sizeId: l.sizeId, sku: l.sku, nombre: l.nombre, talle: l.talle, cantidad: falta, precio: l.precio, ...(l.lineaId ? { lineaId: l.lineaId } : {}) }]
+    }
+    validar(venta, lista)
+    const ya = { ...decididas, [p.indice]: 'completa' as const }
+    setDecididas(ya)
+    setDevueltas(lista)
+    setPreguntaBikini(null)
+    preguntarBikini(venta, lista, ya)
+  }
+
+  /** «Cambia el talle de esta parte»: vuelve sola; en «Lo que se lleva» sale la misma parte en otro talle. */
+  function devolverSoloLaParte() {
+    const p = preguntaBikini
+    if (!p || p.tipo !== 'devuelve') return
+    const ya = { ...decididas, [p.indice]: 'talle' as const }
+    setDecididas(ya)
+    setPreguntaBikini(null)
+    preguntarBikini(venta, devueltas, ya)
   }
 
   /** Elegir una venta y llevar a la devolución las cantidades marcadas (1 por defecto en la pantalla que la elige). */
@@ -210,6 +286,7 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
     validar(nueva, lista)
     setVenta(nueva)
     setDevueltas(lista)
+    preguntarBikini(nueva, lista)
   }
 
   /** Una prenda escaneada o tocada en el paso 1: de la venta elegida, o suelta (sin venta). */
@@ -242,6 +319,7 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
     }
     validar(venta, lista)
     setDevueltas(lista)
+    preguntarBikini(venta, lista)
     // Sin nada devuelto y sin venta elegida, se vuelve al principio: la próxima prenda decide de nuevo si es suelta.
     if (!lista.length && venta?.origen.tipo === 'suelto') setVenta(null)
   }
@@ -251,19 +329,59 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
   function sumarNueva(v: Variante) {
     // Un cambio es de UNA marca (Bruno, 26-oct): en el cambio suelto, lo que se lleva es de la marca de lo que devuelve.
     if (tipo && tipo !== 'erp' && lineaDelCambio && lineaDe(v) !== lineaDelCambio) throw new Error(`Lo que se lleva tiene que ser de ${nombreDe(lineaDelCambio)}: un cambio es de una sola marca.`)
+    // 🩱 La parte de una bikini: sola, SÓLO la misma parte en otro talle de la que vuelve sola (a lo que vale en la bikini); si no, se
+    // elige con qué otra parte se lleva la bikini entera (como en la venta).
+    const opciones = conjuntosConPieza(config?.conjuntos, v.product_id, v.size_id)
+    if (opciones.length) {
+      const suelta = sueltas.find((x) => x.product_id === v.product_id && x.size_id !== v.size_id)
+      const yaSale = nuevas.filter((x) => x.parte && x.variante.product_id === v.product_id).reduce((s, x) => s + x.cantidad, 0)
+      if (suelta && yaSale < sueltas.filter((x) => x.product_id === v.product_id).reduce((s, x) => s + x.cantidad, 0)) {
+        setNuevas((xs) => {
+          const i = xs.findIndex((x) => x.parte && x.variante.product_id === v.product_id && x.variante.size_id === v.size_id)
+          if (i >= 0) return xs.map((x, j) => (j === i ? { ...x, cantidad: x.cantidad + 1 } : x))
+          return [...xs, { variante: v, cantidad: 1, precio: precioDeParte(config?.conjuntos, v.product_id, v.size_id) ?? '', parte: true }]
+        })
+        return
+      }
+      setPreguntaBikini({ tipo: 'lleva', variante: v, opciones })
+      return
+    }
     setNuevas((xs) => {
-      const i = xs.findIndex((x) => x.variante.product_id === v.product_id && x.variante.size_id === v.size_id)
+      const i = xs.findIndex((x) => !x.conjunto && !x.parte && x.variante.product_id === v.product_id && x.variante.size_id === v.size_id)
       if (i >= 0) return xs.map((x, j) => (j === i ? { ...x, cantidad: x.cantidad + 1 } : x))
       return [...xs, { variante: v, cantidad: 1, precio: precioDe(v) ?? '' }]
     })
   }
-  const cambiarNueva = (i: number, cambio: Partial<Nueva>) => setNuevas((xs) => xs.map((x, j) => (j === i ? { ...x, ...cambio } : x)))
-  const cambiarCantidadNueva = (i: number, c: number) => setNuevas((xs) => (c <= 0 ? xs.filter((_, j) => j !== i) : xs.map((x, j) => (j === i ? { ...x, cantidad: c } : x))))
+
+  /** 🩱 La bikini que se lleva: un renglón por parte, a lo que vale cada parte, atados por `conjunto` (como en la venta de la Caja). */
+  function llevarBikini(c: ConjuntoCaja) {
+    setPreguntaBikini(null)
+    setNuevas((xs) => {
+      const rs = xs.slice()
+      for (const pz of c.piezas) {
+        const conjunto = { variant_id: c.variant_id, n: pz.n, nombre: c.nombre }
+        const i = rs.findIndex((x) => x.conjunto?.variant_id === c.variant_id && x.conjunto.n === pz.n)
+        const variante: Variante = { product_id: pz.product_id, size_id: pz.size_id, product_name: pz.producto ?? pz.nombre ?? `Producto ${pz.product_id}`, size_name: pz.talle ?? '', sku: null, barcode: null }
+        if (i >= 0) rs[i] = { ...rs[i], cantidad: rs[i].cantidad + pz.cantidad }
+        else rs.push({ variante, cantidad: pz.cantidad, precio: pz.precio, conjunto })
+      }
+      return rs
+    })
+  }
+
+  // El precio de una parte es el de la bikini (el servidor lo exige): ⛔ se cambia a mano.
+  const cambiarNueva = (i: number, cambio: Partial<Nueva>) => setNuevas((xs) => xs.map((x, j) => (j === i && !(cambio.precio !== undefined && (x.conjunto || x.parte)) ? { ...x, ...cambio } : x)))
+  // Las partes de una bikini van juntas: la cantidad se cambia en todas y se sacan todas.
+  const cambiarCantidadNueva = (i: number, c: number) => setNuevas((xs) => {
+    const el = xs[i]
+    const misma = (x: Nueva) => !!el?.conjunto && x.conjunto?.variant_id === el.conjunto.variant_id
+    return c <= 0 ? xs.filter((x, j) => j !== i && !misma(x)) : xs.map((x, j) => (j === i || misma(x) ? { ...x, cantidad: c } : x))
+  })
 
   // ── Lo que se lleva, con el importe de la Caja (`renglones`); sin precio todavía no se puede cobrar ──
   const sinPrecio = nuevas.some((n) => !(Number(n.precio) > 0))
   const sinPrecioDevuelta = tipo === 'suelto' && devueltas.some((d) => !(Number(d.precio) > 0))
-  const items = nuevas.map((n) => ({ product_id: n.variante.product_id, size_id: n.variante.size_id, cantidad: n.cantidad, precio: Number(n.precio), sku: n.variante.sku, ...(esStunned(n.variante) ? { linea: 'stunned', ...(enOferta?.(n.variante) ? { oferta: true } : {}) } : {}) }))
+  const items = nuevas.map((n) => ({ product_id: n.variante.product_id, size_id: n.variante.size_id, cantidad: n.cantidad, precio: Number(n.precio), sku: n.variante.sku, ...(n.conjunto ? { conjunto: n.conjunto } : {}), ...(esStunned(n.variante) ? { linea: 'stunned', ...(enOferta?.(n.variante) ? { oferta: true } : {}) } : {}) }))
   let filas: Array<{ product_id: number; importe: number }> = []
   try {
     filas = sinPrecio || !items.length ? [] : renglones(items)
@@ -320,7 +438,19 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
   const pideClienta = (aFavor > 0 && !desestimaSaldo) || saldoUsado > 0
   const faltaClienta = pideClienta && !(docLimpio.length >= 7 && clienta.nombre.trim().length >= 3)
   const faltaPin = (tipo === 'suelto' || desestimaSaldo) && !(encargada.persona.trim() && /^\d{4}$/.test(encargada.pin))
-  const listo = !!venta && devueltas.length > 0 && !sinPrecio && !sinPrecioDevuelta && !errorCobro && (diferencia <= 0 || cobrado.total > 0) && !faltaClienta && !faltaPin
+  /**
+   * 🩱 La regla del MOTOR (`conjuntoIncompleto`, la del 409 CONJUNTO_INCOMPLETO) corrida antes del cobro, con lo que hay en pantalla:
+   * una parte sola vuelve sólo si sale la misma parte en otro talle. Sólo con la venta del ERP (sabe qué renglones van juntos).
+   */
+  const problemaBikini: string | null = venta?.origen.tipo === 'erp' && venta.conjuntos?.length && devueltas.length
+    ? conjuntoIncompleto(
+      { detalle: { conjuntos: venta.conjuntos } },
+      vendidas.map((l) => ({ id: l.clave, product_id: l.productId, size_id: l.sizeId })),
+      new Map(devueltas.map((d) => [d.clave, d.cantidad])),
+      nuevas.map((n) => ({ product_id: n.variante.product_id, size_id: n.variante.size_id, cantidad: n.cantidad })),
+    )
+    : null
+  const listo = !!venta && devueltas.length > 0 && !problemaBikini && !sinPrecio && !sinPrecioDevuelta && !errorCobro && (diferencia <= 0 || cobrado.total > 0) && !faltaClienta && !faltaPin
   /** El modo de la venta que se cambia: de prueba o real (el motor ⛔ mezcla uno con otro). El suelto es de una línea que ya cortó ⇒ real. */
   const deEnsayo = origen == null || origen.tipo === 'suelto' ? false : origen.prueba
 
@@ -406,6 +536,7 @@ export function useCambio({ store, config, precioDe, esStunned, enOferta }: Entr
     empezarDeNuevo, elegirVenta, devolverDeVenta, devolverPrenda, cambiarCantidadDevuelta, ponerPrecioDevuelta, sumarNueva, cambiarNueva, cambiarCantidadNueva,
     sinPrecio, sinPrecioDevuelta, unidadesDevueltas, unidadesNuevas, vuelve, diferencia, reglas, docLimpio, saldoUsado, resto, cuenta, errorCobro, cobrado,
     aFavor, pideClienta, faltaClienta, faltaPin, listo, lineaDelCambio, erpLineas, deEnsayo, buscarSaldo, probarPin, confirmar,
+    preguntaBikini, setPreguntaBikini, devolverBikiniCompleta, devolverSoloLaParte, llevarBikini, problemaBikini, decididas,
     /** Lo que se lleva, en pesos (los importes de `renglones`). */
     seLleva: Math.round(filas.reduce((s, f) => s + f.importe, 0) * 100) / 100,
   }

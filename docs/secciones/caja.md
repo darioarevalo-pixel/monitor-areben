@@ -654,8 +654,15 @@ salen de la MISMA `sobreEsperado`.
   descuenta se reparte entre las partes (`repartirDescuento`, al centavo).
 - 🔑 La venta lleva al motor `detalle.conjuntos` (`entradaDelMotor`); **ticket** (`renglonesParaMostrar`) y **factura**
   (`renglonesDeVenta`) la muestran en UNA línea con la regla del motor (`lineasParaMostrar`, `motor/venta/conjuntos.mjs`).
-- ▶️ Falta: el CAMBIO en pantalla (tildar una parte ⇒ «otro talle de esta parte» o «la bikini completa»; el motor ya frena con
-  `CONJUNTO_INCOMPLETO`). Tests: `caja-conjuntos`.
+- 🔑 **El CAMBIO** (`useCambio`: POS y ERP › Caja). La ficha de la venta trae sus bikinis (`conjuntos`, de `detalle`). Devolver una
+  parte pregunta **«Devuelve la bikini completa»** (suma la otra parte) o **«Cambia el talle de esta parte»**. Lo que se lleva:
+  la parte que vuelve SOLA sale sola sólo en **otro talle**, a lo que vale en la bikini (`precioDeParte`; en TN la parte ⛔ tiene
+  precio); cualquier otra parte abre el mismo «Es parte de una bikini» y sale entera, atada por `conjunto`. Antes del cobro corre la
+  regla del motor (`conjuntoIncompleto`, re-exportada en `conjuntos.core.js`): el mismo texto del 409 `CONJUNTO_INCOMPLETO`.
+- 🔴 **El servidor del cambio lo EXIGE** (`cambiarVentaPropia`): `exigirConjuntos(nuevas, catálogo, { sueltas: piezasSueltas(...) })`
+  —parte sola sólo en otro talle de la que vuelve sola, ⛔ más de las que vuelven, a su precio—; sin poder leer las bikinis, un cambio
+  que se lleva una ⇒ 503. La bikini que se lleva queda en `detalle.conjuntos` del cambio. Sin ticket o de GN ⛔ se sabe con qué se
+  vendió: toda parte que vuelve cuenta como suelta. Tests: `caja-conjuntos`, `caja-cambio-bikini`, `erp-cambio-bikini`.
 
 ## Pendiente
 
