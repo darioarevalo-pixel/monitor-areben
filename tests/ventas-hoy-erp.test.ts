@@ -105,14 +105,14 @@ describe('traerVentasDeHoy: pasada la baja de GN de la base (`gnSeSaltea`)', () 
     expect(espia).not.toHaveBeenCalled()
     espia.mockRestore()
   })
-  it('BDI cortada, pero su mayorista sigue en GN ⇒ GN se sigue pidiendo', async () => {
+  it('BDI cortada: todo está en el ERP (Bruno 22-nov) ⇒ ⛔ pide GN, trae las del ERP', async () => {
     cortes = { bdi: '2026-11-14T16:12:00Z' }
     const gn = await import('../api/_gn.js')
     const espia = vi.spyOn(gn, 'gnFetch')
     const { traerVentasDeHoy } = await import('../api/_ventas-hoy.js')
-    const r = await traerVentasDeHoy(sbVacio, 'bdi', Date.parse('2026-11-24T15:00:00Z'), { erp: async () => null })
-    expect(r).toMatchObject({ ok: true })
-    expect(espia).toHaveBeenCalled()
+    const r = await traerVentasDeHoy(sbVacio, 'bdi', Date.parse('2026-11-24T15:00:00Z'), { erp: async () => ({ ventas: 3, detalles: 4, sacadas: 0, freno: null }) })
+    expect(r).toMatchObject({ ok: true, ventas: 0, erp: { ventas: 3 }, gn: false })
+    expect(espia).not.toHaveBeenCalled()
     espia.mockRestore()
   })
 })
