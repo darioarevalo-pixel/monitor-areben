@@ -112,7 +112,8 @@ describe('las columnas', () => {
     const p = normalizarPrefs('zattia', null)
     expect(p.visibles).toEqual(['p', 't', 'disp', 'est', 'dep:local', 'dep:deposito', 'ped', 'bol', 'ult'])
     expect(alternarColumna('zattia', p, 'disp')).toBe(p)
-    expect(alternarColumna('zattia', p, 'gn').visibles).toContain('gn')
+    expect(alternarColumna('zattia', p, 'sku').visibles).toContain('sku')
+    expect(columnasDe('zattia')).not.toHaveProperty('gn') // Darío 22-nov: sin la columna de Gestión Nube
     // Lo guardado de otra base (otro depósito) se cae solo.
     expect(normalizarPrefs('zattia', { orden: ['dep:deposito_minorista', 'p'], visibles: ['dep:deposito_minorista', 'p'] }).visibles).toEqual(['p', 't', 'disp'])
   })
@@ -153,8 +154,8 @@ describe('Diseño §9: una sola densidad y mínimos de columna', () => {
     expect(c.p[1]).toBe('minmax(240px, 2fr)')
     expect(c.t[1]).toMatch(/^minmax\(104px/)
     expect(c.ult[1]).toMatch(/^minmax\(150px/)
-    for (const k of ['sku', 'disp', 'est', 'dep:local', 'dep:deposito', 'ped', 'gn', 'linea']) expect(c[k][1]).toMatch(/^\d+px$/)
-    expect([c.disp[1], c.est[1], c['dep:local'][1], c.ped[1], c.gn[1]]).toEqual(['96px', '76px', '64px', '88px', '120px'])
+    for (const k of ['sku', 'disp', 'est', 'dep:local', 'dep:deposito', 'ped', 'linea']) expect(c[k][1]).toMatch(/^\d+px$/)
+    expect([c.disp[1], c.est[1], c['dep:local'][1], c.ped[1]]).toEqual(['96px', '76px', '64px', '88px'])
   })
   it('las preferencias guardadas ya no llevan densidad', () => {
     expect(normalizarPrefs('zattia', { orden: [], visibles: [], densidad: 'comoda' })).not.toHaveProperty('densidad')

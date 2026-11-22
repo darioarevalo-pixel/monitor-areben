@@ -47,7 +47,7 @@ const DEPOSITOS: Record<MarcaErp, string[]> = { bdi: ['local', 'deposito_minoris
 /** Los motivos que se cargan a mano: el conteo entra solo desde el monitor (⛔ va en el menú). */
 export const MOTIVOS_A_MANO = MOTIVOS.filter((m) => m.key !== 'conteo')
 /** El mismo porqué que da el servidor (`api/_erp-ajustes.js`), antes de guardar. */
-export const QUEDA_NEGATIVO = 'En ese depósito Areben Gestión tiene menos de las que salen. Si el producto está, contalo primero en Conteo de depósito (o de fundas): el conteo entra solo a Areben Gestión.'
+export const QUEDA_NEGATIVO = 'No hay stock suficiente. Si el producto está, contalo primero.'
 // «Para aprobar» ⛔ (la aprobación está apagada): es un ajuste guardado que todavía no cambió el stock.
 // «Eliminado» (Bruno 18-nov): el aplicado que Admin volvió atrás; queda en la lista y el stock vuelve a como estaba.
 const ESTADO = { para_aprobar: ['warning', 'Pendiente'], aplicado: ['success', 'Aplicado'], rechazado: ['neutral', 'Descartado'], eliminado: ['neutral', 'Eliminado'] } as const
@@ -215,7 +215,7 @@ export function AjustesStock({ pedida = null, alContar, enErp: _enErp = false }:
     } catch (e) {
       const m = e instanceof Error ? e.message : 'No se pudo guardar el ajuste.'
       // Se creó pero ⛔ se aplicó: queda «Pendiente» y el borrador se suelta para ⛔ crearlo dos veces.
-      if (creado) { setBorrador(null); setVista('sinaplicar'); setError(`El ajuste A-${creado.numero} quedó guardado sin aplicar (${m}). Confirmalo desde Pendientes.`) }
+      if (creado) { setBorrador(null); setVista('sinaplicar'); console.error(m); setError(`A-${creado.numero} quedó pendiente: confirmalo en Pendientes.`) }
       else setError(m)
     } finally {
       setTrabajando(false)
@@ -234,7 +234,7 @@ export function AjustesStock({ pedida = null, alContar, enErp: _enErp = false }:
     setTrabajando(true)
     try {
       const r = await eliminarAjuste(linea, a.id)
-      setHecho({ texto: `Ajuste A-${r.numero} eliminado · el stock volvió a como estaba.`, avisos: [] })
+      setHecho({ texto: `Ajuste A-${r.numero} eliminado.`, avisos: [] })
       setFicha(null)
       setError(null)
       setVuelta((n) => n + 1)
@@ -253,7 +253,7 @@ export function AjustesStock({ pedida = null, alContar, enErp: _enErp = false }:
         setHecho({ texto: `Ajuste A-${r.numero} aplicado · ${productos(r.movimientos)}.`, avisos: r.avisos })
       } else {
         const r = await descartarAjuste(linea, a.id, descartando?.motivo ?? '')
-        setHecho({ texto: `Ajuste A-${r.numero} descartado: el stock no cambió.`, avisos: [] })
+        setHecho({ texto: `Ajuste A-${r.numero} descartado.`, avisos: [] })
         setDescartando(null)
       }
       setFicha(null)
@@ -437,7 +437,7 @@ export function AjustesStock({ pedida = null, alContar, enErp: _enErp = false }:
       )}
 
       {!enTarea && !borrador && <>
-        {!datos && !error && <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, padding: space[6] }}><EmptyState title="Cargando ajustes…" /></div>}
+        {!datos && !error && <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, padding: space[6] }}><EmptyState title="Leyendo…" /></div>}
         {datos && (
           <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
             <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
@@ -448,7 +448,7 @@ export function AjustesStock({ pedida = null, alContar, enErp: _enErp = false }:
             <ListaTrabajo
               columnas={COLUMNAS} filas={filas} claveDe={(a) => a.id} celda={celda} activa={ficha}
               onAbrir={(a) => { setFicha(a.id); setDescartando(null) }} etiquetaFila={(a) => `el ajuste A-${a.numero}`}
-              vacio={<div style={{ padding: space[6] }}><EmptyState title={q ? 'Ningún ajuste coincide con la búsqueda.' : vista === 'sinaplicar' ? 'No hay ajustes pendientes.' : 'No hay ajustes en esta línea.'} /></div>}
+              vacio={<div style={{ padding: space[6] }}><EmptyState title={q ? `Ningún ajuste coincide con «${q}».` : vista === 'sinaplicar' ? 'No hay ajustes pendientes.' : 'No hay ajustes.'} /></div>}
             />
             <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>{filas.length.toLocaleString('es-AR')} de {todos.length.toLocaleString('es-AR')}</div>
           </div>

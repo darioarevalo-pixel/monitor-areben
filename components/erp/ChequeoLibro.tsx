@@ -32,7 +32,7 @@ function Regla({ r }: { r: ReglaDelLibro }) {
         <span style={{ flex: '0 0 auto' }}><ChipEstado mapa={ESTADO} k={r.estado} /></span>
         <span style={{ flex: '1 1 260px', color: color.ink }}>{r.titulo}</span>
         <span style={{ flex: '0 0 auto', fontVariantNumeric: 'tabular-nums', color: r.total ? color.ink : color.mut }}>{r.estado === 'omitida' ? '—' : `${r.total.toLocaleString('es-AR')} ${r.total === 1 ? 'fila' : 'filas'}`}</span>
-        {conFilas && <Button size="sm" variant="ghost" onClick={() => setAbierta((x) => !x)}>{abierta ? 'Ocultar' : 'Ver las primeras'}</Button>}
+        {conFilas && <Button size="sm" variant="ghost" onClick={() => setAbierta((x) => !x)}>{abierta ? 'Ocultar' : 'Ver'}</Button>}
       </div>
       {r.porque && <span style={{ fontSize: font.sm, color: color.mut }}>No se pudo revisar: {r.porque}.</span>}
       {abierta && conFilas && (
@@ -78,7 +78,7 @@ export function ChequeoLibro({ alContar }: { alContar?: AlContar }) {
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {c && (
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-          <TileResumen oscuro titulo="Errores" valor={c.falla.toLocaleString('es-AR')} nota={c.falla ? 'para arreglar' : 'ninguno'} />
+          <TileResumen oscuro titulo="Errores" valor={c.falla.toLocaleString('es-AR')} />
           <TileResumen tono={c.aviso ? 'revisar' : 'bien'} titulo="Para mirar" valor={c.aviso.toLocaleString('es-AR')} />
           <TileResumen tono="bien" titulo="Bien" valor={c.ok.toLocaleString('es-AR')} nota={`de ${datos!.reglas.length} reglas`} />
           {c.omitida > 0 && <TileResumen titulo="Sin revisar" valor={c.omitida.toLocaleString('es-AR')} />}

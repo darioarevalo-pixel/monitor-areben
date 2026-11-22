@@ -27,7 +27,7 @@ export function armarFila(r: Recepcion): FilaRecepcion {
   const pedidas = Number(r.unidades_pedidas) || 0
   const estado = !pedidas ? 'sin_pedido' : faltaron || sobraron ? 'diferencia' : 'recibida'
   const partes = [faltaron && `faltaron ${faltaron}`, sobraron && `sobraron ${sobraron}`].filter(Boolean).join(' · ')
-  const estadoTexto = estado === 'recibida' ? 'Recibida' : estado === 'sin_pedido' ? 'Sin lo pedido' : `Con diferencia: ${partes}`
+  const estadoTexto = estado === 'recibida' ? 'Recibida' : estado === 'sin_pedido' ? 'Sin pedido' : `Con diferencia: ${partes}`
   const oc = r.oc_label || `OC ${r.oc_id}`
   // «Llegó» = la fecha que carga Ingresos, SALVO que sea posterior a la confirmación (20-oct): nada llega después de
   // confirmado (OC-3047: 30/10, confirmada el 20/10) ⇒ ahí manda la confirmación, y la de Ingresos va en la ficha.
@@ -87,9 +87,9 @@ export function ordenar(filas: FilaRecepcion[], orden: { col: string; dir: 'asc'
 
 export const COLUMNAS: Record<string, [string, string, boolean, boolean]> = {
   oc: ['Orden', '96px', false, true],
-  llego: ['Llegó', '96px', true, true],
-  de: ['De', 'minmax(150px, 1fr)', false, true],
-  va: ['Va a', '150px', false, false],
+  llego: ['Fecha', '96px', true, true],
+  de: ['Proveedor', 'minmax(150px, 1fr)', false, true],
+  va: ['Destino', '150px', false, false],
   pedidas: ['Pedidas', '84px', true, false],
   recibidas: ['Recibidas', '190px', true, true],
   estado: ['Estado', 'minmax(200px, 1.2fr)', false, true],

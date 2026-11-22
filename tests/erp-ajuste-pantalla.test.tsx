@@ -171,7 +171,7 @@ describe('Ingresos y ajustes', () => {
     await elegirSalida()
     await escanear('7790152')
     await click(boton('Sacar 1 unidad'))
-    expect(texto()).toContain('A-8 quedó guardado sin aplicar')
+    expect(texto()).toContain('A-8 quedó pendiente')
     expect(boton('Sacar 1 unidad')).toBeUndefined()
   })
 

@@ -83,7 +83,7 @@ export async function pedidosParaStock({ marca }) {
  * @param {{ conMotor: Function, pedidosParaStock: Function, leerInventario?: Function }} deps
  */
 export async function listaDeStock({ marca }, deps) {
-  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
   const [libro, inventario, pedidos] = await Promise.all([
     deps.conMotor(marca, 'El stock de Areben Gestión', (pg) => libroSumado(pg)),
     (deps.leerInventario ?? leerInventario)(marca),
@@ -136,8 +136,8 @@ async function movimientosDelLibro(pg, r) {
  * @param {{ conMotor: Function, leerInventario?: Function }} deps
  */
 export async function listaDeMovimientos({ marca, desde, hasta }, deps) {
-  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
-  if (!DIA.test(String(desde || '')) || !DIA.test(String(hasta || '')) || desde > hasta) return { status: 400, error: 'Período inválido' }
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
+  if (!DIA.test(String(desde || '')) || !DIA.test(String(hasta || '')) || desde > hasta) return { status: 400, error: 'No se pudo: volvé a intentar.' }
   const r = rangoDeDias(desde, hasta)
   const [libro, inventario] = await Promise.all([
     deps.conMotor(marca, 'Los movimientos de Areben Gestión', (pg) => movimientosDelLibro(pg, r)),
@@ -184,7 +184,7 @@ export function leerArmados(marca) {
  * @param {{ conMotor: Function, leerArmados?: Function }} deps
  */
 export async function listaDeTransferencias({ marca }, deps) {
-  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
   const [libro, armados] = await Promise.all([
     deps.conMotor(marca, 'Las transferencias de Areben Gestión', (pg) => transferenciasDelLibro(pg)),
     (deps.leerArmados ?? leerArmados)(marca),
@@ -230,7 +230,7 @@ async function tiendaNube(pg) {
  * @param {{ conMotor: Function, pedidosParaStock: Function, leerInventario?: Function }} deps
  */
 export async function comparacionConTiendas({ marca }, deps) {
-  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
   const [libro, tienda, inventario, pedidos] = await Promise.all([
     deps.conMotor(marca, 'El stock de Areben Gestión', (pg) => libroSumado(pg)),
     deps.conMotor(marca, 'Lo publicado en Tienda Nube', (pg) => tiendaNube(pg)),

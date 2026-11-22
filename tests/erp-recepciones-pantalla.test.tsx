@@ -77,10 +77,10 @@ describe('ERP › Stock › Recepciones', () => {
     expect(filaDe('OC-0002').textContent).toContain('NEOXCELA')
     await clic(filaDe('OC-0003').querySelector('[role="cell"]:last-child')!)
     const ficha = document.querySelector('aside[aria-label^="Ficha de la orden"]')!
-    expect(ficha.textContent).toContain('Los que no cerraron (1 de 2)')
+    expect(ficha.textContent).toContain('Con diferencia (1 de 2)')
     expect(ficha.textContent).toContain('Sumó al stock')
     expect(ficha.textContent).toContain('18')
-    expect(ficha.textContent).toContain('falta darlo de alta en Gestión Nube')
+    expect(ficha.textContent).not.toContain('Gestión Nube')
     expect(ficha.querySelectorAll('tbody tr').length).toBe(1)
     await clic(boton(/^Ver los 2/))
     expect(ficha.querySelectorAll('tbody tr').length).toBe(2)

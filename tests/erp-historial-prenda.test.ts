@@ -22,7 +22,7 @@ describe('el historial de un producto (Darío 18-nov: un renglón por cada vez q
     })
     expect(r.filas.map((f: F) => [f.tipo, f.ref, f.cantidad, f.saldo, f.desc])).toEqual([
       ['venta', '#2102', -1, 9, 'Daiana Delgado · Tienda Nube 22577'],
-      ['inicial', '', 10, 10, 'Al pasar a Areben Gestión'],
+      ['inicial', '', 10, 10, ''],
     ])
   })
 
@@ -74,7 +74,7 @@ describe('el historial de un producto (Darío 18-nov: un renglón por cada vez q
       ],
     })
     const min = filtrarHistorial(r.filas, { deposito: 'deposito_minorista', filtro: 'todo' })
-    expect(min.map((f: F) => [f.ref, f.desc, f.saldoVisto])).toEqual([['T-8909', 'Desde Local', 6], ['', 'Al pasar a Areben Gestión', 5]])
+    expect(min.map((f: F) => [f.ref, f.desc, f.saldoVisto])).toEqual([['T-8909', 'Desde Local', 6], ['', '', 5]])
     const todos = filtrarHistorial(r.filas, { deposito: 'todos', filtro: 'transf' })
     expect(todos.map((f: F) => [f.depositoNombre, f.desc, f.saldoVisto])).toEqual([['Depósito minorista', 'Desde Local', 7], ['Local', 'A Depósito minorista', 6]])
     expect(depositoInicial(r.depositos)).toBe('local')

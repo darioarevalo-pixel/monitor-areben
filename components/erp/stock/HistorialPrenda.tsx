@@ -110,10 +110,10 @@ export function HistorialPrenda({ marca, producto, talle, datos, onCerrar }: {
 
   /** Lo que frena el botón principal (se muestra en el botón apagado). */
   const frena = !panel ? null
-    : !panel.cantidad ? 'Cantidad'
-    : panel.tipo === 'transf' ? (panel.desde === panel.hacia ? 'Depósitos distintos' : panel.cantidad > hay(panel.desde) ? `Hay ${hay(panel.desde)} en ${nombreDep(panel.desde)}` : null)
+    : !panel.cantidad ? 'Escribí la cantidad'
+    : panel.tipo === 'transf' ? (panel.desde === panel.hacia ? 'Elegí depósitos distintos' : panel.cantidad > hay(panel.desde) ? `Hay ${hay(panel.desde)} en ${nombreDep(panel.desde)}` : null)
     : panel.sentido === 'salida' && panel.cantidad > hay(panel.deposito) ? `Hay ${hay(panel.deposito)} en ${nombreDep(panel.deposito)}`
-    : panel.motivo === 'otro' && panel.porque.trim().length < 3 ? 'Por qué'
+    : panel.motivo === 'otro' && panel.porque.trim().length < 3 ? 'Escribí el porqué'
     : null
 
   async function guardar() {
@@ -130,11 +130,11 @@ export function HistorialPrenda({ marca, producto, talle, datos, onCerrar }: {
         numero = c.transferencia.numero
         await armarTransferenciaDoc(linea as TiendaErp, c.transferencia.id, renglones)
         const e = await enviarTransferenciaDoc(linea as TiendaErp, c.transferencia.id)
-        setHecho(`T-${e.transferencia.numero} en tránsito hacia ${nombreDep(panel.hacia)}: se recibe escaneando.`)
+        setHecho(`T-${e.transferencia.numero} en camino a ${nombreDep(panel.hacia)}.`)
         setPanel(null); setVuelta((v) => v + 1)
       } catch (err) {
         const m = err instanceof Error ? err.message : 'No se pudo transferir.'
-        setError(numero ? `${m} T-${numero} quedó sin enviar: no salió nada del stock. Cancelala en Transferencias.` : m)
+        setError(numero ? `${m} No salió nada del stock: anulá T-${numero} en Transferencias.` : m)
         if (numero) setPanel(null)
       } finally { setTrabajando(false) }
       return
@@ -150,7 +150,7 @@ export function HistorialPrenda({ marca, producto, talle, datos, onCerrar }: {
       setPanel(null); setVuelta((v) => v + 1)
     } catch (err) {
       const m = err instanceof Error ? err.message : 'No se pudo guardar el ajuste.'
-      if (creado) { setPanel(null); setError(`A-${creado.numero} quedó guardado sin aplicar (${m}). Confirmalo en Ajustes.`) } else setError(m)
+      if (creado) { console.error(m); setPanel(null); setError(`A-${creado.numero} quedó pendiente: confirmalo en Ajustes.`) } else setError(m)
     } finally { setTrabajando(false) }
   }
 

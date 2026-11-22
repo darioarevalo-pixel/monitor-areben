@@ -20,9 +20,9 @@ describe('cada movimiento', () => {
     expect(documentoDe(mov({ venta_numero: 296 }))).toBe('Venta #296')
     expect(documentoDe(mov())).toBe('Venta de la Caja')
     expect(documentoDe(mov({ origen: 'ajuste', tipo: 'ajuste', origen_ref: 'a1:1', detalle: { ajuste: 12, motivo: 'fallado' } }))).toBe('Ajuste A-12 · Con falla')
-    expect(documentoDe(mov({ origen: 'gn', origen_ref: '1533152:694420:76626:local', detalle: { canal: 'Tienda Nube', tn_order: '7324' } }))).toBe('Gestión Nube 1533152 · Tienda Nube 7324')
+    expect(documentoDe(mov({ origen: 'gn', origen_ref: '1533152:694420:76626:local', detalle: { canal: 'Tienda Nube', tn_order: '7324' } }))).toBe('Venta 1533152 · Tienda Nube 7324')
     expect(documentoDe(mov({ origen: 'repo', tipo: 'transferencia', origen_ref: 'repo:ra1:t1:1_1:entra', detalle: { transfer_id: 8101 } }))).toBe('Transferencia 8101')
-    expect(documentoDe(mov({ origen: 'apertura', tipo: 'apertura', detalle: { anclaje: 'gn' } }))).toBe('Stock inicial (foto de Gestión Nube)')
+    expect(documentoDe(mov({ origen: 'apertura', tipo: 'apertura', detalle: { anclaje: 'gn' } }))).toBe('Stock inicial')
     expect(documentoDe(mov({ origen: 'recepcion', tipo: 'ingreso', detalle: {} }))).toBe('Ingreso de mercadería')
     expect(documentoDe(mov({ origen: 'recepcion', tipo: 'ingreso', detalle: { oc: 'OC-3049' } }))).toBe('OC-3049 · Ingreso de mercadería')
   })
@@ -31,7 +31,7 @@ describe('cada movimiento', () => {
     expect(quienDe(mov({ venta_usuario: 'camila' }))).toEqual({ nombre: 'camila', de: 'persona' })
     expect(quienDe(mov({ origen: 'ajuste', ajuste_usuario: 'bruno' }))).toEqual({ nombre: 'bruno', de: 'persona' })
     expect(quienDe(mov({ origen: 'repo' }))).toEqual({ nombre: 'Reposición', de: 'sistema' })
-    expect(quienDe(mov({ origen: 'gn' }))).toEqual({ nombre: 'Gestión Nube', de: 'sistema' })
+    expect(quienDe(mov({ origen: 'gn' }))).toEqual({ nombre: 'Sistema anterior', de: 'sistema' })
   })
 
   it('la fila trae el nombre del espejo, lo que quedó y se busca por documento y por quién', () => {

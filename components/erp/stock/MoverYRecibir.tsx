@@ -164,7 +164,7 @@ export function Escaneo({ linea, onPrenda, autoFocus = true, hayDe, origen, rech
             const p = opciones?.variantes[marcada]
             if (p && !onCantidad && !local?.(texto.trim())) { vuelta.current++; setTexto(''); sumar(p) } else void buscar()
           }
-        }} placeholder="Código de barras, código o nombre" autoComplete="off" />
+        }} placeholder="Código de barras, SKU o nombre" autoComplete="off" />
       </Field>
       {ocupado && <div style={{ marginTop: space[2], color: color.mut }}>Buscando…</div>}
       {error && <Notice tone="warning" style={{ marginTop: space[2] }}>{error}</Notice>}
@@ -209,7 +209,7 @@ export function Escaneo({ linea, onPrenda, autoFocus = true, hayDe, origen, rech
             </table>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: space[2], padding: '6px 12px', borderTop: `1px solid ${color.line}`, background: color.bg2, color: color.mut, fontSize: font.sm }}>
-            <span style={{ flex: 1 }}>{opciones.cortado ? 'Hay más productos: sumá otra palabra para achicar la búsqueda.' : `${opciones.variantes.length} ${opciones.variantes.length === 1 ? 'modelo' : 'modelos'}`}</span>
+            <span style={{ flex: 1 }}>{opciones.cortado ? 'Hay más: sumá otra palabra.' : `${opciones.variantes.length} ${opciones.variantes.length === 1 ? 'modelo' : 'modelos'}`}</span>
             {hayDe && conTodo && <Button size="sm" variant="outline" onClick={() => { for (const p of opciones.variantes) { const t = (hayDe(p) ?? 0) + cantidadDe(p); if (t > 0) onCantidad(p, t) } }}>Todo el stock</Button>}
             <Button size="sm" variant="outline" onClick={() => { setOpciones(null); setTexto(''); caja.current?.focus() }}>Listo</Button>
           </div>
@@ -237,7 +237,7 @@ export function Escaneo({ linea, onPrenda, autoFocus = true, hayDe, origen, rech
               </button>
             )
           })}
-          {opciones.cortado && <div style={{ padding: '8px 12px', borderTop: `1px solid ${color.line}`, color: color.mut, background: color.bg2 }}>Hay más productos: sumá otra palabra para achicar la búsqueda.</div>}
+          {opciones.cortado && <div style={{ padding: '8px 12px', borderTop: `1px solid ${color.line}`, color: color.mut, background: color.bg2 }}>Hay más: sumá otra palabra.</div>}
         </div>
       )}
     </div>
@@ -405,11 +405,11 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
       id = c.transferencia.id
       const a = await armarTransferenciaDoc(linea, id, renglones)
       const e = await enviarTransferenciaDoc(linea, id)
-      setHecho({ texto: `T-${e.transferencia.numero} en tránsito: salieron ${e.unidades} u de ${dep(desde)}. Falta recibirla en ${dep(hacia)}.`, avisos: [...a.avisos, ...e.avisos] })
+      setHecho({ texto: `T-${e.transferencia.numero} en camino a ${dep(hacia)} · ${e.unidades} u.`, avisos: [...a.avisos, ...e.avisos] })
       setLista([]); setNota('')
       if (unificada) setMoviendo(false)
     } catch (err) {
-      setError(`${err instanceof Error ? err.message : 'No se pudo transferir.'}${id ? ' La transferencia quedó sin enviar: no salió nada del stock. Cancelala abajo o reintentá.' : ''}`)
+      setError(`${err instanceof Error ? err.message : 'No se pudo transferir.'}${id ? ' No salió nada del stock: volvé a intentar.' : ''}`)
     } finally {
       setTrabajando(false); setVuelta((v) => v + 1)
     }
@@ -438,7 +438,6 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
               </div>
             ))}
           </div>
-          <div style={{ color: color.mut, fontSize: font.sm }}>Quedan marcadas como faltante en la transferencia.</div>
         </div>
       )
       const ok = await confirmar({ titulo: `¿Recibir T-${recibiendo.doc.numero} con ${n} de menos?`, mensaje, ok: `Recibir con ${n} de menos`, cancelar: 'Seguir escaneando', tono: 'warning' })
@@ -451,10 +450,10 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
         const renglones = renglonesParaMotor(recibiendo.lista)
         const a = await armarTransferenciaDoc(linea, recibiendo.doc.id, renglones)
         const e = await enviarTransferenciaDoc(linea, recibiendo.doc.id)
-        setHecho({ texto: `T-${e.transferencia.numero} en tránsito: salieron ${e.unidades} u de ${dep(recibiendo.doc.desde)}. Falta recibirla en ${dep(recibiendo.doc.hacia)}.`, avisos: [...a.avisos, ...e.avisos] })
+        setHecho({ texto: `T-${e.transferencia.numero} en camino a ${dep(recibiendo.doc.hacia)} · ${e.unidades} u.`, avisos: [...a.avisos, ...e.avisos] })
         setRecibiendo(null)
       } catch (err) {
-        setError(`${err instanceof Error ? err.message : 'No se pudo preparar.'} No salió nada del stock: reintentá.`)
+        setError(`${err instanceof Error ? err.message : 'No se pudo preparar.'} Volvé a intentar.`)
       } finally {
         setTrabajando(false); setVuelta((v) => v + 1)
       }
@@ -463,7 +462,7 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
     try {
       const r = await recibirTransferenciaDoc(linea, recibiendo.doc.id, renglonesParaMotor(recibiendo.lista))
       const falt = r.diferencias.reduce((s, d) => s + Math.min(0, d.diferencia), 0)
-      setHecho({ texto: falt < 0 ? `T-${r.transferencia.numero} recibida con ${-falt} u de menos: quedó marcada como diferencia hasta que un ajuste la cierre.` : `T-${r.transferencia.numero} recibida completa.`, avisos: r.avisos })
+      setHecho({ texto: falt < 0 ? `T-${r.transferencia.numero} recibida con ${-falt} u de menos.` : `T-${r.transferencia.numero} recibida completa.`, avisos: r.avisos })
       setRecibiendo(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo recibir.')
@@ -536,11 +535,6 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
           {toca && !moviendo && !recibiendo && <Button variant="solid" tone="brand" onClick={() => { setMoviendo(true); setHecho(null); setError(null) }}>Nueva transferencia</Button>}
         </div>
       )}
-      {!unificada && !(angosta && recibiendo) && (
-        <SectionCard title="Transferir y recibir" subtitle="Una transferencia entre el depósito y el local: se escanea lo que sale y, al llegar, lo que llegó. Lo que no llega queda marcado como diferencia.">
-          {linea !== 'stunned' && <Notice tone="neutral" style={{ marginTop: space[3] }}>Mueve sólo el stock de Areben Gestión: no toca Gestión Nube ni Tienda Nube. Mientras {linea === 'bdi' ? 'BDI' : 'Zattia'} siga en Gestión Nube, sus transferencias se hacen como siempre.</Notice>}
-        </SectionCard>
-      )}
 
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho.texto}{hecho.avisos.map((a, i) => <div key={i} style={{ marginTop: 4 }}>⚠️ {a.texto}</div>)}</Notice>}
@@ -608,7 +602,7 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
       {!recibiendo && !(unificada && moviendo) && <>
 
       {/* Hasta que llegan las transferencias, un cartel: antes se veía la lista en 0 («No hay transferencias») y después se llenaba (Darío, 18-nov). */}
-      {!docs && !error && <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, padding: space[6] }}><EmptyState title="Cargando transferencias…" /></div>}
+      {!docs && !error && <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, padding: space[6] }}><EmptyState title="Leyendo…" /></div>}
       {docs && <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS_DOC.map((v) => (v[0] === 'en_camino' && enCaminoU ? [v[0], `En camino · ${u(enCaminoU)}`] as const : v))} valor={vista} conteo={conteo} onCambio={setVista} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
@@ -623,7 +617,7 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
           activa={fichaId} onAbrir={(d) => setFichaId(d.id)} etiquetaFila={(d) => `la transferencia T-${d.numero} de ${dep(d.desde)} a ${dep(d.hacia)}`}
           vacio={docs ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay transferencias con ese número, producto o persona.' : vista === 'en_camino' ? 'No hay nada en camino.' : 'No hay transferencias en esta vista.'} />
+              <EmptyState title={q ? `Ninguna transferencia coincide con «${q}».` : vista === 'en_camino' ? 'No hay nada en camino.' : 'No hay transferencias en esta vista.'} />
             </div>
           ) : <div style={{ padding: space[6] }}><EmptyState title="Leyendo…" /></div>}
         />

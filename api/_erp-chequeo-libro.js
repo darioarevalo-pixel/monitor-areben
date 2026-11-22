@@ -15,7 +15,7 @@ const MARCAS = ['bdi', 'zattia']
  * @param {{ conMotor: Function, revisar?: Function, ahora?: () => Date }} deps  `revisar`: para los tests (por defecto `revisarLibro` del motor)
  */
 export async function reglasDelLibro({ marca }, deps) {
-  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
   const revisar = deps.revisar || (await import('../motor/invariantes.mjs')).revisarLibro
   const ahora = deps.ahora ? deps.ahora() : new Date()
   return deps.conMotor(marca, 'El chequeo de movimientos', async (pg) => {

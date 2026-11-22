@@ -20,10 +20,10 @@ import type { Tone } from '@/components/ui/tokens'
 import { ListaTrabajo, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
-import { BuscadorLista, ChipEstado, TileResumen, VistasLista, cuandoCorto, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, VistasLista, cuandoCorto, estiloNombre } from '@/components/ui/PiezasLista'
 import { leerComparacion, type ComparacionTiendas, type FilaComparacion, type MarcaErp, type TiendaErp } from '@/lib/erp/cliente'
 import {
-  COLUMNAS, QUE_PASA, VISTAS, alternarColumna, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
+  COLUMNAS, QUE_PASA, VISTAS, alternarColumna, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar,
 } from '@/lib/erp/comparacion.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { diaArgentino } from '@/lib/envios/portal.core.js'
@@ -44,8 +44,8 @@ const tono = (f: FilaComparacion): Tone => (f.clase === 'coincide' ? 'success' :
 
 function bajarCsv(filas: FilaComparacion[], marca: MarcaErp) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Producto', 'Variante', 'SKU', 'Tienda', 'Según Areben Gestión', 'Tienda Nube', 'Diferencia', 'En Gestión Nube', 'Reservado', 'Qué pasa'].map(c).join(';')]
-  for (const f of filas) renglones.push([f.nombre, f.talleNombre, f.sku, TIENDA[f.tienda], f.paraTienda ?? '', f.tn ?? '', f.diferencia ?? '', f.gn ?? '', f.enPedidos, QUE[f.clase]?.nombre ?? f.clase].map(c).join(';'))
+  const renglones = [['Producto', 'Variante', 'SKU', 'Tienda', 'Areben Gestión', 'Tienda Nube', 'Diferencia', 'Reservado', 'Qué pasa'].map(c).join(';')]
+  for (const f of filas) renglones.push([f.nombre, f.talleNombre, f.sku, TIENDA[f.tienda], f.paraTienda ?? '', f.tn ?? '', f.diferencia ?? '', f.enPedidos, QUE[f.clase]?.nombre ?? f.clase].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
   a.href = url
@@ -90,7 +90,6 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = f
   useEffect(() => { alContar?.(cargando ? null : conteo.no) }, [alContar, cargando, conteo])
   const enVista = useMemo(() => filtrar(base, { vista }), [base, vista])
   const filas: FilaComparacion[] = useMemo(() => ordenar(enVista, orden), [enVista, orden])
-  const res = useMemo(() => resumen(base), [base])
   const elegidas = filas.filter((f) => seleccion.has(f.id))
   const mirada = `${vista}|${q}|${tienda}|${orden?.col ?? ''}|${orden?.dir ?? ''}`
   const mostrar = tanda.de === mirada ? tanda.n : DE_A
@@ -116,7 +115,7 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = f
     if (k === 'ped') return f.enPedidos ? <span style={{ color: 'var(--mo-warning-ink)' }} title="Reservadas por pedidos de Tienda Nube sin pagar">{f.enPedidos}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'dif') {
       if (!f.diferencia) return <span style={{ color: color.mut2 }}>—</span>
-      return <span style={{ fontWeight: 700, color: f.diferencia > 0 ? 'var(--mo-danger-ink)' : 'var(--mo-warning-ink)' }} title={f.diferencia > 0 ? 'La tienda muestra de más: se puede vender sin tenerlo' : 'La tienda muestra de menos: se deja de vender'}>{f.diferencia > 0 ? `+${f.diferencia}` : f.diferencia}</span>
+      return <span style={{ fontWeight: 700, color: f.diferencia > 0 ? 'var(--mo-danger-ink)' : 'var(--mo-warning-ink)' }}>{f.diferencia > 0 ? `+${f.diferencia}` : f.diferencia}</span>
     }
     if (k === 'que') return <span title={QUE[f.clase]?.mirar}><ChipEstado mapa={{ x: [tono(f), QUE[f.clase]?.nombre ?? f.clase] }} k="x" />{f.repetidas > 0 && <span style={{ color: color.mut }}> · repetida en Tienda Nube</span>}</span>
     return null
@@ -125,31 +124,20 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = f
   const abrir = (f: FilaComparacion) => setFicha(f)
   const leidas = Object.entries(datos?.tnLeidas ?? {}).filter(([t]) => (marca === 'bdi' ? t === 'bdi' : t !== 'bdi'))
   const nombreVista = VISTAS.find(([k]) => k === vista)?.[1] ?? ''
-  const tnLeida = leidas.length ? cuandoCorto(leidas.map(([, l]) => l).sort()[0]) : '—'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>Por variante: lo que la tienda tendría que mostrar según Areben Gestión (sus depósitos, menos lo reservado por pedidos sin pagar) contra lo que muestra. Arranca con las que no coinciden.</p>
-      {sinGn
-        ? <Notice tone="neutral">{TIENDA[tiendaEnvio]} ya vive en Areben Gestión: el stock de la tienda lo manda Areben Gestión. Si no coinciden, el arreglo es <b>enviar el stock de Areben Gestión</b> a la tienda (abajo).</Notice>
-        : <Notice tone="warning">Hasta el corte de cada tienda, su stock lo manda <b>Gestión Nube</b>: si Gestión Nube y la tienda coinciden y Areben Gestión no, lo que hay que mirar es Areben Gestión. Después del corte, el arreglo es <b>enviar el stock de Areben Gestión</b> a la tienda (abajo).</Notice>}
+      {!sinGn && <Notice tone="warning">{TIENDA[tiendaEnvio]}: el stock de la tienda lo manda Gestión Nube.</Notice>}
       <Notice tone="neutral">
-        <b>Mercado Libre todavía no se compara acá</b>: Areben Gestión no guarda lo publicado en Mercado Libre.
-        {datos?.ml ? <> La conciliación del {datos.ml.fecha.split('-').reverse().slice(0, 2).join('/')} encontró {datos.ml.noCierran} publicaciones que no coinciden. <Button variant="outline" onClick={irAConciliacion}>Ver en Conciliación</Button></> : ' Las que no coinciden salen una vez por día en Conciliación.'}
+        {datos?.ml ? <>Mercado Libre: {datos.ml.noCierran} publicaciones no coinciden ({datos.ml.fecha.split('-').reverse().slice(0, 2).join('/')}). <Button variant="outline" onClick={irAConciliacion}>Ver en Conciliación</Button></> : <>Mercado Libre: <Button variant="outline" onClick={irAConciliacion}>Ver en Conciliación</Button></>}
       </Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
-
-      <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-        <TileResumen titulo="No coinciden" valor={res.noCoinciden.toLocaleString('es-AR')} oscuro nota={`de ${res.comparadas.toLocaleString('es-AR')} variantes publicadas · Tienda Nube leída ${tnLeida}`} />
-        <TileResumen tono={tonoDeConteo(res.deMas)} titulo="Muestra de más" valor={res.deMas.toLocaleString('es-AR')} nota={res.uMas ? `${res.uMas.toLocaleString('es-AR')} u que se pueden vender sin tenerlas` : 'ninguna'} />
-        <TileResumen tono={tonoDeConteo(res.deMenos)} titulo="Muestra de menos" valor={res.deMenos.toLocaleString('es-AR')} nota={res.uMenos ? `${res.uMenos.toLocaleString('es-AR')} u que se dejan de vender` : 'ninguna'} />
-      </div>
 
       <EnviarStockTN key={tiendaEnvio} tienda={tiendaEnvio} alTerminar={() => setVuelta((n) => n + 1)} />
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={(k) => { setVista(k); setSeleccion(new Set()) }} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en la comparación" placeholder="Producto o código de barras" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en la comparación" placeholder="Producto, SKU o código de barras" />
           <PanelColumnas
             columnas={prefs.orden.filter((k) => !(sinGn && k === 'gn')).map((k) => ({ key: k, titulo: COLUMNAS[k as keyof typeof COLUMNAS][0], visible: prefs.visibles.includes(k), fija: !!COLUMNAS[k as keyof typeof COLUMNAS][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
@@ -165,7 +153,7 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = f
           activa={ficha?.id ?? null} onAbrir={abrir} etiquetaFila={(f) => `el producto ${f.nombre} ${f.talleNombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay productos con ese nombre o SKU.' : vista === 'no' ? 'Todo coincide con la tienda.' : 'No hay productos en esta vista.'} />
+              <EmptyState title={q ? `Ningún producto coincide con «${q}».` : vista === 'no' ? 'Todo coincide con la tienda.' : 'No hay productos en esta vista.'} />
               {vista !== 'todas' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todas')}>Ver todas</Button></div>}
             </div>
           ) : null}
@@ -176,13 +164,13 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = f
           </div>
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo la comparación…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')} · ${nombreVista.toLowerCase()}`}
-          {datos && <> · Areben Gestión llega hasta {cuandoCorto(datos.libroHasta)}{leidas.map(([t, l]) => ` · ${TIENDA[t]} leída ${cuandoCorto(l)}`).join('')}</>}
+          {cargando && !datos ? 'Leyendo…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')} · ${nombreVista.toLowerCase()}`}
+          {datos && <>{leidas.map(([t, l]) => ` · ${TIENDA[t]} leída ${cuandoCorto(l)}`).join('')}</>}
         </div>
       </div>
 
       <BarraSeleccion cuantas={elegidas.length} onSoltar={() => setSeleccion(new Set())}>
-        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca)}>Exportar las elegidas</AccionSeleccion>
+        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca)}>Exportar</AccionSeleccion>
       </BarraSeleccion>
 
       {ficha?.producto && ficha.talle && (

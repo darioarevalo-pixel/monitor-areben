@@ -95,34 +95,35 @@ export function ActualizarIngresos() {
   const listosVistos = listosFiltrados.slice(0, DE_A)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
-        <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Los productos de Ingresos: lo que Areben Gestión ya tiene está Listo, y lo que llegó en una orden de compra confirmada y falta queda Pendiente. Al importarlo, sus unidades entran al stock.</p>
-        <Button variant="outline" onClick={() => actualizar('habitual')} disabled={leyendo || importando}>{leyendo && modo === 'habitual' ? 'Leyendo…' : 'Actualizar Ingresos'}</Button>
+    // 🎨 Darío 22-nov («muy plana»): una tarjeta con título, como las listas; el resto va adentro.
+    <section style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', padding: '14px 16px' }}>
+        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+          <div style={{ fontSize: font.lg, fontWeight: 700, color: color.ink }}>Productos nuevos</div>
+          <div style={{ fontSize: font.sm, color: color.mut }}>{!datos ? 'De Ingresos' : datos.manda ? `${lista.length.toLocaleString('es-AR')} pendientes · ${listos.length.toLocaleString('es-AR')} listos` : 'De Ingresos'}</div>
+        </div>
+        <Button variant="solid" tone="brand" onClick={() => actualizar('habitual')} disabled={leyendo || importando}>{leyendo && modo === 'habitual' ? 'Leyendo…' : 'Actualizar Ingresos'}</Button>
         {puede('configurar') && <Button variant="ghost" onClick={() => actualizar('excepcional')} disabled={leyendo || importando}>{leyendo && modo === 'excepcional' ? 'Leyendo…' : 'Traer sin orden de compra'}</Button>}
       </div>
-      {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
-      {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
-      {!datos && !error && !leyendo && <EmptyState title="Tocá «Actualizar Ingresos» para ver qué hay." />}
-      {datos && !datos.manda && (
-        <Notice tone="neutral">
-          {datos.motivo === 'frenada'
-            ? 'El envío a Areben Gestión de esta marca está frenado: no se puede importar.'
-            : 'Todavía no corresponde: esta marca no pasó a Areben Gestión. Hasta el corte, los productos llegan desde Gestión Nube.'}
-        </Notice>
+      {(error || hecho || (datos && (!datos.manda || datos.prueba || modo === 'excepcional' || datos.oc_error || (datos.oc_sin_producto?.length ?? 0) > 0 || (datos.a_vincular?.length ?? 0) > 0))) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: space[3], padding: '0 16px 14px' }}>
+          {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+          {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
+          {datos && !datos.manda && <Notice tone="neutral">{datos.motivo === 'frenada' ? 'El envío a Areben Gestión de esta marca está frenado: no se puede importar.' : 'Esta marca todavía no pasó a Areben Gestión.'}</Notice>}
+          {datos?.manda && datos.prueba && <Notice tone="warning">Antes del corte: se ve todo lo que falta. Importá lo que se va a vender después del corte; su stock entra por sus órdenes de compra.</Notice>}
+          {datos?.manda && !datos.prueba && modo === 'excepcional' && <Notice tone="neutral">Sin orden de compra: entran con stock 0.</Notice>}
+          {datos?.manda && datos.oc_error && <Notice tone="warning">{datos.oc_error}</Notice>}
+          {datos?.manda && (datos.oc_sin_producto?.length ?? 0) > 0 && (
+            <Notice tone="warning">Ingresos ya no tiene estos productos: {datos.oc_sin_producto!.map((x) => `${x.sku}${x.oc ? ` (${x.oc})` : ''}`).join(', ')}.</Notice>
+          )}
+          {datos?.manda && (datos.a_vincular?.length ?? 0) > 0 && (
+            <Notice tone="warning">Ya existe algo parecido, resolvelo en Vincular: {datos.a_vincular!.map((x) => x.nombre ?? `Producto ${x.ingresos_id}`).join(', ')}.</Notice>
+          )}
+        </div>
       )}
       {datos?.manda && (
         <>
-          {datos.prueba && <Notice tone="warning">Antes del corte: se ve todo lo que falta. Importá lo que se va a vender después del corte; su stock entra por sus órdenes de compra.</Notice>}
-          {!datos.prueba && modo === 'excepcional' && <Notice tone="neutral">Productos tocados en Ingresos desde el corte, sin orden de compra: entran con stock 0.</Notice>}
-          {datos.oc_error && <Notice tone="warning">{datos.oc_error}</Notice>}
-          {(datos.oc_sin_producto?.length ?? 0) > 0 && (
-            <Notice tone="warning">Hay mercadería que no se puede importar porque Ingresos ya no tiene el producto: {datos.oc_sin_producto!.map((x) => `${x.sku}${x.oc ? ` (${x.oc})` : ''}`).join(', ')}.</Notice>
-          )}
-          {(datos.a_vincular?.length ?? 0) > 0 && (
-            <Notice tone="warning">No se pueden importar porque ya hay algo parecido en Areben Gestión, hay que resolverlos en Vincular: {datos.a_vincular!.map((x) => x.nombre ?? `Producto ${x.ingresos_id}`).join(', ')}.</Notice>
-          )}
-          <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ borderTop: `1px solid ${color.line}` }}>
             <VistasLista vistas={VISTAS} valor={vista} conteo={{ pendiente: lista.length, listo: listos.length }} onCambio={(v) => setVista(v as 'pendiente' | 'listo')} />
             <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', padding: '10px 16px' }}>
               {vista === 'pendiente' && lista.length > 0 && (
@@ -152,6 +153,6 @@ export function ActualizarIngresos() {
           </div>
         </>
       )}
-    </div>
+    </section>
   )
 }

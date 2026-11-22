@@ -64,8 +64,8 @@ describe('la lista de movimientos', () => {
     expect(venta).toContain('-1')
     expect(venta).toContain('Venta #296')
     expect(venta).toContain('camila')
-    const t = filaDe('Depósito').textContent
-    expect(t).toContain('Transferencia 8101')
+    const t = filaDe('Transferencia 8101').textContent
+    expect(t).toContain('Local')
     expect(t).toContain('Reposición') // ⛔ una persona inventada
     await clic(boton(/^Ventas/))
     expect(host.querySelector('[role="table"]')!.textContent).not.toContain('BUZO ROMA')

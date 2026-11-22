@@ -40,24 +40,24 @@ const apretar = async (texto: string) => {
 const boton = () => [...document.querySelectorAll('button')].find((b) => /Enviar el stock|Enviando|Pidiendo/.test(b.textContent ?? ''))!
 
 describe('Enviar el stock a Tienda Nube', () => {
-  it('un envío seco dice «Sin enviar» y qué cambiaría, ⛔ «Enviado»; el automático dice que lo pidió Areben Gestión', async () => {
+  it('un envío seco dice «De prueba» y qué cambiaría, ⛔ «Enviado»; el automático dice «Automático»', async () => {
     lista = [env({ id: 3, pedidoPor: 'libro:zattia' }), env({ id: 1 })]
     await montar()
     expect(leerEmpujesStock).toHaveBeenCalledWith('stunned')
-    expect(todo()).toContain('Sin enviar')
+    expect(todo()).toContain('De prueba')
     expect(todo()).toContain('3 variantes distintas (5 u)')
     expect(todo()).not.toContain('Enviado')
-    expect(todo()).toContain('Areben Gestión, solo')
+    expect(todo()).toContain('Automático')
     expect(todo()).toContain('Bruno')
-    expect(todo()).toContain('Hasta el corte de Stunned es una prueba')
+    expect(todo()).toContain('Stunned: de prueba, no toca la tienda.')
   })
 
   it('confirma ANTES (prueba hasta el corte) y cancelar ⛔ pide nada', async () => {
     lista = [env({})]
     await montar()
     await act(async () => { boton().click() })
-    expect(todo()).toContain('Areben Gestión sólo calcula qué cambiaría')
-    expect(todo()).toContain('dio 3 variantes distintas')
+    expect(todo()).toContain('¿Enviar el stock a Tienda Nube de Stunned?')
+    expect(todo()).toContain('Toda la tienda: 3 variantes distintas.')
     expect(mandarStockATN).not.toHaveBeenCalled()
     await apretar('Cancelar')
     expect(mandarStockATN).not.toHaveBeenCalled()
@@ -69,7 +69,7 @@ describe('Enviar el stock a Tienda Nube', () => {
     expect(todo()).toContain('Enviado')
     expect(todo()).toContain('3 variantes cambiadas en Tienda Nube')
     await act(async () => { boton().click() })
-    expect(todo()).toContain('Cambia el stock de la tienda de verdad')
+    expect(todo()).toContain('Si cambia más del 15 %, se frena.')
     await apretar('Enviar')
     expect(mandarStockATN).toHaveBeenCalledWith('zattia')
     expect(leerEmpujesStock).toHaveBeenCalledTimes(2)

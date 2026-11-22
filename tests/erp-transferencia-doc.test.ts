@@ -19,12 +19,12 @@ describe('leerAccion', () => {
     expect(r.entrada.origen_ref).toBe('a1:t1')
   })
   it('línea, depósitos, id y productos mal ⇒ error', () => {
-    expect((leer({ accion: 'transferencia-crear', linea: 'xx', desde: 'a', hacia: 'b' })).error).toBe('Línea inválida')
-    expect((leer({ accion: 'transferencia-crear', linea: 'bdi', desde: 'a' })).error).toMatch(/de dónde sale/)
+    expect((leer({ accion: 'transferencia-crear', linea: 'xx', desde: 'a', hacia: 'b' })).error).toBe('Todavía no disponible.')
+    expect((leer({ accion: 'transferencia-crear', linea: 'bdi', desde: 'a' })).error).toMatch(/origen y destino/)
     expect((leer({ accion: 'transferencia-enviar', linea: 'bdi', transferenciaId: 'no' })).error).toBe('Falta la transferencia')
-    expect((leer({ accion: 'transferencia-armar', linea: 'bdi', transferenciaId: ID, renglones: 'x' })).error).toMatch(/llegó incompleta/)
-    expect((leer({ accion: 'transferencia-armar', linea: 'bdi', transferenciaId: ID, renglones: [null] })).error).toMatch(/llegó incompleta/)
-    expect((leer({ accion: 'otra', linea: 'bdi', transferenciaId: ID })).error).toBe('Acción desconocida')
+    expect((leer({ accion: 'transferencia-armar', linea: 'bdi', transferenciaId: ID, renglones: 'x' })).error).toMatch(/volvé a intentar/)
+    expect((leer({ accion: 'transferencia-armar', linea: 'bdi', transferenciaId: ID, renglones: [null] })).error).toMatch(/volvé a intentar/)
+    expect((leer({ accion: 'otra', linea: 'bdi', transferenciaId: ID })).error).toBe('Todavía no disponible.')
   })
   it('enviar acepta el id de Gestión Nube; cancelar lleva el motivo', () => {
     expect((leer({ accion: 'transferencia-enviar', linea: 'bdi', transferenciaId: ID, gn_transfer_id: 8139 })).entrada).toEqual({ gn_transfer_id: '8139' })
@@ -38,7 +38,7 @@ describe('leerAccion', () => {
 
 describe('errorDe y avisos', () => {
   it('dice el error en palabras de la pantalla', () => {
-    expect(errorDe({ error: { codigo: 'SIN_PRENDAS', mensaje: 'x' } })).toEqual({ status: 409, error: 'No hay nada escaneado para transferir.' })
+    expect(errorDe({ error: { codigo: 'SIN_PRENDAS', mensaje: 'x' } })).toEqual({ status: 409, error: 'Sin productos escaneados.' })
     expect(errorDe({ error: { codigo: 'ESTADO_INVALIDO', mensaje: 'La transferencia T-3 está en transito' } }).error).toMatch(/Volvé a leer/)
     expect(errorDe({ error: { codigo: 'ENTRADA_INVALIDA', mensaje: '⛔ cantidad' } })).toEqual({ status: 400, error: 'no cantidad' })
   })

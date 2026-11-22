@@ -60,9 +60,9 @@ describe('leerCrearAjuste', () => {
     expect(leerCrearAjuste({ ...base, motivo: 'otro', detalle: 'apareció', renglones: [{ producto: '1', talle: '10', cantidad: 3 }] }).renglones[0].cantidad).toBe(3)
   })
   it('lo que ⛔ tiene forma se corta acá', () => {
-    expect(leerCrearAjuste({ ...base, linea: 'otra', motivo: 'conteo', renglones: [{ producto: '1', talle: '10', contado: 1 }] }).error).toBe('Línea inválida')
+    expect(leerCrearAjuste({ ...base, linea: 'otra', motivo: 'conteo', renglones: [{ producto: '1', talle: '10', contado: 1 }] }).error).toBe('Todavía no disponible.')
     expect(leerCrearAjuste({ ...base, motivo: 'merma', renglones: [{ producto: '1', talle: '10', contado: 1 }] }).error).toBe('Elegí el motivo')
-    expect(leerCrearAjuste({ ...base, motivo: 'conteo', renglones: [] }).error).toBe('Agregá al menos un producto')
+    expect(leerCrearAjuste({ ...base, motivo: 'conteo', renglones: [] }).error).toBe('Agregá un producto.')
     expect(leerCrearAjuste({ ...base, motivo: 'conteo', renglones: [{ producto: '1', talle: '10', contado: '' }] }).error).toMatch(/lo contado/)
     expect(leerCrearAjuste({ ...base, motivo: 'conteo', fuente: 'excel', renglones: [{ producto: '1', talle: '10', contado: 1 }] }).fuente).toBe('mano')
   })
@@ -75,7 +75,7 @@ describe('filaDeAjuste y avisos', () => {
     expect([a.neto, a.seMovio, a.motivoNombre, a.renglones.map((r: { despues: number }) => r.despues)]).toEqual([-38, 1, 'Conteo', [0, 2]])
   })
   it('cada aviso del motor se lee en palabras del equipo', () => {
-    expect(textoDeAviso({ codigo: 'CONTEO_DE_DEPOSITO_RECIENTE', conteo: 31 })).toMatch(/C-31.*dos veces/)
+    expect(textoDeAviso({ codigo: 'CONTEO_DE_DEPOSITO_RECIENTE', conteo: 31 })).toMatch(/C-31.*descartá/)
     expect(textoDeAviso({ codigo: 'LIBRO_SE_MOVIO', sku: 'S1', antes: 40, ahora: 39 })).toMatch(/S1.*40 → 39/)
   })
 })

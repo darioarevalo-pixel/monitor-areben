@@ -80,26 +80,24 @@ describe('Comparación con TN y ML', () => {
     expect(todo()).not.toContain('no arregla nada')
   })
 
-  it('la hora de Tienda Nube va en el mismo renglón del número', async () => {
+  it('la hora de Tienda Nube va al pie; sin cuadros que repiten las pestañas (Darío 22-nov)', async () => {
     await montar()
-    const tile = [...document.querySelectorAll('*')].filter((e) => e.textContent?.startsWith('No coinciden') && e.textContent.includes('variantes publicadas')).pop()!
-    expect(tile.textContent).toMatch(/variantes publicadas · Tienda Nube leída \S/)
+    expect(todo()).toMatch(/Zattia leída \S/)
+    expect(todo()).not.toContain('variantes publicadas')
     expect(todo()).not.toContain('se lee cada 2 horas')
   })
 
   it('con la línea cortada dice que vive en Areben Gestión y ⛔ muestra Gestión Nube; sin cortar, sí', async () => {
     await montar()
-    expect(todo()).toContain('su stock lo manda Gestión Nube')
+    expect(todo()).toContain('lo manda Gestión Nube')
     act(() => root?.unmount()); host.remove(); root = null
     await montar(true)
-    expect(todo()).toContain('Zattia ya vive en Areben Gestión')
-    expect(todo()).not.toContain('su stock lo manda Gestión Nube')
+    expect(todo()).not.toContain('Gestión Nube')
   })
 
   it('Mercado Libre dice que no se compara y lleva a Conciliación', async () => {
     await montar()
-    expect(todo()).toContain('Mercado Libre todavía no se compara acá')
-    expect(todo()).toContain('44 publicaciones que no coinciden')
+    expect(todo()).toContain('Mercado Libre: 44 publicaciones no coinciden')
     const boton = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Ver en Conciliación')!
     await act(async () => { boton.click() })
     expect(irAConciliacion).toHaveBeenCalled()

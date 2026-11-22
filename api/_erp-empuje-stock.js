@@ -12,7 +12,7 @@
  * ⛔ Mercado Libre (el empuje es un workflow a mano de Actions, `ml-stock.yml`) ni Gestión Nube (⛔ hay escritura de stock a GN).
  */
 const TIENDAS = ['bdi', 'zattia', 'stunned']
-const errorDe = (r) => ({ status: r.error?.codigo === 'TIENDA' || r.error?.codigo === 'USUARIO' ? 400 : 409, error: r.error?.mensaje ?? 'Areben Gestión no lo aceptó.' })
+const errorDe = (r) => ({ status: r.error?.codigo === 'TIENDA' || r.error?.codigo === 'USUARIO' ? 400 : 409, error: r.error?.mensaje ?? 'No se pudo: volvé a intentar.' })
 
 /** Lo que la pantalla necesita de cada empuje (el resultado del trabajo, ⛔ el evento crudo). */
 export function aEmpuje(e) {
@@ -31,7 +31,7 @@ export function aEmpuje(e) {
  * @param {{ conMotor: Function }} deps
  */
 export async function empujesDeStock({ marca }, deps) {
-  if (!TIENDAS.includes(marca)) return { status: 400, error: 'Tienda inválida' }
+  if (!TIENDAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
   return deps.conMotor('bdi', 'Los envíos de stock', async (pg) => {
     const { empujesStock } = await import('../motor/tn/pedido-stock.mjs')
     const r = await empujesStock(pg, { tienda: marca, limite: 5 })
@@ -45,8 +45,8 @@ export async function empujesDeStock({ marca }, deps) {
  * @param {{ conMotor: Function }} deps
  */
 export async function mandarStock({ marca, usuario }, deps) {
-  if (!TIENDAS.includes(marca)) return { status: 400, error: 'Tienda inválida' }
-  if (!usuario) return { status: 400, error: 'Falta quién lo pide' }
+  if (!TIENDAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
+  if (!usuario) return { status: 400, error: 'No se pudo: volvé a intentar.' }
   return deps.conMotor('bdi', 'Mandar el stock', async (pg) => {
     const { pedirEmpujeStock } = await import('../motor/tn/pedido-stock.mjs')
     const r = await pedirEmpujeStock(pg, { tienda: marca, usuario })

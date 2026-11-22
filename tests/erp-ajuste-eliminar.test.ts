@@ -31,9 +31,9 @@ describe('Eliminar un ajuste aplicado', () => {
 
   it('el ajuste de OTRA línea ⇒ 404 y el motor ⛔ se llama', async () => {
     eliminarAjuste.mockReset()
-    expect(await eliminar('bdi', 'zattia')).toEqual({ status: 404, error: 'No está ese ajuste' })
-    expect(await eliminar('bdi', null)).toEqual({ status: 404, error: 'No está ese ajuste' })
-    expect(await eliminar('otra', 'otra')).toEqual({ status: 400, error: 'Línea inválida' })
+    expect(await eliminar('bdi', 'zattia')).toEqual({ status: 404, error: 'Ese ajuste no existe.' })
+    expect(await eliminar('bdi', null)).toEqual({ status: 404, error: 'Ese ajuste no existe.' })
+    expect(await eliminar('otra', 'otra')).toEqual({ status: 400, error: 'Todavía no disponible.' })
     expect(eliminarAjuste).not.toHaveBeenCalled()
   })
 
@@ -47,10 +47,10 @@ describe('Eliminar un ajuste aplicado', () => {
     const con = async (codigo: string, mensaje = '') => { eliminarAjuste.mockReset().mockResolvedValueOnce({ ok: false, error: { codigo, mensaje } }); return eliminar('bdi', 'bdi') }
     const neg = await con('QUEDA_NEGATIVO', 'TOP-1: el ajuste sumó 5 en deposito_minorista y hoy hay 1; eliminarlo lo deja en -4')
     expect(neg.status).toBe(409)
-    expect(neg.error).toBe('No se puede eliminar: lo que sumó ese ajuste ya salió. TOP-1: el ajuste sumó 5 en Depósito minorista y hoy hay 1; eliminarlo lo deja en -4.')
-    expect((await con('DE_OTRO_FLUJO')).error).toMatch(/se deshace desde ese trámite/)
-    expect((await con('ANTES_DEL_CORTE')).error).toMatch(/antes de pasar la marca a Areben Gestión/)
-    expect((await con('NO_APLICADO')).error).toMatch(/si está pendiente, se descarta/)
-    expect((await con('YA_RESUELTO')).error).toBe('Ese ajuste ya está eliminado: volvé a leer.')
+    expect(neg.error).toBe('No se puede eliminar: lo que sumó ya salió.')
+    expect((await con('DE_OTRO_FLUJO')).error).toMatch(/se deshace desde donde se hizo/i)
+    expect((await con('ANTES_DEL_CORTE')).error).toMatch(/anterior al inicio/)
+    expect((await con('NO_APLICADO')).error).toMatch(/pendiente: se descarta/)
+    expect((await con('YA_RESUELTO')).error).toBe('Ese ajuste ya está eliminado: actualizá.')
   })
 })

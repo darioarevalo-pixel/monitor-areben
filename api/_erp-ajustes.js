@@ -14,28 +14,27 @@
  */
 import { LINEAS, armarAContar, baseDe, filaDeAjuste, leerCrearAjuste, textoDeAviso } from '../lib/erp/ajuste.core.js'
 import { textoDelMotor } from '../lib/erp/venta.core.js'
-import { NOMBRE_DEPOSITO } from '../lib/erp/stock.core.js'
 
-const SIN_TABLA = 'Los ajustes todavía no están disponibles: falta actualizar la base (026).'
+const SIN_TABLA = 'Todavía no disponible.'
 const STATUS = { ENTRADA_INVALIDA: 400, QUEDA_NEGATIVO: 409, SIN_DIFERENCIAS: 409, YA_RESUELTO: 409, NO_ENCONTRADO: 404, NO_APLICADO: 409, DE_OTRO_FLUJO: 409, ANTES_DEL_CORTE: 409 }
 const motor = () => import('../motor/stock/ajuste.mjs')
 /** Lo que el motor dice en palabras del motor («libro», «aplicado», `local`), dicho como en la pantalla. */
 const MENSAJE = {
-  SIN_DIFERENCIAS: 'Lo contado coincide con Areben Gestión: no hay nada que ajustar.',
-  QUEDA_NEGATIVO: 'En ese depósito Areben Gestión tiene menos de las que salen. Si el producto está, contalo primero en Conteo de depósito (o de fundas): el conteo entra solo a Areben Gestión.',
-  YA_RESUELTO: 'Ese ajuste ya se aprobó o se descartó: volvé a leer.',
-  NO_ENCONTRADO: 'No está ese ajuste.',
+  SIN_DIFERENCIAS: 'Lo contado coincide: no hay nada que ajustar.',
+  QUEDA_NEGATIVO: 'No hay stock suficiente. Si el producto está, contalo primero.',
+  YA_RESUELTO: 'Ese ajuste ya se resolvió: actualizá.',
+  NO_ENCONTRADO: 'Ese ajuste no existe.',
 }
 const errorDe = (r) => ({ status: STATUS[r.error.codigo] ?? 409, error: MENSAJE[r.error.codigo] ?? textoDelMotor(r.error) })
 /** Eliminar un aplicado: el porqué en palabras de la pantalla. QUEDA_NEGATIVO trae del motor el producto y los números. */
 const AL_ELIMINAR = {
-  YA_RESUELTO: 'Ese ajuste ya está eliminado: volvé a leer.',
-  NO_APLICADO: 'Ese ajuste no cambió el stock: si está pendiente, se descarta.',
-  DE_OTRO_FLUJO: 'Ese ajuste lo hizo otro trámite (un canje, un reclamo, un pedido o una salida): se deshace desde ese trámite.',
-  ANTES_DEL_CORTE: 'Ese ajuste es de antes de pasar la marca a Areben Gestión: el stock ya se igualó con Gestión Nube ese día.',
+  YA_RESUELTO: 'Ese ajuste ya está eliminado: actualizá.',
+  NO_APLICADO: 'Está pendiente: se descarta.',
+  DE_OTRO_FLUJO: 'Se deshace desde donde se hizo (canje, reclamo, pedido o salida).',
+  ANTES_DEL_CORTE: 'Es anterior al inicio: no se puede eliminar.',
 }
 const errorAlEliminar = (r) => (r.error.codigo === 'QUEDA_NEGATIVO'
-  ? { status: 409, error: `No se puede eliminar: lo que sumó ese ajuste ya salió. ${textoDelMotor(r.error).replace(/ en ([a-z_]+) y /, (_, d) => ` en ${NOMBRE_DEPOSITO[d] ?? d} y `)}.` }
+  ? { status: 409, error: 'No se puede eliminar: lo que sumó ya salió.' }
   : AL_ELIMINAR[r.error.codigo] ? { status: STATUS[r.error.codigo] ?? 409, error: AL_ELIMINAR[r.error.codigo] } : errorDe(r))
 const conAvisos = (r) => (r.avisos || []).map((a) => ({ ...a, texto: textoDeAviso(a) }))
 
@@ -46,7 +45,7 @@ async function ventasAContar(pg, linea) {
 }
 
 export async function ajustesDeLinea({ linea }, deps) {
-  if (!LINEAS.includes(linea)) return { status: 400, error: 'Línea inválida' }
+  if (!LINEAS.includes(linea)) return { status: 400, error: 'Todavía no disponible.' }
   const m = await motor()
   // La conciliación sale por supabase-js (⛔ ocupa la conexión pg); va en paralelo con lo del motor.
   const conciliacion = deps.conciliacionDelDia({ tienda: linea, fecha: null }).catch(() => null)
@@ -82,12 +81,12 @@ export async function crearAjusteErp({ body, usuario }, deps) {
 
 export async function resolverAjusteErp({ body, usuario, aprobar }, deps) {
   const linea = String(body?.linea || '')
-  if (!LINEAS.includes(linea)) return { status: 400, error: 'Línea inválida' }
+  if (!LINEAS.includes(linea)) return { status: 400, error: 'Todavía no disponible.' }
   const m = await motor()
   return deps.conMotor(baseDe(linea), 'Los ajustes', async (pg) => {
     // El ajuste tiene que ser de ESTA línea: el id viaja del navegador.
     const [a] = (await pg.query('select linea from stock_ajuste where id = $1', [String(body?.ajusteId || '')]).catch(() => ({ rows: [] }))).rows
-    if (!a || a.linea !== linea) return { status: 404, error: 'No está ese ajuste' }
+    if (!a || a.linea !== linea) return { status: 404, error: 'Ese ajuste no existe.' }
     const r = aprobar
       ? await m.aprobarAjuste(pg, { ajuste_id: body.ajusteId, usuario })
       : await m.rechazarAjuste(pg, { ajuste_id: body.ajusteId, usuario, motivo: body.motivo })
@@ -99,12 +98,12 @@ export async function resolverAjusteErp({ body, usuario, aprobar }, deps) {
 /** «Eliminar» un ajuste aplicado (sólo Admin, lo frena `api/_erp.js`): el motor escribe el movimiento contrario y lo marca eliminado. */
 export async function eliminarAjusteErp({ body, usuario }, deps) {
   const linea = String(body?.linea || '')
-  if (!LINEAS.includes(linea)) return { status: 400, error: 'Línea inválida' }
+  if (!LINEAS.includes(linea)) return { status: 400, error: 'Todavía no disponible.' }
   const m = await motor()
   return deps.conMotor(baseDe(linea), 'Los ajustes', async (pg) => {
     // El ajuste tiene que ser de ESTA línea: el id viaja del navegador.
     const [a] = (await pg.query('select linea from stock_ajuste where id = $1', [String(body?.ajusteId || '')]).catch(() => ({ rows: [] }))).rows
-    if (!a || a.linea !== linea) return { status: 404, error: 'No está ese ajuste' }
+    if (!a || a.linea !== linea) return { status: 404, error: 'Ese ajuste no existe.' }
     const r = await m.eliminarAjuste(pg, { ajuste_id: body.ajusteId, usuario })
     if (!r.ok) return errorAlEliminar(r)
     return { ok: true, numero: r.ajuste.numero, estado: r.ajuste.estado, movimientos: r.movimientos }

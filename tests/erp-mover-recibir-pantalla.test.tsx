@@ -78,7 +78,7 @@ describe('Mover y recibir', () => {
     expect(m.crearTransferenciaDoc).toHaveBeenCalledWith('stunned', 'deposito', 'local', renglones)
     expect(m.armarTransferenciaDoc).toHaveBeenCalledWith('stunned', t.id, renglones)
     expect(m.enviarTransferenciaDoc).toHaveBeenCalledWith('stunned', t.id)
-    expect(document.body.textContent).toContain('T-7 en tránsito')
+    expect(document.body.textContent).toContain('T-7 en camino')
   })
 
   it('si «armar» falla, el error dice que no salió nada y NO se envía', async () => {
@@ -90,7 +90,7 @@ describe('Mover y recibir', () => {
     await act(async () => { boton('Transferir 1 unidad').click() })
     await esperar()
     expect(m.enviarTransferenciaDoc).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('no salió nada del stock')
+    expect(document.body.textContent).toContain('No salió nada del stock')
   })
 
   it('«Recibir» arranca en 0, suma lo escaneado y manda sólo eso; con faltante lo dice', async () => {
@@ -130,7 +130,7 @@ describe('Mover y recibir', () => {
     const renglones = [{ product_id: '10', size_id: '1', sku: 'STU-REM-0019-M', barcode: '779001', cantidad: 2 }]
     expect(m.armarTransferenciaDoc).toHaveBeenCalledWith('stunned', pedida.id, renglones)
     expect(m.enviarTransferenciaDoc).toHaveBeenCalledWith('stunned', pedida.id)
-    expect(document.body.textContent).toContain('en tránsito')
+    expect(document.body.textContent).toContain('en camino a')
   })
 
   it('si el ERP rechaza al preparar (rol sin permiso), el error se ve AL LADO del botón y lo escaneado queda', async () => {
@@ -261,15 +261,15 @@ describe('Mover y recibir', () => {
     pregunta.mockRestore()
   })
 
-  it('mientras cargan, «Cargando transferencias…» y ⛔ la lista en 0 (Darío, 18-nov: parpadeaba)', async () => {
+  it('mientras cargan, «Leyendo…» y ⛔ la lista en 0 (Darío, 18-nov: parpadeaba)', async () => {
     let soltar: (v: unknown) => void = () => {}
     m.leerTransferenciasDoc.mockReturnValue(new Promise((r) => { soltar = r }))
     await montar({ unificada: true })
-    expect(document.body.textContent).toContain('Cargando transferencias…')
+    expect(document.body.textContent).toContain('Leyendo…')
     expect(document.querySelector('[role="tablist"]')).toBeNull()
     await act(async () => { soltar({ transferencias: [doc({})], enTransito: [] }) })
     await esperar()
-    expect(document.body.textContent).not.toContain('Cargando transferencias…')
+    expect(document.body.textContent).not.toContain('Leyendo…')
     expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain('En camino')
   })
 })

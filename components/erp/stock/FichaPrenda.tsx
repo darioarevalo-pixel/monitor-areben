@@ -20,7 +20,6 @@ import { leerStockDePrenda, type FilaStock, type MarcaErp, type StockDePrenda } 
 import { NOMBRE_DEPOSITO } from '@/lib/erp/stock.core.js'
 
 const nombreDe = (mapa: Record<string, string>, k: string) => mapa[k] ?? k
-const conSigno = (n: number) => (n > 0 ? `+${n}` : String(n))
 const LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
 
 
@@ -62,8 +61,8 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
 
 
   const menu: AccionMenu[] = [
-    { key: 'repo', label: 'Transferir en el monitor ↗', icono: 'abrir', onClick: () => window.open('/reposicion', '_blank', 'noopener'), hint: 'Las transferencias se preparan y se reciben escaneando en Reposición.' },
-    { key: 'etiq', label: 'Etiquetas en el monitor ↗', icono: 'abrir', onClick: () => window.open('/etiquetas', '_blank', 'noopener') },
+    { key: 'repo', label: 'Reposición ↗', icono: 'abrir', onClick: () => window.open('/reposicion', '_blank', 'noopener') },
+    { key: 'etiq', label: 'Etiquetas ↗', icono: 'abrir', onClick: () => window.open('/etiquetas', '_blank', 'noopener') },
   ]
   const h3: React.CSSProperties = { margin: 0, fontSize: font.lg, fontWeight: weight.bold }
   const aAjustar = () => linea && ajustar({ linea, producto: prenda.producto, talle: prenda.talle, sku, barcode, nombre, talleNombre: talle })
@@ -108,24 +107,21 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
         <h3 style={h3}>Por depósito</h3>
         {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : (
-          <div role="table" aria-label="Stock por depósito" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 64px 64px 92px', columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
-            {['Depósito', 'Areben Gestión', 'Gestión Nube', ''].map((t, i) => <span key={i} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: i ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>)}
+          <div role="table" aria-label="Stock por depósito" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 64px', columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
+            {['Depósito', 'Stock'].map((t, i) => <span key={i} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: i ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>)}
             {s.depositos.filter((d) => d.deposito !== 'deposito_mayorista' || d.libro !== 0).map((d) => (
               <div key={d.deposito} role="row" style={{ display: 'contents' }}>
                 <span role="cell" style={{ padding: '8px 0', borderBottom: `1px solid ${color.bg2}` }}>{nombreDe(NOMBRE_DEPOSITO, d.deposito)}</span>
                 <span role="cell" style={{ padding: '8px 0', borderBottom: `1px solid ${color.bg2}`, textAlign: 'right', fontWeight: weight.semibold, color: d.libro < 0 ? 'var(--mo-danger-ink)' : color.ink }}>{d.libro}</span>
-                <span role="cell" style={{ padding: '8px 0', borderBottom: `1px solid ${color.bg2}`, textAlign: 'right', color: color.mut }}>{d.gn ?? '—'}</span>
-                <span role="cell" style={{ padding: '8px 0', borderBottom: `1px solid ${color.bg2}`, textAlign: 'right', fontSize: font.sm, color: d.diferencia ? 'var(--mo-warning-ink)' : color.mut2 }}>{d.diferencia == null ? '' : d.diferencia === 0 ? 'igual a Gestión Nube' : `Gestión Nube ${conSigno(d.diferencia)}`}</span>
               </div>
             ))}
           </div>
         )}
-        {!!s?.sinDeposito.length && <Notice tone="warning">Gestión Nube tiene stock en depósitos que Areben Gestión no conoce: {s.sinDeposito.join(', ')}.</Notice>}
       </section>
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
         <h3 style={h3}>Movimientos</h3>
-        {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : !s.historial.length ? <span style={{ color: color.mut }}>Areben Gestión todavía no tiene movimientos de este producto.</span> : (
+        {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : !s.historial.length ? <span style={{ color: color.mut }}>Sin movimientos.</span> : (
           <Button variant="soft" tone="brand" onClick={() => setVerMovimientos(true)} style={{ alignSelf: 'flex-start' }}>Ver movimientos</Button>
         )}
       </section>

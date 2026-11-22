@@ -81,7 +81,7 @@ describe('armarConciliacion', () => {
     const diaGN = { resumen: { porLinea: { stunned: { inexplicadas: 13 } } } }
     const d = armarConciliacion({ tienda: 'stunned', filas: f, resumen: res, nombres, diaGN })
     expect(d.tarjetas.map((t: { tipo: string }) => t.tipo)).toEqual(['stock_tn', 'pedido_erp'])
-    expect(d.tarjetas[0].nombre).toBe('Stock: Tienda Nube y Areben Gestión')
+    expect(d.tarjetas[0].nombre).toBe('Stock en Tienda Nube')
     expect(JSON.stringify(d.tarjetas)).not.toContain('Gestión Nube')
     expect(d.gn).toEqual({ calculado: false, sinExplicar: null, sinGn: true })
     expect(d.desconocidas).toBe(0)

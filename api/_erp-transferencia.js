@@ -15,7 +15,7 @@
 import { LINEAS, baseDe, errorDe, leerAccion, textoDeAviso } from '../lib/erp/transferencia-doc.core.js'
 import { conFaltoArmar } from '../lib/erp/transferencias-doc.core.js'
 
-const SIN_TABLA = 'Las transferencias como documento todavía no están disponibles: falta actualizar la base (034).'
+const SIN_TABLA = 'Todavía no disponible.'
 const motor = () => import('../motor/stock/transferencia.mjs')
 const conAvisos = (r) => (r.avisos || []).map((a) => ({ ...a, texto: textoDeAviso(a) }))
 
@@ -24,7 +24,7 @@ const conAvisos = (r) => (r.avisos || []).map((a) => ({ ...a, texto: textoDeAvis
  * base): si ese pedido no se puede leer, la lista sale igual, sin ese dato (⛔ se frena la pantalla por un extra).
  */
 export async function documentosDeLinea({ linea, estado }, deps) {
-  if (!LINEAS.includes(linea)) return { status: 400, error: 'Línea inválida' }
+  if (!LINEAS.includes(linea)) return { status: 400, error: 'Todavía no disponible.' }
   const m = await motor()
   const r = await deps.conMotor(baseDe(linea), 'Las transferencias', async (pg) => {
     const { sinTablas, transferencias } = await m.transferenciasDe(pg, { linea, estado: estado ? String(estado).split(',') : null, limite: 200 })
@@ -45,7 +45,7 @@ export async function accionDeTransferencia({ body, usuario }, deps) {
   return deps.conMotor(baseDe(e.linea), 'Las transferencias', async (pg) => {
     if (e.id) {
       const [t] = (await pg.query('select linea from stock_transferencia where id = $1', [e.id]).catch(() => ({ rows: [] }))).rows
-      if (!t || t.linea !== e.linea) return { status: 404, error: 'No está esa transferencia.' }
+      if (!t || t.linea !== e.linea) return { status: 404, error: 'Esa transferencia no existe.' }
     }
     const op = { usuario, transferencia_id: e.id, ...e.entrada }
     const r = body.accion === 'transferencia-crear' ? await m.crearTransferencia(pg, op)

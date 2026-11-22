@@ -37,13 +37,13 @@ describe('Actualizar Ingresos (pantalla)', () => {
   it('⛔ lee solo al entrar: es a pedido', async () => {
     await montar()
     expect(leerProductosDeIngresos).not.toHaveBeenCalled()
-    expect(texto()).toContain('Tocá «Actualizar Ingresos»')
+    expect(texto()).toContain('Productos nuevos')
   })
   it('antes del corte dice que todavía no corresponde, y ⛔ ofrece importar', async () => {
     leerProductosDeIngresos.mockImplementation(async () => ({ manda: false, corte: null, motivo: 'sin_corte' }))
     await montar()
     await clic(boton('Actualizar Ingresos'))
-    expect(texto()).toContain('Todavía no corresponde')
+    expect(texto()).toContain('todavía no pasó a Areben Gestión')
     expect(boton('Importar')).toBeUndefined()
   })
   it('con el freno dice que está frenado', async () => {

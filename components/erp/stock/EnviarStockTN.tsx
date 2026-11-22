@@ -29,19 +29,19 @@ const n = (x: number) => x.toLocaleString('es-AR')
 /** Quién lo pidió, en palabras: el botón guarda `boton:<nombre>`; el resto lo avisó el ERP solo. */
 export function quienPidio(origen: string | null): string {
   if (origen?.startsWith('boton:')) return origen.slice(6)
-  return 'Areben Gestión, solo (cambió el stock)'
+  return 'Automático'
 }
 
 /** El estado de un envío: [tono, rótulo, detalle]. */
 export function estadoDeEnvio(e: EmpujeStock): [Tone, string, string] {
-  if (e.estado === 'pendiente') return ['neutral', 'En cola', 'Se envía en el próximo minuto.']
-  if (e.estado === 'corriendo') return ['info', 'Enviando', 'Leyendo Tienda Nube y comparando con Areben Gestión.']
-  if (e.estado === 'fallado') return ['danger', 'No se pudo', e.error ?? 'El envío falló: avisá.']
-  if (e.estado === 'abandonado') return ['neutral', 'Reemplazado', 'Lo cubrió otro envío posterior.']
+  if (e.estado === 'pendiente') return ['neutral', 'En cola', '']
+  if (e.estado === 'corriendo') return ['info', 'Enviando…', '']
+  if (e.estado === 'fallado') return ['danger', 'No se pudo', e.error ?? 'Volvé a intentar.']
+  if (e.estado === 'abandonado') return ['neutral', 'Reemplazado', '']
   const cambios = e.cambios ?? 0
   const detalle = cambios ? `${n(cambios)} variantes distintas (${n(e.unidades ?? 0)} u)` : 'Todo coincidía'
-  if (e.seco) return ['warning', 'Sin enviar', `${detalle}: todavía manda Gestión Nube, no se tocó la tienda.`]
-  const quedan = e.quedan ? ` · quedan ${n(e.quedan)} para la vuelta siguiente` : ''
+  if (e.seco) return ['warning', 'De prueba', detalle]
+  const quedan = e.quedan ? ` · faltan ${n(e.quedan)}` : ''
   return ['success', 'Enviado', `${n(e.escritos ?? 0)} variantes cambiadas en Tienda Nube${quedan}.`]
 }
 
@@ -82,13 +82,11 @@ export function EnviarStockTN({ tienda, alTerminar }: { tienda: TiendaErp; alTer
 
   const enviar = async () => {
     const ok = await confirmar({
-      titulo: `Enviar el stock a Tienda Nube de ${nombre}`,
+      titulo: `¿Enviar el stock a Tienda Nube de ${nombre}?`,
       mensaje: (
         <>
-          <p>Se iguala <b>toda la tienda {nombre}</b> al stock de Areben Gestión. No se puede elegir un solo producto.{ultimo?.cambios != null ? <> El último cálculo ({cuandoCorto(ultimo.terminadoEn)}) dio <b>{n(ultimo.cambios)} variantes distintas</b>.</> : null}</p>
-          <p>{deVerdad
-            ? <><b>Cambia el stock de la tienda de verdad.</b> Si Areben Gestión quisiera cambiar de golpe más del 15 % de la tienda, frena y no toca nada.</>
-            : <>Hasta el corte de {nombre} manda Gestión Nube: Areben Gestión <b>sólo calcula</b> qué cambiaría y no toca la tienda.</>}</p>
+          <p>Toda la tienda{ultimo?.cambios != null ? <>: <b>{n(ultimo.cambios)} variantes distintas</b></> : null}.</p>
+          <p>{deVerdad ? 'Si cambia más del 15 %, se frena.' : `${nombre}: de prueba, no toca la tienda.`}</p>
         </>
       ),
       ok: 'Enviar',
@@ -111,13 +109,10 @@ export function EnviarStockTN({ tienda, alTerminar }: { tienda: TiendaErp; alTer
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
         <div style={{ minWidth: 0, flex: '1 1 320px' }}>
           <div style={{ fontWeight: 700, color: color.ink }}>Enviar el stock a Tienda Nube · {nombre}</div>
-          <div style={{ fontSize: font.sm, color: color.mut }}>
-            Areben Gestión le pone a cada variante de la tienda su stock (sus depósitos, menos lo reservado por pedidos sin pagar). Va la tienda entera.
-            {' '}{deVerdad ? 'Además se envía solo cada vez que cambia el stock de Areben Gestión.' : `Hasta el corte de ${nombre} es una prueba: calcula y no toca la tienda.`}
-          </div>
+          <div style={{ fontSize: font.sm, color: color.mut }}>{deVerdad ? 'Se envía solo con cada cambio.' : `${nombre}: de prueba, no toca la tienda.`}</div>
         </div>
         <Button disabled={pidiendo || esperando} onClick={() => void enviar()}>
-          {pidiendo ? 'Pidiendo…' : esperando ? 'Enviando…' : 'Enviar el stock a Tienda Nube'}
+          {pidiendo ? 'Enviando…' : esperando ? 'Enviando…' : 'Enviar el stock a Tienda Nube'}
         </Button>
       </div>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
@@ -135,7 +130,7 @@ export function EnviarStockTN({ tienda, alTerminar }: { tienda: TiendaErp; alTer
             )
           })}
         </div>
-      ) : <div style={{ fontSize: font.sm, color: color.mut }}>Todavía no hubo envíos de stock a esta tienda.</div>)}
+      ) : <div style={{ fontSize: font.sm, color: color.mut }}>Sin envíos.</div>)}
     </div>
   )
 }

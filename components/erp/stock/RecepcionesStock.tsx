@@ -44,7 +44,7 @@ const COLOR_ESTADO = { recibida: '#15803d', diferencia: '#b42318', sin_pedido: '
 
 function bajarCsv(filas: FilaRecepcion[], marca: string) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Orden', 'Llegó', 'De', 'Va a', 'Pedidas', 'Recibidas', 'Faltaron', 'Sobraron', 'Estado'].map(c).join(';')]
+  const renglones = [['Orden', 'Fecha', 'Proveedor', 'Destino', 'Pedidas', 'Recibidas', 'Faltaron', 'Sobraron', 'Estado'].map(c).join(';')]
   for (const f of filas) renglones.push([f.oc, f.fecha, f.proveedor ?? '', f.vaA, f.pedidas, f.recibidas, f.faltaron, f.sobraron, f.estadoTexto].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -105,7 +105,7 @@ export function RecepcionesStock({ alContar }: { alContar?: AlContar } = {}) {
     if (k === 'oc') return <b style={{ color: color.ink }}>{f.oc}</b>
     if (k === 'llego') return <span style={{ color: color.mut }}>{f.fecha}</span>
     if (k === 'de') return f.proveedor ? <span style={{ color: color.ink2 }} title={f.proveedor}>{f.proveedor}</span> : <span style={{ color: color.mut2 }}>—</span>
-    if (k === 'va') return <span style={{ color: color.mut }} title="Ingresos todavía no dice a qué depósito va: Areben Gestión lo supone">{f.vaA}</span>
+    if (k === 'va') return <span style={{ color: color.mut }}>{f.vaA}</span>
     if (k === 'pedidas') return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{f.pedidas.toLocaleString('es-AR')}</span>
     if (k === 'recibidas') return f.pedidas ? <BarraRecibidas recibidas={f.recibidas} pedidas={f.pedidas} tono={f.tono} /> : <span style={{ color: color.mut }}>{u(f.recibidas)}</span>
     if (k === 'estado') return <span style={{ fontWeight: 600, fontSize: 13, color: COLOR_ESTADO[f.estado] }} title={f.estadoTexto}>{f.estadoTexto}</span>
@@ -114,8 +114,8 @@ export function RecepcionesStock({ alContar }: { alContar?: AlContar } = {}) {
 
   const acciones = (f: FilaRecepcion) => {
     const menu: AccionMenu[] = [
-      { key: 'ficha', label: f.estado === 'diferencia' ? 'Ver la diferencia' : 'Abrir la orden', icono: 'abrir', onClick: () => setFicha(f) },
-      { key: 'ingresos', label: 'Abrir en Ingresos del monitor ↗', icono: 'abrir', onClick: () => abrirIngresos(f.id) },
+      { key: 'ficha', label: 'Ver orden', icono: 'abrir', onClick: () => setFicha(f) },
+      { key: 'ingresos', label: 'Ingresos ↗', icono: 'abrir', onClick: () => abrirIngresos(f.id) },
     ]
     return <MenuAcciones acciones={menu} etiqueta={`Más acciones de la orden ${f.oc}`} vertical alinear="izquierda" />
   }
@@ -123,22 +123,19 @@ export function RecepcionesStock({ alContar }: { alContar?: AlContar } = {}) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
-        <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Cada orden de compra que llegó, con lo recibido de lo pedido. Las órdenes las manda Ingresos y entran al stock del depósito.</p>
+        <span style={{ flex: '1 1 320px' }} />
         <Button disabled={!filas.length} onClick={() => bajarCsv(filas, marca)}>Exportar</Button>
-        <Button variant="outline" onClick={() => abrirIngresos()}>Abrir Ingresos en el monitor ↗</Button>
+        <Button variant="outline" onClick={() => abrirIngresos()}>Ingresos ↗</Button>
       </div>
-      <Notice tone="warning">
-        Ingresos avisa cada orden <b>recién cuando se confirma</b> lo que llegó: todavía no se ven las <b>pedidas que no llegaron</b>, ni a qué depósito va cada una (Areben Gestión supone el depósito de la marca).
-      </Notice>
+      <Notice tone="warning">Solo se ven las órdenes confirmadas.</Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
-      <ActualizarIngresos />
-
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-        <TileResumen titulo="Recibidas este mes" valor={res.ordenes.toLocaleString('es-AR')} oscuro nota="órdenes de Ingresos" />
-        <TileResumen titulo="Productos que entraron" valor={u(res.entraron)} nota="este mes" />
-        <TileResumen tono={tonoDeConteo(res.conDiferencia)} titulo="Con diferencia" valor={res.conDiferencia.toLocaleString('es-AR')} nota="este mes" />
-        <TileResumen tono={tonoDeConteo(res.faltaron)} titulo="Faltaron" valor={u(res.faltaron)} nota="pedidas que no vinieron, este mes" />
+        <TileResumen titulo="Órdenes del mes" valor={res.ordenes.toLocaleString('es-AR')} oscuro />
+        <TileResumen titulo="Unidades" valor={u(res.entraron)} />
+        <TileResumen tono={tonoDeConteo(res.faltaron)} titulo="Faltaron" valor={u(res.faltaron)} />
       </div>
+
+      <ActualizarIngresos />
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
@@ -158,7 +155,7 @@ export function RecepcionesStock({ alContar }: { alContar?: AlContar } = {}) {
           activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `la orden ${f.oc}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay órdenes con ese número o proveedor.' : vista === 'diferencia' ? 'No hay órdenes con diferencia.' : 'No hay órdenes en esta vista.'} />
+              <EmptyState title={q ? `Ninguna orden coincide con «${q}».` : vista === 'diferencia' ? 'No hay órdenes con diferencia.' : 'No hay órdenes en esta vista.'} />
             </div>
           ) : null}
         />
@@ -168,8 +165,7 @@ export function RecepcionesStock({ alContar }: { alContar?: AlContar } = {}) {
           </div>
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo los ingresos…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
-          {' · '}<span style={{ fontWeight: weight.medium }}>Con diferencia</span> = faltó o sobró algún renglón (aunque el total dé igual).
+          {cargando && !datos ? 'Leyendo…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
         </div>
       </div>
 
@@ -201,23 +197,23 @@ function FichaRecepcion({ f, marca, onCerrar }: { f: FilaRecepcion; marca: strin
         {f.pedidas > 0 && <BarraRecibidas recibidas={f.recibidas} pedidas={f.pedidas} tono={f.tono} />}
         <span style={{ fontWeight: 600, fontSize: 13, color: COLOR_ESTADO[f.estado] }}>{f.estadoTexto}</span>
       </div>
-      {!f.totalesCoinciden && <Notice tone="warning">Los totales que mandó Ingresos no cierran contra sus renglones: se muestra lo de cada renglón.</Notice>}
+      {!f.totalesCoinciden && <Notice tone="warning">Los totales no coinciden con los renglones.</Notice>}
       <DatosFicha>
-        {f.fechaIngresos && <DatoFicha titulo="Fecha que cargó Ingresos">{f.fechaIngresos} · posterior a la confirmación</DatoFicha>}
+        {f.fechaIngresos && <DatoFicha titulo="Fecha de ingreso">{f.fechaIngresos}</DatoFicha>}
         <DatoFicha titulo="Pedidas">{u(f.pedidas)}</DatoFicha>
         <DatoFicha titulo="Recibidas">{u(f.recibidas)}</DatoFicha>
         <DatoFicha titulo="Faltaron">{f.faltaron ? u(f.faltaron) : '—'}</DatoFicha>
         <DatoFicha titulo="Sobraron">{f.sobraron ? u(f.sobraron) : '—'}</DatoFicha>
-        <DatoFicha titulo="Va a">{f.vaA} (supuesto)</DatoFicha>
+        <DatoFicha titulo="Destino">{f.vaA}</DatoFicha>
         {enStock && <DatoFicha titulo="Sumó al stock">{u(enStock.unidades)}</DatoFicha>}
       </DatosFicha>
       {error && <Notice tone="danger">{error}</Notice>}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: space[2], marginBottom: 6 }}>
           <span style={{ fontWeight: weight.semibold, color: color.ink, flex: 1 }}>
-            {!lineas ? 'Leyendo los renglones…' : noCerraron.length && !todas ? `Los que no cerraron (${noCerraron.length} de ${lineas.length})` : `Renglones (${lineas.length})`}
+            {!lineas ? 'Leyendo…' : noCerraron.length && !todas ? `Con diferencia (${noCerraron.length} de ${lineas.length})` : `Productos (${lineas.length})`}
           </span>
-          {lineas && noCerraron.length > 0 && <Button variant="outline" size="sm" onClick={() => setTodas(!todas)}>{todas ? 'Ver sólo los que no cerraron' : `Ver los ${lineas.length}`}</Button>}
+          {lineas && noCerraron.length > 0 && <Button variant="outline" size="sm" onClick={() => setTodas(!todas)}>{todas ? 'Ver con diferencia' : `Ver los ${lineas.length}`}</Button>}
         </div>
         {lineas && (
           <div className="erp-tabla-desliza"><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: font.base }}>
@@ -229,7 +225,7 @@ function FichaRecepcion({ f, marca, onCerrar }: { f: FilaRecepcion; marca: strin
                   <tr key={l.id}>
                     <td style={{ ...td, textAlign: 'left' }}>
                       <b style={{ color: color.ink }}>{l.nombre ?? l.sku ?? '—'}</b> <span style={{ color: color.mut }}>{[l.talle, l.color].filter(Boolean).join(' · ')}</span>
-                      <div style={{ fontSize: font.sm, color: color.mut }}>{l.sku ?? ''}{l.es_nuevo ? ' · nuevo' : ''}{l.en_gn_hoy === false ? ' · falta darlo de alta en Gestión Nube' : ''}</div>
+                      <div style={{ fontSize: font.sm, color: color.mut }}>{l.sku ?? ''}{l.es_nuevo ? ' · nuevo' : ''}</div>
                     </td>
                     <td style={td}>{l.cantidad_pedida}</td>
                     <td style={td}>{l.cantidad_contada}</td>
@@ -241,7 +237,7 @@ function FichaRecepcion({ f, marca, onCerrar }: { f: FilaRecepcion; marca: strin
           </table></div>
         )}
       </div>
-      <div><Button variant="outline" onClick={() => abrirIngresos(f.id)}>Abrir en Ingresos del monitor ↗</Button></div>
+      <div><Button variant="outline" onClick={() => abrirIngresos(f.id)}>Ingresos ↗</Button></div>
     </FichaCostado>
   )
 }
