@@ -57,6 +57,7 @@ import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
 import { avisoDeRenglon, stockSinReservasWeb } from '@/lib/caja/pedidos-web.core.js'
 import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { aplicarPromos } from '@/lib/caja/promos.core.js'
+import { conjuntosConPieza, esPieza, type ConjuntoCaja } from '@/lib/caja/conjuntos.core.js'
 import { registrarRespuesta, repetida } from '@/lib/caja/repetida.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { imprimirTicket, numeroProvisorio, plata, ticketDeCambio, ticketDeVenta, type ComprobanteCambio, type DatosTicket } from '@/lib/caja/ticket'
@@ -120,6 +121,7 @@ import {
   VentasDelTurno,
   aNumero,
   claveDe,
+  claveDeRenglon,
   horaAr,
   type PagoUI,
   type Renglon,
@@ -229,6 +231,9 @@ function POS() {
   useEffect(() => {
     cantidades.current = new Map(bor.renglones.map((r) => [claveDe(r.variante), r.cantidad]))
   }, [bor.renglones])
+  // 🩱 La parte de una bikini escaneada: se pide la otra (Bruno 22-nov: ⛔ se venden sueltas).
+  const [otraParte, setOtraParte] = useState<{ variante: Variante; stock: Stock; opciones: ConjuntoCaja[] } | null>(null)
+  const [pidiendoParte, setPidiendoParte] = useState(false)
   const [pregunta, setPregunta] = useState<{ variante: Variante; stock: Stock; enPedido: number; quedaria: number; superaStock: boolean } | null>(null)
   // Se lee del aparato al montar, adentro de un async: `localStorage` ⛔ existe en el render del servidor.
   useEffect(() => {
@@ -574,7 +579,7 @@ function POS() {
     // El de Stunned sale del ERP (`fuente: 'erp'`): ⛔ dice nada de GN.
     if (stock.fuente !== 'erp') setGnSenal(stock.fuente === 'vivo' ? { ok: true, que: 'el stock del último producto se leyó en vivo' } : { ok: false, que: `el stock del último producto es el de anoche${stock.motivo ? ` (${stock.motivo})` : ''}` })
     setBor((b) => {
-      const i = b.renglones.findIndex((r) => claveDe(r.variante) === claveDe(variante))
+      const i = b.renglones.findIndex((r) => !r.conjunto && claveDe(r.variante) === claveDe(variante))
       if (i >= 0) {
         const rs = b.renglones.slice()
         rs[i] = { ...rs[i], stock, cantidad: rs[i].cantidad + 1 }
@@ -611,6 +616,13 @@ function POS() {
       }
       return
     }
+    // 🩱 Una parte de bikini ⛔ va sola al pedido: se elige la otra parte (el talle) y entran las dos atadas.
+    const opciones = conjuntosConPieza(config?.conjuntos, variante.product_id, variante.size_id)
+    if (opciones.length) {
+      avisar('mira')
+      setOtraParte({ variante, stock, opciones })
+      return
+    }
     const rep = repetida({ enPedido: cantidades.current.get(claveDe(variante)) ?? 0, local: stock.local })
     if (!rep) return agregar(variante, stock)
     avisar('ojo', 'Ya está en el pedido')
@@ -626,6 +638,47 @@ function POS() {
     if (si) agregar(p.variante, p.stock)
     const k = claveDe(p.variante)
     setBor((b) => ({ ...b, renglones: b.renglones.map((r) => (claveDe(r.variante) === k ? { ...r, repetida: registrarRespuesta(r.repetida, si ? 'si' : 'no') } : r)) }))
+  }
+
+  /**
+   * 🩱 La bikini elegida entra al pedido: un renglón por parte, al precio de su parte (el de TN de la bikini repartido por costo, lo
+   * arma el servidor), atados por `conjunto`. Trae el stock de las otras partes; la escaneada ya lo tiene.
+   */
+  async function elegirBikini(c: ConjuntoCaja) {
+    const ya = otraParte
+    if (!ya) return
+    setPidiendoParte(true)
+    try {
+      const partes = await Promise.all(
+        c.piezas.map(async (pz) => {
+          if (pz.product_id === ya.variante.product_id && pz.size_id === ya.variante.size_id) return { pz, variante: ya.variante, stock: ya.stock }
+          const r = await elegirVariante({ product_id: pz.product_id, size_id: pz.size_id, product_name: pz.nombre ?? '', size_name: '', sku: null, barcode: null })
+          if ('candidatos' in r) throw new Error(`No se encontró la otra parte de ${c.nombre}.`)
+          return { pz, variante: r.variante, stock: r.stock }
+        }),
+      )
+      setOtraParte(null)
+      setBor((b) => {
+        const rs = b.renglones.slice()
+        for (const { pz, variante, stock } of partes) {
+          const conjunto = { variant_id: c.variant_id, n: pz.n, nombre: c.nombre }
+          const k = claveDeRenglon({ variante, conjunto })
+          const i = rs.findIndex((r) => claveDeRenglon(r) === k)
+          if (i >= 0) rs[i] = { ...rs[i], stock, cantidad: rs[i].cantidad + pz.cantidad }
+          else rs.push({ variante, stock, cantidad: pz.cantidad, rebaja: null, precio: pz.precio, precioLista: pz.precio, fueraDeTn: false, foto: fotoDe(variante), conjunto })
+        }
+        return { ...b, renglones: rs }
+      })
+      const ultima = partes.find(({ stock, pz }) => stock.local - pz.cantidad <= 0)
+      if (ultima) avisar('ojo', 'Última')
+      else avisar('ok')
+    } catch (e) {
+      avisar('no')
+      setAviso({ tono: 'danger', texto: (e as Error).message })
+    } finally {
+      setPidiendoParte(false)
+      enfocar()
+    }
   }
 
   async function escanear(texto: string, elegida?: Variante) {
@@ -663,16 +716,27 @@ function POS() {
     else setEligiendo(p)
   }
 
+  // 🩱 Las partes de una bikini van juntas: la cantidad se cambia en las dos y se sacan las dos (⛔ queda una sola en el pedido).
+  const mismaBikini = (a: Renglon, b: Renglon) => !!a.conjunto && !!b.conjunto && a.conjunto.variant_id === b.conjunto.variant_id
   const cambiarRenglon = (i: number, cambio: Partial<Renglon>) =>
-    setBor((b) => ({ ...b, renglones: b.renglones.map((r, j) => (j === i ? { ...r, ...cambio } : r)) }))
-  const sacarRenglon = (i: number) => setBor((b) => ({ ...b, renglones: b.renglones.filter((_, j) => j !== i) }))
+    setBor((b) => {
+      const el = b.renglones[i]
+      const cantidad = el?.conjunto && cambio.cantidad != null ? cambio.cantidad : null
+      if (el?.conjunto && cambio.precio !== undefined) return b // el precio de la bikini es el de TN
+      return { ...b, renglones: b.renglones.map((r, j) => (j === i ? { ...r, ...cambio } : cantidad != null && mismaBikini(r, el) ? { ...r, cantidad } : r)) }
+    })
+  const sacarRenglon = (i: number) =>
+    setBor((b) => {
+      const el = b.renglones[i]
+      return { ...b, renglones: b.renglones.filter((r, j) => j !== i && !(el?.conjunto && mismaBikini(r, el))) }
+    })
 
   // ── El cobro: el mismo núcleo que el servidor ──
   const sinPrecio = bor.renglones.some((r) => !(r.precio && r.precio > 0))
   // Lo que viaja al servidor: el descuento A MANO y las categorías de Tienda Nube; la promo la aplica él.
   // y la LÍNEA (Stunned, por el SKU, como el precio): con reglas comerciales, cobra con las de su línea.
   // Con su OFERTA (Stunned en oferta en su tienda, 26-oct): paga el % de la oferta de la línea (`PCT_OFERTA_DE_LINEA`).
-  const items = bor.renglones.map((r) => ({ product_id: r.variante.product_id, size_id: r.variante.size_id, cantidad: r.cantidad, precio: r.precio ?? 0, rebaja: r.rebaja ?? null, categorias: categoriasDe(r.variante.product_id), ...(esStunnedVariante(r.variante) ? { linea: 'stunned', ...(precioDeProducto(r.variante.product_id)?.oferta ? { oferta: true } : {}) } : {}) }))
+  const items = bor.renglones.map((r) => ({ product_id: r.variante.product_id, size_id: r.variante.size_id, cantidad: r.cantidad, precio: r.precio ?? 0, rebaja: r.rebaja ?? null, categorias: categoriasDe(r.variante.product_id), ...(r.conjunto ? { conjunto: r.conjunto } : {}), ...(esStunnedVariante(r.variante) ? { linea: 'stunned', ...(precioDeProducto(r.variante.product_id)?.oferta ? { oferta: true } : {}) } : {}) }))
   // 🔑 W5: las promos, con el MISMO núcleo que el servidor (`aplicarPromos`). La de compra la
   // reemplaza el descuento a mano a la venta (Bruno, 5-oct).
   const conPromo = (() => {
@@ -1138,6 +1202,28 @@ pendientes
           onAutorizar={(encargada) => { void confirmar(encargada) }}
         />
       )}
+          {otraParte && (
+            <Modal abierto onCerrar={() => { setOtraParte(null); enfocar() }} titulo="Es parte de una bikini">
+              <div style={{ display: 'grid', gap: space[3] }}>
+                <div style={{ fontSize: font.lg, fontWeight: weight.semibold }}>
+                  {otraParte.variante.product_name} · {otraParte.variante.size_name}
+                </div>
+                <div>Se vende con la otra parte. Elegí el talle de la otra parte:</div>
+                <div style={{ display: 'grid', gap: space[2] }}>
+                  {otraParte.opciones.map((c, i) => {
+                    const otras = c.piezas.filter((pz) => !(pz.product_id === otraParte.variante.product_id && pz.size_id === otraParte.variante.size_id))
+                    return (
+                      <Button key={c.variant_id} variant={i === 0 ? 'solid' : 'outline'} tone="brand" disabled={pidiendoParte} onClick={() => void elegirBikini(c)} {...(i === 0 ? { 'data-foco': true } : {})}>
+                        {otras.map((pz) => pz.nombre ?? 'Otra parte').join(' + ')} · {plata(c.precio)}
+                      </Button>
+                    )
+                  })}
+                </div>
+                <div style={{ color: color.mut, fontSize: font.sm }}>{otraParte.opciones[0].nombre}: el precio es el de la bikini en Tienda Nube.</div>
+              </div>
+            </Modal>
+          )}
+
           {/* 🔴 La prenda repetida (Bruno, 14-oct): el foco y el Enter van a «No» — el lector que disparó dos
               veces manda su Enter acá —, y cerrar con Escape o el fondo también es «No». */}
           {pregunta && (

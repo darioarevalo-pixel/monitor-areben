@@ -215,3 +215,52 @@ export async function preciosLocalStunned() {
     return { precios: Object.fromEntries(rows.map((r) => [String(r.product_id), Number(r.precio)])) }
   })
 }
+
+/**
+ * LAS BIKINIS que vende la Caja (`tn_kit_pieza`, sql/092 del motor; Bruno 21/22-nov): cada variante de TN de una bikini con sus
+ * partes y lo que vale cada una. El precio es el de Tienda Nube (con la oferta vigente: el mismo de lista online y local) y se
+ * reparte entre las partes por COSTO de producción con la regla del motor (`repartirPrecio`; sin costo, en partes iguales). El costo
+ * ⛔ sale de acá: sólo lo que vale cada parte.
+ * Sin la tabla (motor sin migrar) ⇒ `{ conjuntos: [] }`. Sin poder leer ⇒ `{ error }` / `{ sinConexion }`. ⛔ Lanza.
+ * @returns {Promise<{ conjuntos: import('../lib/caja/conjuntos.core.js').ConjuntoCaja[] } | { error: string } | { sinConexion: true }>}
+ */
+export async function conjuntosDeCaja(store) {
+  const tienda = store === 'zattia' ? 'zattia' : store === 'bdi' ? 'bdi' : null
+  if (!tienda) return { conjuntos: [] }
+  return conMotor(store, async (db) => {
+    const [{ hay }] = (await db.query(`select to_regclass('public.tn_kit_pieza') is not null as hay`)).rows
+    if (!hay) return { conjuntos: [] }
+    const { rows } = await db.query(`
+      select k.variant_id, k.n, k.product_id, k.size_id, k.cantidad, v.precio, v.precio_promocional, v.valores, p.nombre as producto,
+             i.product_name, i.size_name
+        from tn_kit_pieza k
+        join tn_variante v on v.tienda = k.tienda and v.variant_id = k.variant_id
+        left join tn_producto p on p.tienda = v.tienda and p.tn_id = v.tn_product_id
+        left join lateral (select product_name, size_name from inventario where product_id = k.product_id and size_id = k.size_id limit 1) i on true
+       where k.tienda = $1
+       order by k.variant_id, k.n`, [tienda])
+    if (!rows.length) return { conjuntos: [] }
+    const [{ repartirPrecio }, { costosDe }] = await Promise.all([import('../motor/tn/kit.mjs'), import('../motor/venta/costo.mjs')])
+    const costos = await costosDe(db, [...new Set(rows.map((r) => Number(r.product_id)))])
+    const porVariante = new Map()
+    for (const r of rows) porVariante.set(Number(r.variant_id), [...(porVariante.get(Number(r.variant_id)) || []), r])
+    const conjuntos = []
+    for (const [variant_id, ps] of porVariante) {
+      const lista = Number(ps[0].precio), promo = Number(ps[0].precio_promocional)
+      const precio = promo > 0 && promo < lista ? promo : lista
+      if (!(precio > 0) || ps.length < 2) continue // sin precio en TN ⛔ se cobra: la pantalla la muestra sin precio
+      const piezas = ps.map((r) => ({ product_id: Number(r.product_id), cantidad: Number(r.cantidad) || 1 }))
+      const { partes } = repartirPrecio(precio, piezas, (pid) => costos.get(Number(pid))?.costo ?? null)
+      conjuntos.push({
+        variant_id, nombre: ps[0].producto || 'Bikini', valores: ps[0].valores || [], precio,
+        piezas: ps.map((r, i) => ({
+          n: Number(r.n), product_id: Number(r.product_id), size_id: Number(r.size_id), cantidad: Number(r.cantidad) || 1,
+          // Lo que vale UNA unidad de la parte (las bikinis 2027 llevan 1 de cada una).
+          precio: Math.round((partes[i] / (Number(r.cantidad) || 1)) * 100) / 100,
+          nombre: r.product_name ? `${r.product_name}${r.size_name ? ` · ${r.size_name}` : ''}` : null,
+        })),
+      })
+    }
+    return { conjuntos }
+  })
+}

@@ -45,6 +45,7 @@ import { armarSobre, billetesDe } from './conteo.core.js'
 import { sobreEsperado } from './arqueo.core.js'
 import { codigoCaja } from './core.core.js'
 import { esStunned } from '../lineas.core.js'
+import { renglonesParaMostrar } from './conjuntos.core.js'
 import { numeroDeLaVenta, type Config, type Venta } from './cliente'
 
 /** `importe` es lo que queda después del descuento a mano de esa prenda (si lo hubo). */
@@ -97,12 +98,13 @@ export function ticketDeVenta(venta: Venta, config: Pick<Config, 'politica_cambi
     numero: numeroDeLaVenta(venta),
     enErp: venta.destino === 'erp',
     id: venta.id,
-    renglones: (venta.renglones ?? []).map((r) => ({
-      nombre: r.nombre ?? `Producto ${r.product_id}`,
+    // 🩱 Cada bikini en UNA línea (Bruno 22-nov): «Bikini MADDIE · Camo — Corpiño S / Bombacha M» (`renglonesParaMostrar`).
+    renglones: renglonesParaMostrar(venta.renglones ?? []).map((r, i) => ({
+      nombre: r.nombre ?? `Producto ${venta.renglones?.[i]?.product_id ?? ''}`.trim(),
       talle: r.talle,
       cantidad: r.cantidad,
       precio: r.precio,
-      importe: r.importe ?? Math.round(r.cantidad * r.precio * 100) / 100,
+      importe: r.importe,
       promos: r.promos ?? null,
       stunned: esStunned(r.sku),
     })),
