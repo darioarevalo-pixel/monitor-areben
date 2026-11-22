@@ -4,7 +4,11 @@
  *
  * 🔑 Qué depósitos suman al stock de cada tienda — MEDIDO el 15-oct (stock de TN = suma de esos depósitos de GN,
  * sobre las variantes de TN con SKU): BDI = Depósito Minorista (88,6%) · Zattia = Local (91,0%) · Stunned =
- * Depósito + Local (99,4%; ⛔ igual que Zattia). El resto de la diferencia era el espejo de TN viejo (el stock
+ * Depósito + Local (99,4%; ⛔ igual que Zattia).
+ * 🔴 22-nov (corte de Zattia, Bruno DICTADO): «la tienda online vende stock del depósito, pq unificaba en gestion nube el stock de la
+ * tienda y luego siempre entraba la venta al local, y si un producto quedaba en menos 1, se generaba la reposicion» ⇒ Zattia = Depósito + Local.
+ * Medido 22-nov (TN contra el libro recién alineado, 1.205 variantes con SKU): Local + Depósito 1.159 (96%) · sólo Local 959 (80%): las
+ * bikinis (BKB/BKC) viven en el Depósito y con «sólo Local» iban a 0 en la tienda. El resto de la diferencia era el espejo de TN viejo (el stock
  * cambia sin mover el `updated_at` del producto) ⇒ acá TN se lee EN VIVO.
  * Un nivel negativo se empuja como 0 (TN ⛔ acepta negativo). Una variante con `stock: null` en TN es «sin
  * límite»: ⛔ se toca. Una variante de TN sin SKU/código o sin variante en GN ⛔ se puede empujar: se cuenta.
@@ -12,7 +16,7 @@
 import { varianteDeLineaTN } from './cruce.mjs'
 import { grupoComparte } from './vinculo.mjs'
 
-export const DEPOSITOS_TN = { bdi: ['deposito_minorista'], zattia: ['local'], stunned: ['deposito', 'local'] }
+export const DEPOSITOS_TN = { bdi: ['deposito_minorista'], zattia: ['deposito', 'local'], stunned: ['deposito', 'local'] }
 
 /** @param {Map<string, number>} niveles 'pid:sid:deposito' → unidades @returns {(pid:number, sid:number) => number} */
 export function nivelDe(niveles, depositos) {
