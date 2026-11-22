@@ -57,7 +57,7 @@ describe('«Buscar en ARCA»', () => {
     expect(dom.value).toBe('CORRIENTES 763, ROSARIO (2000), SANTA FE')
     expect((document.querySelector('select') as HTMLSelectElement).value).toBe('ri')
     expect(document.body.textContent).toContain('Datos de ARCA cargados')
-    expect(document.body.textContent).toContain('Sale factura A.')
+    expect(document.body.textContent).toContain('Factura A.')
   })
   it('si ARCA falla, lo dice y los campos quedan para tipear', async () => {
     await montar()

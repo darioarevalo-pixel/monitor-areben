@@ -233,11 +233,11 @@ function CamposFiscales({ fiscal, f }: { fiscal: FiscalDelPanel; f: ReturnType<t
       {bcra && <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}><ResumenBcra r={bcra} /></div>}
       <Field label={esA ? 'Razón social' : 'Razón social (opcional)'}><Input value={f.razonSocial} maxLength={120} onChange={(e) => f.setRazonSocial(e.target.value)} /></Field>
       <Field label={esA ? 'Domicilio' : 'Domicilio (opcional)'}><Input value={f.domicilio} maxLength={200} onChange={(e) => f.setDomicilio(e.target.value)} /></Field>
-      {f.condicion && <div style={{ fontSize: font.sm, color: color.mut2 }}>Sale factura {esA ? 'A' : 'B'}.</div>}
+      {f.condicion && <div style={{ fontSize: font.sm, color: color.mut2 }}>Factura {esA ? 'A' : 'B'}.</div>}
     </div>
   ) : (
     <div style={{ fontSize: font.sm, color: color.mut2 }}>
-      Sale factura {esCondicionA(fiscal.condicion) ? 'A' : 'B'} a {fiscal.razonSocial || 'el cliente'}{fiscal.doc ? ` (${fiscal.doc})` : ''}.{' '}
+      Factura {esCondicionA(fiscal.condicion) ? 'A' : 'B'} a nombre de {fiscal.razonSocial || 'el cliente'}{fiscal.doc ? ` (${fiscal.doc})` : ''}.{' '}
       <Button size="sm" variant="ghost" style={{ height: 'auto' }} onClick={() => f.setPedirDatos(true)}>Cambiar datos</Button>
     </div>
   )

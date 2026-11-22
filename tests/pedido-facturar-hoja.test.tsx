@@ -58,7 +58,7 @@ describe('«Facturar» en la hoja del pedido', () => {
     await act(async () => { boton('Facturar')!.click() })
     await esperar()
     expect(cliente.leerFacturasClientePanel).toHaveBeenCalledWith(C)
-    expect(document.body.textContent).toContain('Sale factura A a X SA')
+    expect(document.body.textContent).toContain('Factura A a nombre de X SA')
     expect(document.body.textContent).not.toContain('todavía no está preparado')
     await act(async () => { boton(/^Facturar \$/)!.click() })
     await esperar()

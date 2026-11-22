@@ -309,8 +309,8 @@ export function FacturaCaja({ ventaInicial = null }: { /** Viene de «Facturar»
           <div style={{ display: 'flex', gap: space[2], marginTop: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <Field label="¿A quién se factura?">
               <Select value={clase} onChange={(e) => { setClase(e.target.value as 'A' | 'B'); limpiarA() }}>
-                <option value="B">Consumidor final · sale factura B</option>
-                <option value="A">Responsable inscripto o monotributista · sale factura A</option>
+                <option value="B">Factura B · consumidor final</option>
+                <option value="A">Factura A · responsable inscripto o monotributista</option>
               </Select>
             </Field>
             {clase === 'A' && (

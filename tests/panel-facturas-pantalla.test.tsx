@@ -58,7 +58,7 @@ describe('Facturas en la tarjeta de cuenta (pantalla)', () => {
   it('factura libre con la ficha completa: manda los renglones y ⛔ datos fiscales', async () => {
     await montar({ doc: '20123456786', razonSocial: 'X SA', domicilio: 'Mitre 1', condicion: 'ri' })
     await act(async () => { boton('Hacer factura libre')!.click() })
-    expect(document.body.textContent).toContain('Sale factura A a X SA (20123456786)')
+    expect(document.body.textContent).toContain('Factura A a nombre de X SA (20123456786)')
     await escribir(campo('Producto'), 'Fundas iPhone')
     await escribir(campo('Cantidad'), '100')
     await escribir(campo('Precio unitario'), '2.000')
@@ -76,7 +76,7 @@ describe('Facturas en la tarjeta de cuenta (pantalla)', () => {
     await escribir(campo('Producto'), 'Fundas')
     await escribir(campo('Precio unitario'), '1000')
     await escribir(campo('Condición'), 'ri')
-    expect(document.body.textContent).toContain('Sale factura A.')
+    expect(document.body.textContent).toContain('Factura A.')
     await escribir(campo('CUIT'), '20-12345678-6')
     await escribir(campo('Razón social'), 'X SA')
     await escribir(campo('Domicilio'), 'Mitre 1')
