@@ -269,7 +269,45 @@ export function armarCambio(e, conf, original, { ahora = new Date(), yaDevueltas
       linea_origen_id: l.id, costo_unitario: l.costo_unitario ?? null, costo_fuente: l.costo_fuente ?? null,
     }))
   }
+  const incompleto = conjuntoIncompleto(o, original.lineas, devueltasPorLinea, e.nuevas || [])
+  if (incompleto) return fallo('CONJUNTO_INCOMPLETO', incompleto, 'devueltas')
   return cerrarCambio(e, conf, venta, lineas)
+}
+
+/**
+ * 🔑 Bruno 21/22-nov: un CONJUNTO (la bikini) se vende completo pero con el talle de cada parte elegido ⇒ en un cambio, una pieza
+ * sola vuelve SÓLO si sale la MISMA pieza en OTRO talle (corpiño S ⇒ corpiño M: mismo producto, misma cantidad); cualquier otro
+ * cambio es de la bikini COMPLETA (vuelven todas sus piezas, en la misma proporción). Los conjuntos de la venta están en su detalle
+ * (`detalle.tn.conjuntos` los pone la venta de TN, `lib/tn/kit.mjs`; `detalle.conjuntos` la Caja). Devuelve el texto del problema, o null.
+ */
+export function conjuntoIncompleto(venta, lineas, devueltasPorLinea, nuevas = []) {
+  const conjuntos = [...(venta?.detalle?.tn?.conjuntos ?? []), ...(venta?.detalle?.conjuntos ?? [])]
+  if (!conjuntos.length) return null
+  const devuelto = new Map()
+  for (const l of lineas) {
+    const n = devueltasPorLinea.get(l.id) || 0
+    if (n) devuelto.set(`${l.product_id}:${l.size_id}`, (devuelto.get(`${l.product_id}:${l.size_id}`) || 0) + n)
+  }
+  // Lo que sale, por producto y talle (para «la misma pieza en otro talle»).
+  const sale = new Map()
+  for (const l of nuevas) sale.set(`${Number(l.product_id)}:${Number(l.size_id)}`, (sale.get(`${Number(l.product_id)}:${Number(l.size_id)}`) || 0) + (num(l.cantidad) || 0))
+  const otroTalle = (pz, n) => {
+    let hay = 0
+    for (const [k, q] of sale) { const [pid, sid] = k.split(':').map(Number); if (pid === Number(pz.product_id) && sid !== Number(pz.size_id)) hay += q }
+    return hay >= n
+  }
+  for (const c of conjuntos) {
+    const piezas = c.piezas || []
+    const kits = piezas.map((pz) => (devuelto.get(`${pz.product_id}:${pz.size_id}`) || 0) / (pz.cantidad || 1))
+    if (!kits.some((k) => k > 0)) continue
+    if (kits.every((k) => k === kits[0] && Number.isInteger(k))) continue // la bikini completa
+    // Piezas sueltas: cada una tiene que salir en otro talle.
+    const sueltas = piezas.filter((pz, i) => kits[i] > 0 && kits[i] !== Math.min(...kits))
+    const todas = piezas.filter((pz, i) => kits[i] > 0)
+    if ((sueltas.length ? sueltas : todas).every((pz) => otroTalle(pz, devuelto.get(`${pz.product_id}:${pz.size_id}`) || 0))) continue
+    return `${c.nombre || 'El conjunto'}: una parte sola se cambia sólo por otro talle de la misma parte; si no, vuelve la bikini completa`
+  }
+  return null
 }
 
 /** Lo común a los dos cambios: las nuevas, la diferencia, su cobro y los movimientos. */

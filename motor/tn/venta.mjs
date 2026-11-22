@@ -15,6 +15,7 @@
  * se cuenta por qué (la próxima corrida lo vuelve a intentar: la clave es el pedido).
  */
 import { PAGADA, DEVUELTA, varianteDeLineaTN } from './cruce.mjs'
+import { repartirPrecio } from './kit.mjs'
 import { TIENDAS } from './orden.mjs'
 
 /** Medido el 14-oct (`ventas.store` de las ventas de GN con pedido de TN). */
@@ -84,9 +85,11 @@ export function cuentaDeGateway(tienda, gateway, cuentas) {
  *   🔴 Una FUNCIÓN del instante de PAGO (`ventaTnReal` con `ahora = pagada_en`, lo que manda `aplicar.mjs`): un pedido pagado
  *   ANTES del corte que se registra después (salteado hasta que se copió su vínculo, la red de 2 h) ⛔ entra real — GN ya lo
  *   descontó y el alineo del corte copió ese stock ⇒ bajaría dos veces (revisión 10-nov). Un booleano vale para todos.
+ * @param {(product_id: number) => number | null} [p.costoDe]  el costo de producción vigente: reparte el precio de un CONJUNTO
+ *   (la bikini) entre sus piezas (`lib/tn/kit.mjs`). Sin él, en partes iguales.
  * @returns {{ registrar: any[], anular: Array<{ venta_id: string, motivo: string, numero: number }>, saltadas: Record<string, number[]>, ya: number }}
  */
-export function planVentasTN({ tienda, ordenes, indice, cuentas, ya, real = false, porArmado }) {
+export function planVentasTN({ tienda, ordenes, indice, cuentas, ya, real = false, porArmado, costoDe = null }) {
   if (!TIENDAS[tienda]) throw new Error(`tienda desconocida: ${tienda}`)
   if (typeof porArmado !== 'function') throw new Error('planVentasTN: falta `porArmado` (¿el pedido es de después del corte?)')
   const variante = varianteDeLineaTN(indice)
@@ -111,7 +114,20 @@ export function planVentasTN({ tienda, ordenes, indice, cuentas, ya, real = fals
     if (!cuenta) { saltar('cuenta_desconocida', o); continue }
     const lineas = []
     let falta = false
+    const conjuntos = []
     for (const l of o.lineas || []) {
+      // Un CONJUNTO (la bikini): un renglón por pieza, con el precio repartido por costo (Bruno 21-nov).
+      const kit = indice.piezasTN?.(l.variant_id)
+      if (kit) {
+        if (!Array.isArray(kit)) { falta = true; break }
+        const cantidad = Number(l.cantidad)
+        const { partes, reparto } = repartirPrecio(l.precio, kit, costoDe)
+        kit.forEach((p, i) => lineas.push({ product_id: Number(p.product_id), size_id: Number(p.size_id), sku: p.sku ?? null, barcode: p.barcode ?? null,
+          cantidad: cantidad * p.cantidad, precio: pesos(partes[i] / p.cantidad), descuento: 0, rebaja: 0, importe: pesos(partes[i] * cantidad) }))
+        conjuntos.push({ variant_id: Number(l.variant_id), nombre: l.nombre ?? null, cantidad, precio: pesos(l.precio), reparto,
+          piezas: kit.map((p) => ({ product_id: Number(p.product_id), size_id: Number(p.size_id), cantidad: p.cantidad })) })
+        continue
+      }
       const v = variante(l)
       if (!v) { falta = true; break }
       const cantidad = Number(l.cantidad)
@@ -131,7 +147,9 @@ export function planVentasTN({ tienda, ordenes, indice, cuentas, ya, real = fals
       ...(o.cliente_id ? { cliente_id: String(o.cliente_id) } : {}),
       lineas, subtotal, total,
       pagos: [{ cuenta: cuenta.id, monto: total, tipo_pago: tipoDePagoTN(o.medio), ...(o.cuotas ? { cuotas: Number(o.cuotas) } : {}) }],
-      detalle: { tn: { numero: Number(o.numero), tn_id: Number(o.tn_id), gateway: o.gateway, medio: o.medio, ...(/^multiple$/i.test(o.gateway || '') ? { pago_multiple: true } : {}), envio: pesos(o.envio || 0), descuento: pesos(o.descuento || 0) },
+      detalle: { tn: { numero: Number(o.numero), tn_id: Number(o.tn_id), gateway: o.gateway, medio: o.medio, ...(/^multiple$/i.test(o.gateway || '') ? { pago_multiple: true } : {}), envio: pesos(o.envio || 0), descuento: pesos(o.descuento || 0),
+          // Los conjuntos del pedido: el ticket, la factura y un CAMBIO (de la bikini completa) los leen de acá.
+          ...(conjuntos.length ? { conjuntos } : {}) },
         // 🔑 Bruno 16-nov: después del corte el libro lo mueve el ARMADO del pedido, ⛔ el pago (`lib/tn/armado.mjs`).
         ...(porArmado(o) ? { stock_por_armado: true } : {}) },
     })

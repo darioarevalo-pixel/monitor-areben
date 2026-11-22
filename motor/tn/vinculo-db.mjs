@@ -24,9 +24,11 @@ const variantesDeTN = async (db, tienda) => (await db.q(
     where v.tienda = $1`, [tienda],
 )).map((v) => ({ ...v, id: Number(v.variant_id), tn_product_id: Number(v.tn_product_id) }))
 
+const hayConjuntos = async (db) => (await db.q(`select to_regclass('public.tn_kit_pieza') is not null as hay`))[0].hay
 const indiceConVinculos = async (db) => indiceDeVariantes(
   await db.q('select product_id, size_id, sku, barcode from variante order by product_id, size_id'),
   await db.q('select variant_id, product_id, size_id from tn_vinculo'),
+  (await hayConjuntos(db)) ? await db.q('select variant_id, n, product_id, size_id, cantidad from tn_kit_pieza order by variant_id, n') : [],
 )
 
 /** El nombre de cada variante del ERP (el del espejo de GN, el mismo que lee el catálogo). */
@@ -49,7 +51,8 @@ export async function leerVinculos(db, { tienda }) {
   const variantes = await variantesDeTN(db, tienda)
   const { sin_par, trabados } = vinculosPendientes({ variantes, indice: await indiceConVinculos(db) })
   const elegidas = await db.q(`select variant_id, product_id, size_id, usuario, actualizado_en from tn_vinculo where tienda = $1 and origen = 'erp' order by actualizado_en desc`, [tienda])
-  const nombres = await nombresDeVariantes(db, [...trabados, ...elegidas])
+  const piezas = (await hayConjuntos(db)) ? await db.q('select variant_id, n, product_id, size_id, cantidad, origen, usuario from tn_kit_pieza where tienda = $1 order by variant_id, n', [tienda]) : []
+  const nombres = await nombresDeVariantes(db, [...trabados, ...elegidas, ...piezas])
   const porId = new Map(variantes.map((v) => [v.id, v]))
   const nombreDe = (p) => nombres.get(`${Number(p.product_id)}:${Number(p.size_id)}`) ?? null
   return {
@@ -58,6 +61,11 @@ export async function leerVinculos(db, { tienda }) {
     trabados: trabados.map((g) => ({ product_id: g.product_id, size_id: g.size_id, nombre: nombreDe(g), variantes: g.variantes.map(fila) })),
     elegidas: elegidas.filter((e) => porId.has(Number(e.variant_id))).map((e) => ({
       ...fila(porId.get(Number(e.variant_id))), product_id: Number(e.product_id), size_id: Number(e.size_id), nombre: nombreDe(e), usuario: e.usuario, actualizado_en: e.actualizado_en,
+    })),
+    // Los CONJUNTOS (la bikini): cada variante de TN con sus piezas del ERP.
+    conjuntos: [...Map.groupBy(piezas, (p) => Number(p.variant_id))].filter(([id]) => porId.has(id)).map(([id, ps]) => ({
+      ...fila(porId.get(id)),
+      piezas: ps.map((p) => ({ n: Number(p.n), product_id: Number(p.product_id), size_id: Number(p.size_id), cantidad: Number(p.cantidad), nombre: nombreDe(p) })),
     })),
   }
 }
@@ -117,4 +125,38 @@ export async function guardarVinculoDelERP(db, { tienda, variant_id, product_id,
     [empresa, tienda, ids, product_id, size_id, usuario],
   )
   return { ok: true, vinculadas: ids.length }
+}
+
+/**
+ * Guarda las PIEZAS de un conjunto (sql/092): la variante de TN «Bikini MADDIE · Camo (S, M)» = corpiño S + bombacha M, en ese orden
+ * (`piezas[0]` es la pieza 1). Reemplaza lo que hubiera. Desde Vincular (`origen = 'erp'`) o desde el script que crea el producto
+ * (`'script'`). Valida: la variante está en TN, cada pieza está en el ERP y es de la misma marca, al menos dos y sin repetir.
+ * @param {{ tienda: string, variant_id: number, piezas: Array<{ product_id: number, size_id: number, cantidad?: number }>, usuario?: string, origen?: 'erp'|'script' }} e
+ */
+export async function guardarConjunto(db, { tienda, variant_id, piezas, usuario = null, origen = 'erp', empresa = 'areben' }) {
+  if (!TIENDAS.includes(tienda)) return fallo('TIENDA_DESCONOCIDA', `Tienda desconocida: ${tienda}`)
+  if (!(await hayConjuntos(db))) return fallo('SIN_TABLA', 'Los conjuntos todavía no están en la base del motor (migración 092).')
+  if (!['erp', 'script'].includes(origen)) return fallo('ENTRADA_INVALIDA', `Origen inválido: ${origen}`)
+  if (!Array.isArray(piezas) || piezas.length < 2 || piezas.length > 9) return fallo('ENTRADA_INVALIDA', 'Un conjunto lleva entre 2 y 9 piezas.')
+  const claves = piezas.map((p) => `${Number(p.product_id)}:${Number(p.size_id)}`)
+  if (new Set(claves).size !== claves.length) return fallo('ENTRADA_INVALIDA', 'Hay una pieza repetida.')
+  if (piezas.some((p) => !(Number.isInteger(Number(p.cantidad ?? 1)) && Number(p.cantidad ?? 1) > 0))) return fallo('ENTRADA_INVALIDA', 'La cantidad de cada pieza es un entero mayor que 0.')
+  const [tv] = await db.q('select variant_id from tn_variante where tienda = $1 and variant_id = $2', [tienda, variant_id])
+  if (!tv) return fallo('NO_ENCONTRADA', 'Esa variante no está en Tienda Nube.')
+  for (const p of piezas) {
+    const [erp] = await db.q('select sku from variante where product_id = $1 and size_id = $2', [p.product_id, p.size_id])
+    if (!erp) return fallo('VARIANTE_DESCONOCIDA', 'Una de las piezas no está en el ERP.')
+    if (lineaDe(baseDe(tienda), erp.sku) !== tienda) return fallo('OTRA_LINEA', 'Una de las piezas es de otra marca.')
+  }
+  const filas = piezas.map((p, i) => [i + 1, Number(p.product_id), Number(p.size_id), Number(p.cantidad ?? 1)])
+  await db.q(
+    `insert into tn_kit_pieza (empresa_id, tienda, variant_id, n, product_id, size_id, cantidad, origen, usuario)
+     select $1, $2, $3, x.n, x.product_id, x.size_id, x.cantidad, $5, $6
+       from jsonb_to_recordset($4::jsonb) as x(n int, product_id bigint, size_id bigint, cantidad int)
+     on conflict (empresa_id, tienda, variant_id, n) do update
+       set product_id = excluded.product_id, size_id = excluded.size_id, cantidad = excluded.cantidad, origen = excluded.origen, usuario = excluded.usuario`,
+    [empresa, tienda, variant_id, JSON.stringify(filas.map(([n, product_id, size_id, cantidad]) => ({ n, product_id, size_id, cantidad }))), origen, usuario],
+  )
+  await db.q('delete from tn_kit_pieza where empresa_id = $1 and tienda = $2 and variant_id = $3 and n > $4', [empresa, tienda, variant_id, filas.length])
+  return { ok: true, piezas: filas.length }
 }

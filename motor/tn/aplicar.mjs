@@ -8,6 +8,7 @@ import { anularVenta, registrarVenta } from '../venta/registrar.mjs'
 import { origenRef, planVentasTN } from './venta.mjs'
 import { leerCortes, ventaTnReal } from '../llave-corte.mjs'
 import { despuesDelCorteTN } from '../venta/pago-tn.mjs'
+import { costosDe } from '../venta/costo.mjs'
 
 /** @param {{ q: Function }} db  @param {string} tienda  @param {Array} ordenes  filas de `tn_orden` con `lineas` */
 export async function planDe(db, tienda, ordenes) {
@@ -17,7 +18,10 @@ export async function planDe(db, tienda, ordenes) {
   const ya = new Map((refs.length ? await db.q(`select origen_ref, id, estado from venta where origen = 'tn' and origen_ref = any($1)`, [refs]) : []).map((v) => [v.origen_ref, v]))
   // Real según el instante de PAGO de cada pedido, ⛔ la hora de esta corrida (ver `planVentasTN`).
   const cortes = await leerCortes(db)
-  return planVentasTN({ tienda, ordenes, indice, cuentas, ya, real: (pagada) => ventaTnReal(tienda, cortes, process.env, new Date(pagada)),
+  // El costo de las piezas de los CONJUNTOS del lote (la bikini): reparte su precio entre corpiño y bombacha.
+  const pidsKit = [...new Set(ordenes.flatMap((o) => (o.lineas || []).flatMap((l) => { const k = indice.piezasTN(l.variant_id); return Array.isArray(k) ? k.map((p) => p.product_id) : [] })))]
+  const costos = pidsKit.length ? await costosDe({ query: async (sql, p) => ({ rows: await db.q(sql, p) }) }, pidsKit) : new Map()
+  return planVentasTN({ tienda, ordenes, indice, cuentas, ya, costoDe: (pid) => costos.get(Number(pid))?.costo ?? null, real: (pagada) => ventaTnReal(tienda, cortes, process.env, new Date(pagada)),
     porArmado: (o) => despuesDelCorteTN(o, cortes[tienda] ?? null) })
 }
 
