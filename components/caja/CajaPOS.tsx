@@ -57,7 +57,7 @@ import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
 import { avisoDeRenglon, stockSinReservasWeb } from '@/lib/caja/pedidos-web.core.js'
 import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { aplicarPromos } from '@/lib/caja/promos.core.js'
-import { conjuntosConPieza, esPieza, type ConjuntoCaja } from '@/lib/caja/conjuntos.core.js'
+import { conjuntosConPieza, type ConjuntoCaja } from '@/lib/caja/conjuntos.core.js'
 import { registrarRespuesta, repetida } from '@/lib/caja/repetida.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { imprimirTicket, numeroProvisorio, plata, ticketDeCambio, ticketDeVenta, type ComprobanteCambio, type DatosTicket } from '@/lib/caja/ticket'
@@ -1135,7 +1135,12 @@ pendientes
             ))
   )
   // El precio LOCAL de Stunned del ERP (28-oct) ⛔ se pudo leer: la Caja cobra el de Tienda Nube, y lo dice.
-  const avisoPrecioLocalJSX = config?.stunned_local_error ? <Notice tone="warning">{config.stunned_local_error}</Notice> : null
+  const avisoPrecioLocalJSX = config?.stunned_local_error || config?.conjuntos_error ? (
+    <>
+      {config?.stunned_local_error && <Notice tone="warning">{config.stunned_local_error}</Notice>}
+      {config?.conjuntos_error && <Notice tone="warning">{config.conjuntos_error}</Notice>}
+    </>
+  ) : null
   const avisoSinLlegarJSX =
     sinLlegar > 0 && (
             <Notice tone="danger">

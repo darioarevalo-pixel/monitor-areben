@@ -638,6 +638,25 @@ Cajas (sólo admin): ver `docs/secciones/erp.md`. 🔑 **El cierre ⛔ depende d
 una consulta APARTE (`conArqueo`) y sin columnas el ticket sale sin código. 🔑 «TOTAL SOBRE» del ticket y lo que se arquea
 salen de la MISMA `sobreEsperado`.
 
+## Las bikinis 2027: un producto con dos partes (Bruno 21/22-nov-2026)
+
+- 🔑 **⛔ se venden sueltas**: escanear un corpiño (o una bombacha) que es parte de una bikini abre «Es parte de una bikini» y
+  pide el talle de la otra parte; entran las DOS, cada una su renglón, atadas por `renglones[].conjunto` (`{ variant_id, n, nombre }`:
+  la variante de TN de la bikini y qué parte es). La cantidad se cambia en las dos y la cruz saca las dos. El precio ⛔ se cambia
+  (se hace un descuento). Núcleo: `lib/caja/conjuntos.core.js`.
+- 🔑 **El precio es el de TN de la bikini** (con la oferta vigente: el mismo de lista online y local), **repartido entre las partes
+  por COSTO** con la regla del motor (`repartirPrecio`); el costo ⛔ viaja al navegador. Lo arma `conjuntosDeCaja` (`api/_caja-motor.js`,
+  de `tn_kit_pieza` + `tn_variante` + `costosDe` del motor) y viaja en la config (`conjuntos`; si ⛔ se lee, `conjuntos_error` y la
+  parte ⛔ tiene precio).
+- 🔴 **El servidor lo EXIGE** en `confirmar` (`exigirConjuntos`): ninguna parte suelta, cada bikini completa y a su precio. Sin poder
+  leer las bikinis, una venta que trae una ⇒ 503.
+- 🔑 **Promos: la bikini cuenta UNA** (`unidadesParaPromos` dentro de `aplicarPromos`): se evalúa con el precio de la bikini y lo que
+  descuenta se reparte entre las partes (`repartirDescuento`, al centavo).
+- 🔑 La venta lleva al motor `detalle.conjuntos` (`entradaDelMotor`); **ticket** (`renglonesParaMostrar`) y **factura**
+  (`renglonesDeVenta`) la muestran en UNA línea con la regla del motor (`lineasParaMostrar`, `motor/venta/conjuntos.mjs`).
+- ▶️ Falta: el CAMBIO en pantalla (tildar una parte ⇒ «otro talle de esta parte» o «la bikini completa»; el motor ya frena con
+  `CONJUNTO_INCOMPLETO`). Tests: `caja-conjuntos`.
+
 ## Pendiente
 
 - 🏁 `sql/migrate-caja-anulada-en-gn.sql` CORRIDA en las dos bases (12-oct), verificada leyendo la columna, el check y las 7 de prueba (`por: sync`).

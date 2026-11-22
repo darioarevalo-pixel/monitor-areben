@@ -45,13 +45,13 @@ describe('caja · las bikinis (conjuntos, Bruno 21/22-nov)', () => {
     expect(r.items[2].rebaja).toEqual({ tipo: 'pesos', valor: 20000 })
     // Dos bikinis solas: una gratis, repartida entre sus partes (las dos partes de la más barata, que empatan ⇒ la segunda).
     const dos = aplicarPromos({ items: [parte(902, 1, 100, 1, 30000), parte(902, 2, 200, 2, 19990), parte(903, 1, 100, 2, 30000), parte(903, 2, 200, 1, 19990)], promos, feriaIds: new Set(), hoy: '2026-11-25' })
-    expect(dos.items.map((x: any) => x.rebaja?.valor ?? 0)).toEqual([0, 0, 30000, 19990])
+    expect(dos.items.map((x) => x.rebaja?.valor ?? 0)).toEqual([0, 0, 30000, 19990])
   })
 
   it('por cantidad: dos bikinis son 2 unidades, ⛔ 4', () => {
     const promos = [{ id: 'c', nombre: 'Escalera', tipo: 'cantidad' as const, escalones: [{ desde: 2, pct: 10 }, { desde: 4, pct: 30 }], alcance: { tipo: 'todo' as const }, desde: '2026-01-01', hasta: null, activa: true }]
     const r = aplicarPromos({ items: [parte(902, 1, 100, 1, 30000), parte(902, 2, 200, 2, 19990), parte(903, 1, 100, 2, 30000), parte(903, 2, 200, 1, 19990)], promos, feriaIds: new Set(), hoy: '2026-11-25' })
-    expect(r.items.map((x: any) => x.rebaja.valor)).toEqual([3000, 1999, 3000, 1999])
+    expect(r.items.map((x) => x.rebaja?.valor)).toEqual([3000, 1999, 3000, 1999])
   })
 
   it('el descuento repartido cierra al centavo', () => {
@@ -66,14 +66,34 @@ describe('caja · las bikinis (conjuntos, Bruno 21/22-nov)', () => {
     const e = entradaDelMotor({ id: 'x', store: 'zattia', renglones: filas, pagos: [], subtotal: 0, total: 0, creada_en: '2026-11-25' })
     expect(e.detalle.conjuntos).toEqual([{ variant_id: 902, nombre: 'Bikini MADDIE · Camo', cantidad: 2, piezas: [{ product_id: 100, size_id: 1, cantidad: 1 }, { product_id: 200, size_id: 2, cantidad: 1 }] }])
     const lineas = lineasParaMostrar(filas, detalleDeConjuntos(filas))
-    expect(lineas.map((l: any) => [l.conjunto, l.cantidad, l.importe])).toEqual([[true, 2, 99980], [false, 1, 20000]])
+    expect(lineas.map((l: { conjunto: boolean; cantidad: number; importe: number }) => [l.conjunto, l.cantidad, l.importe])).toEqual([[true, 2, 99980], [false, 1, 20000]])
   })
   it('el ticket de la venta: la bikini en UNA línea con el talle de cada parte', () => {
     const filas = renglones([parte(902, 1, 100, 1, 30000), parte(902, 2, 200, 2, 19990), remera]).map((f, i) => ({ ...f, nombre: ['CORPIÑO MADDIE CAMO', 'BOMBACHA MADDIE CAMO', 'REMERA'][i], talle: ['S', 'M', 'U'][i] }))
-    const t = ticketDeVenta({ id: 'x', renglones: filas, subtotal: 69990, pagos: [], total: 69990, paga_con: null, email: null } as any, null, () => '')
+    const t = ticketDeVenta({ id: 'x', renglones: filas, subtotal: 69990, pagos: [], total: 69990, paga_con: null, email: null } as unknown as Parameters<typeof ticketDeVenta>[0], null, () => '')
     expect(t.renglones.map((r) => [r.nombre, r.talle, r.cantidad, r.precio, r.importe])).toEqual([
       ['Bikini MADDIE · Camo', 'Corpiño S / Bombacha M', 1, 49990, 49990],
       ['REMERA', 'U', 1, 20000, 20000],
+    ])
+  })
+})
+
+describe('factura · la bikini en UNA línea', () => {
+  it('renglonesDeVenta junta las partes de cada conjunto', async () => {
+    const { renglonesDeVenta } = await import('@/lib/erp/factura.core.js')
+    const f = {
+      tipo: 'venta', total: 69990,
+      lineas: [
+        { id: 1, product_id: 100, size_id: 1, cantidad: 1, importe: 30000 },
+        { id: 2, product_id: 200, size_id: 2, cantidad: 1, importe: 19990 },
+        { id: 3, product_id: 300, size_id: 1, cantidad: 1, importe: 20000 },
+      ],
+      detalle: { conjuntos: [{ variant_id: 902, nombre: 'Bikini MADDIE · Camo', cantidad: 1, piezas: [{ product_id: 100, size_id: 1, cantidad: 1 }, { product_id: 200, size_id: 2, cantidad: 1 }] }] },
+    }
+    const nombres = new Map([['100/1', { nombre: 'CORPIÑO MADDIE CAMO', talle: 'S' }], ['200/2', { nombre: 'BOMBACHA MADDIE CAMO', talle: 'M' }], ['300/1', { nombre: 'REMERA', talle: 'U' }]])
+    expect(renglonesDeVenta(f, nombres).map((r: { descripcion: string; cantidad: number; importe: number }) => [r.descripcion, r.cantidad, r.importe])).toEqual([
+      ['Bikini MADDIE · Camo - CORPIÑO S / BOMBACHA M', 1, 49990],
+      ['REMERA - U', 1, 20000],
     ])
   })
 })
