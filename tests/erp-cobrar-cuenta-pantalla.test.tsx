@@ -48,7 +48,7 @@ describe('Cobrar a la cuenta (pantalla)', () => {
   it('abre con el saldo, avisa que paga la más vieja y manda el cobro SIN venta', async () => {
     await montar()
     await act(async () => { boton('Cobrar')!.click() })
-    expect(document.body.textContent).toContain('paga primero la compra más vieja')
+    expect(document.body.textContent).toContain('Paga primero la venta más vieja.')
     await elegirCuenta()
     await act(async () => { boton('Cobrar $')!.click() })
     expect(cobrarCuentaErp).toHaveBeenCalledTimes(1)
@@ -83,19 +83,19 @@ describe('Cobrar a la cuenta (pantalla)', () => {
     expect((cobrarCuentaErp.mock.calls[0] as unknown as [string, Record<string, unknown>])[1]).toMatchObject({ cuentaReal: real.id })
   })
 
-  it('«Anular con motivo»: sin motivo no sale; manda la clave del pago y el motivo, y dice cómo queda el saldo', async () => {
+  it('«Anular pago»: sin motivo no sale; manda la clave del pago y el motivo, y dice cómo queda el saldo', async () => {
     leerCuentaDeCliente.mockResolvedValueOnce({ ...cuenta, mayor: { anterior: 0, final: 1000, renglones: [
       { ref: 'erp-cobro-cuenta:a', tipo: 'pago', fecha: '2026-10-25', detalle: 'Galicia', debe: 0, haber: 500, saldo: 1000 },
     ] } } as typeof cuenta)
     await montar()
     await act(async () => { (document.querySelector('button[aria-label^="Más acciones del pago"]') as HTMLButtonElement).click() })
-    await act(async () => { [...document.querySelectorAll('button')].find((b) => b.textContent?.includes('Anular con motivo'))!.click() })
+    await act(async () => { [...document.querySelectorAll('button')].find((b) => b.textContent?.includes('Anular pago'))!.click() })
     expect(document.body.textContent).toMatch(/\$\s1\.000 → \$\s1\.500/)
-    expect(boton('Anular el pago de')?.disabled).toBe(true)
+    expect(boton('Anular pago')?.disabled).toBe(true)
     const motivo = document.querySelector('input:not([type="date"])') as HTMLInputElement
     const setI = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
     await act(async () => { setI.call(motivo, 'Se cargó dos veces'); motivo.dispatchEvent(new Event('input', { bubbles: true })) })
-    await act(async () => { boton('Anular el pago de')!.click() })
+    await act(async () => { boton('Anular pago')!.click() })
     expect(anularPagoCuentaErp.mock.calls[0]).toEqual(['bdi', { clienteId: CLIENTE, linea: 'bdi', ref: 'erp-cobro-cuenta:a', motivo: 'Se cargó dos veces' }])
   })
 })

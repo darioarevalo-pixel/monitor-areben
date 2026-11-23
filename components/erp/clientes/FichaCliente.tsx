@@ -8,6 +8,7 @@
 
 import { useTiendaErp } from '@/lib/erp/linea-erp'
 import { useEffect, useState } from 'react'
+import { usePantallaAngosta } from '@/lib/movil'
 import { MoneyText, Notice, color, font, space, weight } from '@/components/ui'
 import { formatMoney } from '@/components/ui/MoneyText'
 import { DatoFicha, DatosFicha, FichaCostado, type PieFicha } from '@/components/ui/FichaCostado'
@@ -39,10 +40,11 @@ export function FichaCliente({ marca, fila, onCerrar }: { marca: MarcaErp; fila:
   const celda: React.CSSProperties = { padding: '7px 0', borderBottom: `1px solid ${color.bg2}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
   // 📱 En el celular el pie es para escribirle por WhatsApp (el mismo número que arma los `wa.me` del CRM).
   const wa = normalizeArgPhone(c?.phone)
-  const pie: PieFicha = { principal: wa ? { label: 'WhatsApp', onClick: () => window.open(`https://wa.me/${wa}`, '_blank', 'noopener') } : undefined }
+  const angosta = usePantallaAngosta()
+  const pie: PieFicha = { principal: wa ? { label: 'Escribir por WhatsApp', onClick: () => window.open(`https://wa.me/${wa}`, '_blank', 'noopener') } : undefined }
 
   return (
-    <FichaCostado abierta onCerrar={onCerrar} titulo={fila.doc ? `Cliente · ${fila.doc}` : 'Cliente'} etiqueta={`Ficha del cliente ${fila.nombre}`} pie={pie}>
+    <FichaCostado abierta ventana onCerrar={onCerrar} titulo={fila.doc ? `Cliente · ${fila.doc}` : 'Cliente'} etiqueta={`Ficha del cliente ${fila.nombre}`} pie={pie}>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], alignItems: 'flex-start' }}>
@@ -52,7 +54,7 @@ export function FichaCliente({ marca, fila, onCerrar }: { marca: MarcaErp; fila:
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
             {fila.mayorista && <ChipEstado mapa={{ m: ['action', 'Mayorista'] }} k="m" />}
             {fila.vencido && <ChipEstado mapa={{ v: ['danger', 'Vencido'] }} k="v" />}
-            {fila.dormido && <ChipEstado mapa={{ d: ['neutral', 'Sin comprar hace +90 días'] }} k="d" />}
+            {fila.dormido && <ChipEstado mapa={{ d: ['neutral', 'Sin compras +90 días'] }} k="d" />}
           </div>
         </div>
         <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
@@ -60,21 +62,21 @@ export function FichaCliente({ marca, fila, onCerrar }: { marca: MarcaErp; fila:
           <div style={{ fontSize: 26, fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums', color: saldo == null ? color.mut2 : saldo > 0 ? color.ink : 'var(--mo-success-ink)' }}>
             {saldo == null ? '—' : saldo < 0 ? formatMoney(-saldo) : formatMoney(saldo)}
           </div>
+          {saldo == null && <div style={{ fontSize: font.sm, color: color.mut }}>Sin cuenta corriente</div>}
           {saldo != null && saldo < 0 && <div style={{ fontSize: font.sm, color: 'var(--mo-success-ink)' }}>a favor</div>}
         </div>
       </div>
 
-      {saldo == null && (
-        <Notice tone="neutral">Areben Gestión todavía no lleva la cuenta de este cliente: sus compras son de Gestión Nube. El saldo aparece cuando se le venda a cuenta desde Areben Gestión.</Notice>
-      )}
-
+      {/* Darío 22-nov: ventana en dos columnas, como Ventas. Izquierda lo que debe y sus compras; derecha los datos. */}
+      <div style={{ display: 'grid', gridTemplateColumns: angosta ? '1fr' : 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: angosta ? space[5] : 32, alignItems: 'start' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[5], minWidth: 0 }}>
       {cuenta && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
           <div>
             <h3 style={h3}>Ventas con saldo</h3>
-            <div style={{ fontSize: font.sm, color: color.mut }}>debe {formatMoney(cuenta.estado.debe)} · tiene a favor {formatMoney(cuenta.estado.a_favor)}</div>
+            <div style={{ fontSize: font.sm, color: color.mut }}>Debe {formatMoney(cuenta.estado.debe)} · A favor {formatMoney(cuenta.estado.a_favor)}</div>
           </div>
-          {!pendientes.length ? <span style={{ color: color.mut }}>No debe ninguna venta.</span> : (
+          {!pendientes.length ? <span style={{ color: color.mut }}>Ninguna.</span> : (
             <div role="table" aria-label="Ventas con saldo" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 72px 104px 104px', columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
               {['Venta', 'Fecha', 'Total', 'Pendiente'].map((t, i) => <span key={t} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: i > 1 ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>)}
               {pendientes.map((p) => (
@@ -90,22 +92,12 @@ export function FichaCliente({ marca, fila, onCerrar }: { marca: MarcaErp; fila:
         </section>
       )}
 
-      <DatosFicha>
-        <DatoFicha titulo="Comprado">{formatMoney(fila.total)}</DatoFicha>
-        <DatoFicha titulo="Primera compra">{fechaCorta(fila.primera)}</DatoFicha>
-        <DatoFicha titulo="Canales">{fila.canales.join(' · ') || '—'}</DatoFicha>
-        <DatoFicha titulo="DNI / CUIT">{fila.doc ?? cuenta?.cliente.doc ?? '—'}</DatoFicha>
-        {c && <DatoFicha titulo="Mail">{c.email || '—'}</DatoFicha>}
-        {c && <DatoFicha titulo="Teléfono">{c.phone || '—'}</DatoFicha>}
-        {c && <DatoFicha titulo="Ciudad">{[c.city, c.province].filter(Boolean).join(', ') || '—'}</DatoFicha>}
-      </DatosFicha>
-
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
         <div>
           <h3 style={h3}>Compras</h3>
-          <div style={{ fontSize: font.sm, color: color.mut }}>las de Gestión Nube, la última primero{s?.cortado ? ' · se muestran las últimas 200' : ''}</div>
+          {s?.cortado && <div style={{ fontSize: font.sm, color: color.mut }}>Últimas 200</div>}
         </div>
-        {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : !s.compras.length ? <span style={{ color: color.mut }}>No tiene compras en Gestión Nube.</span> : (
+        {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : !s.compras.length ? <span style={{ color: color.mut }}>Sin compras.</span> : (
           <div role="table" aria-label="Compras del cliente" style={{ display: 'grid', gridTemplateColumns: '64px 72px minmax(0, 1fr) 104px', columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
             {['Nº', 'Fecha', 'Canal · estado', 'Total'].map((t, i) => <span key={t} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: i === 3 ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>)}
             {s.compras.map((v) => (
@@ -119,6 +111,19 @@ export function FichaCliente({ marca, fila, onCerrar }: { marca: MarcaErp; fila:
           </div>
         )}
       </section>
+      </div>
+
+      <DatosFicha>
+        <DatoFicha titulo="Comprado">{formatMoney(fila.total)}</DatoFicha>
+        <DatoFicha titulo="Primera compra">{fechaCorta(fila.primera)}</DatoFicha>
+        <DatoFicha titulo="Canales">{fila.canales.join(' · ') || '—'}</DatoFicha>
+        <DatoFicha titulo="DNI / CUIT">{fila.doc ?? cuenta?.cliente.doc ?? '—'}</DatoFicha>
+        {c && <DatoFicha titulo="Mail">{c.email || '—'}</DatoFicha>}
+        {c && <DatoFicha titulo="Teléfono">{c.phone || '—'}</DatoFicha>}
+        {c && <DatoFicha titulo="Ciudad">{[c.city, c.province].filter(Boolean).join(', ') || '—'}</DatoFicha>}
+      </DatosFicha>
+
+      </div>
     </FichaCostado>
   )
 }

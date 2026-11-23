@@ -24,9 +24,9 @@ describe('WhatsApp de la cuenta corriente', () => {
     const ok = enlaceWhatsapp({ ...base, whatsapp: '11 5555-1234' })
     expect(ok.url).toMatch(/^https:\/\/wa\.me\/5491155551234\?text=Hola%20Casa/)
     expect(ok.motivo).toBeNull()
-    expect(enlaceWhatsapp({ ...base, whatsapp: null })).toEqual({ url: null, motivo: 'No tiene WhatsApp cargado.' })
-    expect(enlaceWhatsapp({ ...base, whatsapp: '12345' }).motivo).toContain('no se entiende')
-    expect(enlaceWhatsapp({ ...base, saldo: 0, whatsapp: '11 5555-1234' }).motivo).toContain('en cero')
+    expect(enlaceWhatsapp({ ...base, whatsapp: null })).toEqual({ url: null, motivo: 'Sin WhatsApp.' })
+    expect(enlaceWhatsapp({ ...base, whatsapp: '12345' }).motivo).toContain('mal cargado')
+    expect(enlaceWhatsapp({ ...base, saldo: 0, whatsapp: '11 5555-1234' }).motivo).toBe('Sin saldo.')
   })
 })
 

@@ -83,8 +83,8 @@ async function delMotor(pg, marca, linea) {
  * @param {{ conMotor: Function }} deps
  */
 export async function listaDeClientes({ marca, linea = marca === 'bdi' ? 'bdi' : '' }, deps) {
-  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
-  if (!lineaValida(marca, linea)) return { status: 400, error: 'Falta la línea (Zattia o Stunned).' }
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
+  if (!lineaValida(marca, linea)) return { status: 400, error: 'Todavía no disponible.' }
   const l = marca === 'bdi' ? 'bdi' : linea
   const k = conLinea(marca, l)
   return deps.conMotor(marca, 'Los clientes de Areben Gestión', async (pg) => {
@@ -123,12 +123,12 @@ async function contactoDeBdi(id) {
  * @param {{ conMotor: Function, leerContacto?: Function }} deps
  */
 export async function fichaDeCliente({ marca, linea = marca === 'bdi' ? 'bdi' : '', clave }, deps) {
-  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
-  if (!lineaValida(marca, linea)) return { status: 400, error: 'Falta la línea (Zattia o Stunned).' }
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
+  if (!lineaValida(marca, linea)) return { status: 400, error: 'Todavía no disponible.' }
   const l = marca === 'bdi' ? 'bdi' : linea
   const lk = conLinea(marca, l)
   const k = String(clave ?? '')
-  if (!k || k.length > 200) return { status: 400, error: 'Falta el cliente' }
+  if (!k || k.length > 200) return { status: 400, error: 'No se pudo: volvé a intentar.' }
   return deps.conMotor(marca, 'La ficha del cliente', async (pg) => {
     const erpId = k.startsWith('erp:') ? k.slice(4) : null
     const porId = marca === 'bdi' && /^\d+$/.test(k)
@@ -164,8 +164,8 @@ const FECHA = /^\d{4}-\d{2}-\d{2}$/
  * @param {{ conMotor: Function }} deps
  */
 export async function cuentasDeLaMarca({ marca, linea = marca === 'bdi' ? 'bdi' : '', prueba = false }, deps) {
-  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
-  if (!lineaValida(marca, linea)) return { status: 400, error: 'Falta la línea (Zattia o Stunned).' }
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
+  if (!lineaValida(marca, linea)) return { status: 400, error: 'Todavía no disponible.' }
   const lineas = [marca === 'bdi' ? 'bdi' : linea]
   return deps.conMotor(marca, 'La cuenta corriente', async (pg) => {
     let empresas, otroLibro
@@ -173,7 +173,7 @@ export async function cuentasDeLaMarca({ marca, linea = marca === 'bdi' ? 'bdi' 
       empresas = (await pg.query('select distinct empresa_id from cliente')).rows.map((r) => r.empresa_id)
       ;[{ n: otroLibro }] = (await pg.query('select count(distinct cliente_id)::int as n from cuenta_movimiento where prueba = $1 and marca = any($2)', [!prueba, lineas])).rows
     } catch {
-      return { status: 409, error: 'Esta marca todavía no tiene cuenta corriente: falta actualizar la base (025).' }
+      return { status: 409, error: 'Todavía no disponible.' }
     }
     const { cuentasCorrientes } = await import('../motor/cuenta/cuenta.mjs')
     const cuentas = []
@@ -181,7 +181,7 @@ export async function cuentasDeLaMarca({ marca, linea = marca === 'bdi' ? 'bdi' 
     for (const empresa_id of empresas) {
       for (const linea of lineas) {
         const r = await cuentasCorrientes(pg, { empresa_id, marca: linea, prueba })
-        if (!r.ok) return { status: 409, error: r.error?.mensaje ?? 'Areben Gestión no devolvió la cuenta corriente.' }
+        if (!r.ok) return { status: 409, error: r.error?.mensaje ?? 'No se pudo: volvé a intentar.' }
         hoy = r.hoy
         cuentas.push(...r.cuentas.map((c) => ({ ...c, linea })))
       }
@@ -204,10 +204,10 @@ export async function cuentasDeLaMarca({ marca, linea = marca === 'bdi' ? 'bdi' 
  * @param {{ conMotor: Function }} deps
  */
 export async function cuentaDeCliente({ marca, clienteId, linea, prueba = false, desde = '', hasta = '' }, deps) {
-  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
-  if (!LINEAS[marca].includes(linea)) return { status: 400, error: 'Línea inválida' }
-  if (!UUID.test(String(clienteId || ''))) return { status: 400, error: 'Falta el cliente' }
-  for (const f of [desde, hasta]) if (f && !FECHA.test(f)) return { status: 400, error: 'Las fechas van AAAA-MM-DD' }
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
+  if (!LINEAS[marca].includes(linea)) return { status: 400, error: 'Todavía no disponible.' }
+  if (!UUID.test(String(clienteId || ''))) return { status: 400, error: 'No se pudo: volvé a intentar.' }
+  for (const f of [desde, hasta]) if (f && !FECHA.test(f)) return { status: 400, error: 'No se pudo: volvé a intentar.' }
   return deps.conMotor(marca, 'La cuenta corriente', async (pg) => {
     const [{ cuentaDe }, { mayorCSV }] = await Promise.all([import('../motor/cuenta/cuenta.mjs'), import('../motor/cuenta/cuenta.core.mjs')])
     const r = await cuentaDe(pg, { cliente_id: clienteId, marca: linea, prueba, desde: desde || null, hasta: hasta || null })
@@ -243,12 +243,12 @@ export async function libroDePruebaDelPanel({ cortes = () => cortesDeCaja('bdi')
  * @param {{ conMotor: Function }} deps
  */
 export async function ponerCreditoCliente({ marca, body, usuario }, deps) {
-  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
-  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'Falta el cliente' }
-  if (!usuario) return { status: 400, error: 'Falta quién lo marca' }
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
+  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'No se pudo: volvé a intentar.' }
+  if (!usuario) return { status: 400, error: 'No se pudo: volvé a intentar.' }
   return deps.conMotor(marca, 'El crédito', async (pg) => {
     const [c] = (await pg.query('select empresa_id from cliente where id = $1', [body.clienteId])).rows
-    if (!c) return { status: 404, error: 'No está ese cliente.' }
+    if (!c) return { status: 404, error: 'No se pudo: volvé a intentar.' }
     const { ponerCredito } = await import('../motor/cuenta/cuenta.mjs')
     const r = await ponerCredito(pg, { empresa_id: c.empresa_id, cliente_id: body.clienteId, credito: body.credito === true, tope: body.tope ?? null, dias: body.dias ?? null, usuario })
     return r.ok ? { ok: true, credito: r.credito } : { status: 400, error: r.error?.mensaje ?? 'No se pudo marcar el crédito.' }
@@ -262,12 +262,12 @@ export async function ponerCreditoCliente({ marca, body, usuario }, deps) {
  * @param {{ conMotor: Function }} deps
  */
 export async function ponerContactoCliente({ marca, body, usuario }, deps) {
-  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
-  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'Falta el cliente' }
-  if (!usuario) return { status: 400, error: 'Falta quién lo carga' }
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
+  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'No se pudo: volvé a intentar.' }
+  if (!usuario) return { status: 400, error: 'No se pudo: volvé a intentar.' }
   return deps.conMotor(marca, 'El contacto', async (pg) => {
     const [c] = (await pg.query('select empresa_id from cliente where id = $1', [body.clienteId])).rows
-    if (!c) return { status: 404, error: 'No está ese cliente.' }
+    if (!c) return { status: 404, error: 'No se pudo: volvé a intentar.' }
     const { ponerContactoCliente: poner } = await import('../motor/venta/cliente.mjs')
     const r = await poner(pg, { empresa_id: c.empresa_id, cliente_id: body.clienteId, whatsapp: body.whatsapp, email: body.email })
     return r.ok ? { ok: true, contacto: { whatsapp: r.cliente.whatsapp, email: r.cliente.email } } : { status: r.error?.codigo === 'FALTA_CLIENTE' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo guardar el contacto.' }
@@ -374,13 +374,13 @@ export async function cuentaDelPanel({ gnId = '', tel = '', prueba: pedida = fal
  */
 export async function anotarWhatsappPanel({ body, usuario, quien = usuario }, deps) {
   if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
-  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'Falta el cliente' }
+  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'No se pudo: volvé a intentar.' }
   if (!usuario) return { status: 400, error: 'Falta quién lo anota' }
   return deps.conMotor('bdi', 'Anotar el número', async (pg) => {
     const { anotarWhatsapp } = await import('../motor/venta/cliente.mjs')
     if (typeof anotarWhatsapp !== 'function') return { status: 409, error: 'Todavía no se pueden anotar números.' }
     const [c] = (await pg.query('select empresa_id from cliente where id = $1', [body.clienteId])).rows
-    if (!c) return { status: 404, error: 'No está ese cliente.' }
+    if (!c) return { status: 404, error: 'No se pudo: volvé a intentar.' }
     const r = await anotarWhatsapp(pg, { empresa_id: c.empresa_id, cliente_id: body.clienteId, whatsapp: String(body.whatsapp ?? ''), nombre: body.nombre, usuario })
     if (r.ok) return { ok: true, persona: r.persona, yaEstaba: r.ya_estaba }
     return { status: r.error?.codigo === 'YA_ANOTADO' ? 409 : r.error?.codigo === 'FALTA_CLIENTE' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo anotar el número.' }
@@ -439,8 +439,8 @@ export async function clientesDelPanel({ q = '', usuario = null }, deps) {
 export async function clienteNuevoPanel({ body, usuario, quien = usuario }, deps) {
   if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
   const escribir = deps.escribir ?? (await import('./_erp-pedido.js').then((m) => m.escribirPrendido()))
-  if (!escribir) return { status: 409, error: 'Los clientes nuevos se cargan desde acá el día que BDI pasa a Areben Gestión. Hasta entonces, en Gestión Nube.' }
-  if (!usuario) return { status: 400, error: 'Falta quién lo carga' }
+  if (!escribir) return { status: 409, error: 'Todavía no disponible.' }
+  if (!usuario) return { status: 400, error: 'No se pudo: volvé a intentar.' }
   const nombre = String(body?.nombre ?? '').trim()
   if (!nombre) return { status: 400, error: 'Falta el nombre del cliente' }
   return deps.conMotor('bdi', 'Cliente nuevo', async (pg) => {
@@ -527,7 +527,7 @@ export async function bcraDelPanel({ clienteId = '', cuit: cuitSuelto = '', usua
     if (!cuitValido(c)) return { status: 400, error: 'Ese CUIT no es válido: revisá los números.' }
     return { prendido: true, cuit: c, ...(await situacionBcra(c, { fetch: deps.fetch })) }
   }
-  if (!UUID.test(String(clienteId))) return { status: 400, error: 'Falta el cliente' }
+  if (!UUID.test(String(clienteId))) return { status: 400, error: 'No se pudo: volvé a intentar.' }
   const doc = await deps.conMotor('bdi', 'El documento del cliente', async (pg) =>
     (await pg.query('select doc from cliente where id = $1', [clienteId])).rows[0]?.doc ?? null)
   if (doc && typeof doc === 'object' && doc.status) return doc
