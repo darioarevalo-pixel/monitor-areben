@@ -1,15 +1,14 @@
 // Escribe en `inventario` (el espejo de GN) el stock de las líneas que ya cortaron al ERP, desde el LIBRO del motor.
-// Corre DESPUÉS del sync de GN, que ⛔ escribe esas filas. Ver `lib/erp/inventario-espejo.core.js`.
+// Corre DESPUÉS del sync de GN, que ⛔ escribe esas filas. Ver `lib/erp/inventario-espejo.core.js`; la copia vive en
+// `scripts/lib/erp-espejo-copias.mjs` (la misma que la vuelta de 10 minutos, `api/_espejo-vivo.js`).
 //   node scripts/erp-inventario-espejo.mjs bdi|zattia [--seco]
 // Lee el libro por pg (`DATABASE_URL_<BASE>`) y escribe por supabase-js con la service key, como los syncs.
 // 🔴 Cualquier cosa rara sale en rojo: un stock viejo sin avisar es peor que un job caído.
 import pg from 'pg'
 import { createClient } from '@supabase/supabase-js'
 import { configPg } from '../lib/pg.core.js'
-import { planInventarioErp, SQL_INVENTARIO_LINEAS } from '../lib/erp/inventario-espejo.core.js'
 import { ENV_MOTOR, lineasCortadasDe } from './lib/lineas-cortadas.mjs'
-import { escribirInventario } from './lib/erp-inventario-escribir.mjs'
-import { registrarCambiosDeStock } from './lib/stock-cambios.mjs'
+import { copiarInventarioErp } from './lib/erp-espejo-copias.mjs'
 
 const base = process.argv[2]
 const seco = process.argv.includes('--seco')
@@ -28,41 +27,20 @@ if (!lineas.length) {
 }
 
 const db = new pg.Client({ ...configPg(process.env[ENV_MOTOR[base]]), connectionTimeoutMillis: 10000, statement_timeout: 60000 })
-let libro
+const sb = createClient(process.env[ENV.url], process.env[ENV.key])
+let r
 try {
   await db.connect()
-  libro = (await db.query(SQL_INVENTARIO_LINEAS, [lineas])).rows
+  r = await copiarInventarioErp(db, sb, base, lineas, { seco })
 } finally {
   await db.end().catch(() => {})
 }
-
-// El espejo entero de la base (paginado: PostgREST corta en 1000). El plan se queda con las filas de las líneas cortadas.
-const sb = createClient(process.env[ENV.url], process.env[ENV.key])
-const espejo = []
-for (let desde = 0; ; desde += 1000) {
-  const { data, error } = await sb.from('inventario').select('product_id,size_id,store_name,sku,available_quantity')
-    .order('product_id').order('size_id').order('store_name').range(desde, desde + 999)
-  if (error) throw new Error(`leyendo inventario: ${error.message}`)
-  espejo.push(...(data || []))
-  if (!data || data.length < 1000) break
-}
-
-const plan = planInventarioErp(base, lineas, libro, espejo)
-console.log(`[erp-inventario] ${base} · líneas: ${lineas.join(', ')} · libro: ${libro.length} filas (${plan.sinSku} salteadas: su código diría otra línea) · espejo de esas líneas: ${plan.espejoDeLineas} · a escribir ${plan.upserts.length} · a sacar ${plan.borrar.length}${seco ? ' · SECO' : ''}`)
-if (plan.frenoLimpieza) {
-  console.error(`[erp-inventario] ${plan.frenoLimpieza}: no se saca nada, revisar a mano.`)
+console.log(`[erp-inventario] ${base} · líneas: ${lineas.join(', ')} · libro: ${r.libro} filas (${r.sinSku} salteadas: su código diría otra línea) · espejo de esas líneas: ${r.espejoDeLineas} · a escribir ${r.escritas} · a sacar ${r.sacadas}${seco ? ' · SECO' : ''}`)
+if (r.frenoLimpieza) {
+  console.error(`[erp-inventario] ${r.frenoLimpieza}: no se saca nada, revisar a mano.`)
   process.exitCode = 1
 }
 if (seco) process.exit(process.exitCode || 0)
-
-// Historia de stock (Reposición separa lo que entra al local): ANTES del upsert, como en los syncs de GN.
-const historia = await registrarCambiosDeStock(sb, plan.upserts, 'erp')
-if (historia.error) { console.error(`[erp-inventario] historia de stock: ${historia.error}`); process.exitCode = 1 }
-else console.log(`[erp-inventario] historia: ${historia.cambios} variante(s) cambiaron.`)
-
-await escribirInventario(sb, plan.upserts)
-for (const r of plan.borrar) {
-  const { error } = await sb.from('inventario').delete().eq('product_id', r.product_id).eq('size_id', r.size_id).eq('store_name', r.store_name)
-  if (error) throw new Error(`sacando fila colgada: ${error.message}`)
-}
+if (r.errorHistoria) { console.error(`[erp-inventario] historia de stock: ${r.errorHistoria}`); process.exitCode = 1 }
+else console.log(`[erp-inventario] historia: ${r.historia} variante(s) cambiaron.`)
 console.log(`[erp-inventario] ${base} OK`)

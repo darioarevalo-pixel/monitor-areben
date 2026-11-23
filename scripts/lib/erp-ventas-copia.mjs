@@ -7,6 +7,7 @@
  * Sin línea cortada en la base ⇒ ⛔ se escribe ni se saca nada (el plan da vacío).
  */
 import { ID_DESDE_ERP, planVentasErp, SQL_COLUMNAS, SQL_DETALLES_ERP, SQL_VENTAS_ERP } from '../../lib/erp/ventas-espejo.core.js'
+import { ventasRecientes } from '../../lib/erp/espejo-vivo.core.js'
 
 /** Los ids ≥ ID_DESDE_ERP de una tabla del espejo. */
 async function idsDelErp(sb, tabla) {
@@ -24,18 +25,20 @@ async function idsDelErp(sb, tabla) {
  * Lee el motor (`db`, pg abierto) y el espejo (`sb`, supabase-js con service key) y, salvo `seco`, escribe.
  * @param {{ query: (sql: string, p?: unknown[]) => Promise<{ rows: any[] }> }} db
  * @param {any} sb
- * @param {{ seco?: boolean }} [o]
+ * @param {{ seco?: boolean, desde?: string }} [o] `desde` (YYYY-MM-DD): escribe sólo las que el espejo ⛔ tiene y las de ese día en
+ *   adelante (la vuelta de 10 minutos, `ventasRecientes`). Sin `desde`, todas (la noche).
  * @returns {Promise<{ cortes: Array<{ linea: string, instante: any }>, ventas: number, detalles: number, espejo: { ventas: number, detalles: number }, sacadas: { ventas: number, detalles: number }, freno: string | null }>}
  *   🔴 `freno` (texto o null) = había demasiadas para sacar: ⛔ se sacó nada (lo que había que escribir, sí).
  */
-export async function copiarVentasErp(db, sb, { seco = false } = {}) {
+export async function copiarVentasErp(db, sb, { seco = false, desde = '' } = {}) {
   const cortes = (await db.query('select linea, instante from erp_corte where instante <= now() order by linea')).rows
   const [v, d, c] = await Promise.all([db.query(SQL_VENTAS_ERP), db.query(SQL_DETALLES_ERP), db.query(SQL_COLUMNAS)])
   /** @type {{ ventas: string[], venta_detalles: string[] }} */
   const columnas = { ventas: [], venta_detalles: [] }
   for (const f of c.rows) columnas[/** @type {'ventas'|'venta_detalles'} */ (f.table_name)].push(f.column_name)
   const espejo = { ventas: await idsDelErp(sb, 'ventas'), detalles: await idsDelErp(sb, 'venta_detalles') }
-  const plan = planVentasErp({ ventas: v.rows, detalles: d.rows }, espejo, columnas)
+  const entero = planVentasErp({ ventas: v.rows, detalles: d.rows }, espejo, columnas)
+  const plan = desde ? ventasRecientes(entero, espejo.ventas, desde) : entero
   if (!seco) {
     for (let i = 0; i < plan.ventas.length; i += 500) {
       const { error } = await sb.from('ventas').upsert(plan.ventas.slice(i, i + 500), { onConflict: 'id' })

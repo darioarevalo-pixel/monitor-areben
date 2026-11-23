@@ -27,6 +27,7 @@ import organizacion from './_organizacion.js';
 import reportes from './_reportes.js';
 import agenda from './_agenda.js';
 import vigiaErp from './_vigia-erp.js';
+import espejoVivo from './_espejo-vivo.js';
 import syncTn from './_sync-tn.js';
 import metaRentabilidad from './_meta-rentabilidad.js';
 import envios from './_envios.js';
@@ -252,6 +253,8 @@ const RECURSOS = {
   'repo-armado': repoArmado,
   // El vigía de erp.arebensrl.com, sin sesión: lo llama el cron de vercel.json con CRON_SECRET.
   'vigia-erp': vigiaErp,
+  // El espejo en vivo: la copia del ERP cada 10 minutos (cron de vercel.json, con CRON_SECRET). Ver api/_espejo-vivo.js.
+  'espejo-vivo': espejoVivo,
   // Quién soy según el Monitor: la recarga de la página cuando bdi-catalogo no contesta.
   sesion,
 };
