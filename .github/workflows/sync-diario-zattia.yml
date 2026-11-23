@@ -43,6 +43,18 @@ jobs:
           DATABASE_URL_ZATTIA: ${{ secrets.DATABASE_URL_ZATTIA }}
         run: node scripts/sync-diario-zattia.js
 
+      # El catálogo, el precio y el costo de las líneas que ya pasaron al ERP (`erp_corte`) salen del MOTOR, ⛔ de GN: sin esto
+      # el ETL (Liquidación, Márgenes, Comisiones, Reposición), el buscador de artículos y Etiquetas ⛔ ven los productos nacidos
+      # en el ERP y siguen con el precio y el costo que GN tenía al cortar (Bruno 23-nov: «hay que desconectar todo de gn»).
+      # Va DESPUÉS del sync de GN, que desactiva en el espejo lo que GN ⛔ tiene. Ver `lib/erp/productos-espejo.core.js`.
+      - name: Productos del ERP al espejo
+        if: ${{ !cancelled() }}
+        env:
+          DATABASE_URL_ZATTIA: ${{ secrets.DATABASE_URL_ZATTIA }}
+          ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
+          ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
+        run: node scripts/erp-productos-espejo.mjs zattia
+
       # El stock de las líneas que ya pasaron al ERP (`erp_corte`: Stunned desde el 28-oct, BDI el 15/16-nov, Zattia el 23-nov)
       # sale del LIBRO del motor, ⛔ de GN (el sync de arriba ya no escribe esas filas). Sin corte, el script sale sin tocar nada.
       # Ver `lib/erp/inventario-espejo.core.js`.
