@@ -1155,9 +1155,9 @@ export const ponerRoles = (marca: MarcaErp, permiso: string, roles: RolErp[]) =>
 export const restablecerRoles = (marca: MarcaErp, permiso: string) =>
   pedir<{ ok: true; marca: MarcaErp; guardados: Record<string, RolErp[]> }>(post({ accion: 'restablecer-roles', marca, permiso }), '', 'No se pudo restablecer.')
 
-export type PinPersona = { usuario: string; pin: string | null; cambiado_por: string; cambiado_en: string; bloqueado: boolean; bloqueado_hasta: string | null }
+export type PinPersona = { usuario: string; cambiado_por: string; cambiado_en: string; bloqueado: boolean; bloqueado_hasta: string | null }
 
-/** Los PINs de encargada de una marca (sólo Admin; el PIN va en claro, decisión de Bruno 26-oct). */
+/** Quién tiene PIN de encargada en una marca (sólo Admin). ⛔ El PIN: el servidor ⛔ lo devuelve (Bruno 23-nov: «que no se vean»). */
 export const leerPines = (marca: MarcaErp) =>
   pedir<{ marca: MarcaErp; pines: PinPersona[] }>(null, `&vista=pines&marca=${marca}&nc=${Date.now()}`, 'No se pudieron leer los PINs.')
 

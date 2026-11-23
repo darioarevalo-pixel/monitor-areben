@@ -59,15 +59,17 @@ export function Usuarios() {
     }
   }, [perfil, tick])
 
-  // Los PINs de encargada (ERP, motor sql/051-052): se guardan al instante, ⛔ con «Guardar cambios». `undefined` = sin leer; ausente = no tiene.
-  const [pines, setPines] = useState<Record<string, string> | undefined>(undefined)
+  // Los PINs de encargada (ERP, motor sql/051): se guardan al instante, ⛔ con «Guardar cambios». `undefined` = sin leer; ausente = no tiene.
+  // 🔑 Bruno 23-nov: «que no se vean» ⇒ el servidor dice QUIÉN tiene, ⛔ cuál. El recién puesto se ve una vez (`pinesNuevos`, sólo en memoria).
+  const [pines, setPines] = useState<Record<string, true> | undefined>(undefined)
+  const [pinesNuevos, setPinesNuevos] = useState<Record<string, string>>({})
   const [pinOcupado, setPinOcupado] = useState<string | null>(null)
   const [pinError, setPinError] = useState<string | null>(null)
   useEffect(() => {
     if (!admin) return
     let vivo = true
     leerPines('bdi').then(
-      (r) => { if (vivo) { setPines(Object.fromEntries(r.pines.filter((p) => p.pin).map((p) => [p.usuario, p.pin as string]))); setPinError(null) } },
+      (r) => { if (vivo) { setPines(Object.fromEntries(r.pines.map((p) => [p.usuario, true as const]))); setPinError(null) } },
       (e: Error) => { if (vivo) setPinError(e.message) },
     )
     return () => { vivo = false }
@@ -79,7 +81,8 @@ export function Usuarios() {
     try {
       if (pin) await ponerPin(k, pin)
       else await sacarPin(k)
-      setPines((p) => { const n = { ...(p || {}) }; if (pin) n[k] = pin; else delete n[k]; return n })
+      setPines((p) => { const n = { ...(p || {}) }; if (pin) n[k] = true; else delete n[k]; return n })
+      setPinesNuevos((p) => { const n = { ...p }; if (pin) n[k] = pin; else delete n[k]; return n })
       setPinError(null)
     } catch (e) {
       setPinError((e as Error).message)
@@ -238,7 +241,7 @@ export function Usuarios() {
               onFuncion={(f, val) => onFuncion(i, f, val)}
               onEliminar={() => eliminar(i)}
               {...(pines
-                ? { pin: pines[clavePin(u)] ?? null, pinCargando: pinOcupado === clavePin(u), onPinAlAzar: () => cambiarPin(u, pinAlAzar()), onPinSacar: () => cambiarPin(u, null) }
+                ? { tienePin: !!pines[clavePin(u)], pinNuevo: pinesNuevos[clavePin(u)] ?? null, pinCargando: pinOcupado === clavePin(u), onPinAlAzar: () => cambiarPin(u, pinAlAzar()), onPinSacar: () => cambiarPin(u, null) }
                 : {})}
             />
           ))}
