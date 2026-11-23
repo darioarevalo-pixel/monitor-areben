@@ -74,6 +74,18 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
 `tests/reclamos-escenarios.test.ts`, `tests/reclamos-mensajes.test.ts`, `tests/reclamo-publico.test.ts`,
 `tests/reclamos-decidir-pestanas.test.tsx` (jsdom, monta el modal).
 
+## 🔴 Desde el corte de la línea, Reclamos ⛔ escribe en GN (23-nov-2026)
+
+Bruno: «hay que desconectar todo de gn». Hasta acá, «Descontar regaladas» (`proposito:'reclamo'`) y «Procesar cambio»
+(`accion:'cambio_real'`) creaban la venta en GN **aunque la línea ya estuviera en Areben Gestión** ⇒ la prenda bajaba en GN y
+⛔ en el libro. Ahora, en `api/crear-venta.js`, por el corte de la línea del PRODUCTO (BDI, Zattia y Stunned):
+- **Regaladas** ⇒ ajuste `regalo` APLICADO en el ERP (`reclamoAlErp`, `reclamoErpDe`), ref `reclamo-<id>-regaladas:<depósito>`;
+  la «venta» que vuelve es `Areben Gestión A-n`. Igual que la falla y el canje.
+- **Cambio** ⇒ FRENA con 409 y manda a hacerlo en la Caja (⇄ Cambios): la venta del cambio cobra plata y todavía ⛔ tiene camino
+  al ERP desde acá (`cambioErpDe`). ▶️ Pendiente: decidir con Bruno cómo entra al ERP (`registrarCambio` del motor).
+- «Reemplazo» ya iba al ERP (`proposito:'falla'`).
+- ⚠️ El reingreso de lo devuelto y la anulación siguen siendo pasos a mano: desde el corte se hacen en Areben Gestión, ⛔ en GN.
+
 ## 🔴 Escribir en GN acepta las DOS credenciales (7-sep-2026)
 
 Bruno, desde Administración: *«quiero crear la venta desde administración lorena, y me aparece

@@ -14,7 +14,7 @@
 //
 // ⛔ Archivo `_`: NO es una ruta.
 import { configPg } from '../lib/pg.core.js'
-import { canjeDe, canjeErpDe, consumoDe, devolverDe, fallaErpDe, pedidoDeSolicitud, salidasErpDe, sinOrigenesErp, solicitudErpDe, volvioTodo } from '../lib/erp/salida-solicitud.core.js'
+import { cambioErpDe, canjeDe, canjeErpDe, consumoDe, devolverDe, fallaErpDe, pedidoDeSolicitud, reclamoErpDe, salidasErpDe, sinOrigenesErp, solicitudErpDe, volvioTodo } from '../lib/erp/salida-solicitud.core.js'
 import { lineasEnErp } from '../lib/erp/corte.core.js'
 import { baseDeLinea } from '../lib/lineas.core.js'
 import { conBase, cortesDe, lineasDeProductos, PG_DE_STORE } from './_erp-corte.js'
@@ -194,6 +194,27 @@ export async function canjeAlErp({ store, b, usuario }) {
   if (!b || b.proposito !== 'canje') return null
   const aj = await import('../motor/stock/ajuste.mjs')
   return conPedidoErp({ store, b }, canjeErpDe, (db, pedido) => ajusteAplicado(db, aj, pedido, usuario || 'canjes', 'este canje'))
+}
+
+/**
+ * Las regaladas de un reclamo (`proposito: 'reclamo'`) de una línea que ya está en el ERP, ⛔ a GN: ajuste `regalo` aplicado en el
+ * acto (Bruno 23-nov). Mismas reglas que la falla y el canje: si el ERP ⛔ la puede anotar, FRENA.
+ * @returns {Promise<null | { ok: true, linea: string, ajuste: number, ya: boolean } | { error: string }>} `null` = sigue a GN
+ */
+export async function reclamoAlErp({ store, b, usuario }) {
+  if (!b || b.proposito !== 'reclamo') return null
+  const aj = await import('../motor/stock/ajuste.mjs')
+  return conPedidoErp({ store, b }, reclamoErpDe, (db, pedido) => ajusteAplicado(db, aj, pedido, usuario || 'reclamos', 'este reclamo'))
+}
+
+/**
+ * La venta real de un cambio de Reclamos (`accion: 'cambio_real'`) de una línea que ya está en el ERP: ⛔ va a GN y todavía ⛔ hay
+ * camino al ERP ⇒ `{ error }` (FRENA). `null` = ninguna prenda de una línea en el ERP (sigue a GN).
+ * @returns {Promise<null | { error: string }>}
+ */
+export function cambioAlErp({ store, b }) {
+  if (!b || b.accion !== 'cambio_real') return Promise.resolve(null)
+  return conPedidoErp({ store, b }, cambioErpDe, () => null)
 }
 
 /**

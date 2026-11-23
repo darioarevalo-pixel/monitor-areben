@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canjeDe, canjeErpDe, consumoDe, fallaErpDe, lineaErpDe, salidasErpDe, sinOrigenesErp, solicitudErpDe, motivoDeConsumo, devolverDe, pedidoDeSolicitud, salieronDe, tipoDe, volvioTodo, volvieronDe } from '@/lib/erp/salida-solicitud.core.js'
+import { cambioErpDe, canjeDe, canjeErpDe, reclamoErpDe, consumoDe, fallaErpDe, lineaErpDe, salidasErpDe, sinOrigenesErp, solicitudErpDe, motivoDeConsumo, devolverDe, pedidoDeSolicitud, salieronDe, tipoDe, volvioTodo, volvieronDe } from '@/lib/erp/salida-solicitud.core.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const item = (o: Record<string, unknown>) => ({ vid: `${o.pid}_${o.sid}`, nombre: 'x', variante: 'M', sku: 'SKU', qty: 3, origen: 'deposito', ...o })
@@ -206,6 +206,40 @@ describe('canjeErpDe: el canje de BDI desde su corte es el ajuste APLICADO (⛔ 
   it('⛔ es canje ⇒ null; sin id ⇒ error', () => {
     expect(canjeErpDe(pedido({ proposito: 'falla' }), 'bdi', bdi, ['bdi'])).toBeNull()
     expect(canjeErpDe(pedido({ solicitudId: undefined }), 'bdi', bdi, ['bdi'])).toHaveProperty('error')
+  })
+})
+
+describe('reclamoErpDe: las regaladas de una línea cortada son un ajuste `regalo` APLICADO (⛔ la venta de GN, Bruno 23-nov)', () => {
+  const pedido = (o: Record<string, unknown> = {}): any => ({ proposito: 'reclamo', solicitudId: 'reclamo-7-regaladas', origen: 'deposito', items: [{ product_id: 5, size_id: 50, quantity: 1 }, { product_id: 6, size_id: 60, quantity: 2 }], ...o })
+  const zattia = new Map([[5, 'zattia'], [6, 'zattia']])
+  it('sin corte ⇒ null: la venta de GN de siempre', () => {
+    expect(reclamoErpDe(pedido(), 'zattia', zattia, [])).toBeNull()
+  })
+  it('con corte ⇒ ajuste `regalo` del depósito, ref por reclamo', () => {
+    const a: any = reclamoErpDe(pedido(), 'zattia', zattia, ['zattia', 'stunned'])
+    expect([a.linea, a.deposito, a.motivo, a.ref]).toEqual(['zattia', 'deposito', 'regalo', 'reclamo-7-regaladas:deposito'])
+    expect(a.renglones.map((r: any) => r.cantidad)).toEqual([-1, -2])
+  })
+  it('BDI sale de su depósito minorista; Stunned dentro de la base de Zattia', () => {
+    expect((reclamoErpDe(pedido(), 'bdi', new Map([[5, 'bdi'], [6, 'bdi']]), ['bdi']) as any).deposito).toBe('deposito_minorista')
+    expect((reclamoErpDe(pedido(), 'zattia', new Map([[5, 'stunned'], [6, 'stunned']]), ['stunned']) as any).linea).toBe('stunned')
+  })
+  it('⛔ es reclamo ⇒ null; sin id o mezclando líneas ⇒ error', () => {
+    expect(reclamoErpDe(pedido({ proposito: 'falla' }), 'zattia', zattia, ['zattia'])).toBeNull()
+    expect(reclamoErpDe(pedido({ solicitudId: undefined }), 'zattia', zattia, ['zattia'])).toHaveProperty('error')
+    expect(reclamoErpDe(pedido(), 'zattia', new Map([[5, 'zattia'], [6, 'stunned']]), ['zattia'])).toHaveProperty('error')
+  })
+})
+
+describe('cambioErpDe: la venta del cambio de una línea cortada FRENA (⛔ cae a GN)', () => {
+  const pedido = (o: Record<string, unknown> = {}): any => ({ accion: 'cambio_real', proposito: 'cambio', solicitudId: 'reclamo-7-cambio', origen: 'deposito', items: [{ product_id: 5, size_id: 50, quantity: 1 }], ...o })
+  it('sin corte ⇒ null; con corte ⇒ error que manda a la Caja', () => {
+    expect(cambioErpDe(pedido(), 'bdi', new Map([[5, 'bdi']]), [])).toBeNull()
+    const e: any = cambioErpDe(pedido(), 'bdi', new Map([[5, 'bdi']]), ['bdi'])
+    expect(e.error).toMatch(/Caja/)
+  })
+  it('⛔ es cambio_real ⇒ null', () => {
+    expect(cambioErpDe(pedido({ accion: undefined }), 'bdi', new Map([[5, 'bdi']]), ['bdi'])).toBeNull()
   })
 })
 
