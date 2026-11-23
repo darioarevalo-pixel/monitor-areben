@@ -29,6 +29,7 @@ export async function leerAgenda(): Promise<DatosAgenda> {
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer la agenda.')
   return {
     promos: d.promos || [],
+    promosProducto: d.promosProducto || [],
     items: d.items || [],
     hechos: d.hechos || [],
     puede: d.puede || { cargar: false },

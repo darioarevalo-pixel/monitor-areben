@@ -56,6 +56,7 @@ import { incidencias } from './_incidencias.js';
 import { cuerpoTarea } from '../lib/agenda/aviso-texto.core.js';
 import { textoDeRespuesta } from './_tn-desc-ia.js';
 import { SISTEMA as SISTEMA_MEJORAR, descripcionLimpia, respuestaLimpia } from '../lib/agenda/mejorar.core.js';
+import { promosProducto } from './_promos-producto.js';
 import { companerasDe, perfilDe } from '../lib/agenda/celular-compartido.core.js';
 import { EQUIPO } from '../lib/agenda/correo-diario.core.js';
 import { pedirAvisoInterno } from '../lib/mailer/aviso.core.js';
@@ -712,6 +713,8 @@ export default async function handler(req, res) {
       // shell se llevaría miles de tildes que nadie va a mirar.
       const desdeHechos = masDias(hoyUtc(), -(DIAS_CUMPLIMIENTO + 1));
 
+      // Las promos de PRODUCTO (Resorty y la Caja) arrancan en paralelo y ⛔ tiran: ver `_promos-producto.js`.
+      const prodP = promosProducto(marcasConAcceso(perfil, 'agenda', MARCAS));
       const [pro, ite, hec] = await Promise.all([
         q,
         qi,
@@ -868,6 +871,9 @@ export default async function handler(req, res) {
           autor: p.autor,
           creado: p.created_at,
         })),
+        // Bruno, 23-nov-2026: en la misma banda que las bancarias. Cada una con su canal (web/mostrador).
+        promosProducto: (await prodP).promos,
+        fallasPromosProducto: (await prodP).fallas,
         puede: { cargar, incidencias: quienesSeEnteran().includes(yo) },
       });
     }

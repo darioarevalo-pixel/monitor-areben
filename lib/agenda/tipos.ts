@@ -313,9 +313,29 @@ export type Hecho = {
   hechoAt: string | null
 }
 
+/**
+ * Una promo de PRODUCTO vigente (Bruno, 23-nov-2026): «2 −15% · 3 −25%», un combo, el templado con
+ * descuento. ⛔ Se carga en el monitor: la lee el servidor de Resorty (`canal: 'web'`) y de la Caja
+ * de la marca (`canal: 'mostrador'`). Ver `api/_promos-producto.js`.
+ */
+export type PromoProducto = {
+  id: string
+  marca: Marca
+  /** De qué tienda es: «BDI», «Zattia», «Stunned» (web) o «Local» (la Caja). */
+  tienda: string
+  canal: Canal
+  titulo: string
+  detalle: string
+  excluye: string[]
+  nota: string | null
+  desde: FechaIso | null
+  hasta: FechaIso | null
+}
+
 /** Lo que devuelve `GET /api/datos?recurso=agenda`. */
 export type DatosAgenda = {
   promos: Promo[]
+  promosProducto: PromoProducto[]
   items: ItemAgenda[]
   /**
    * El acuse, en **dos tramos**: los últimos `DIAS_CUMPLIMIENTO` días de todos los ítems —lo que
