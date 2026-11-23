@@ -470,7 +470,12 @@ function POS() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- una vez por cambio registrado
   }, [cambioHecho])
   // Es un CAMBIO, ⛔ una devolución (Bruno, 27-oct): para seguir al cobro hay que llevarse algo; lo que sobra queda a favor.
-  const cambioListoParaCobrar = enCambio && pasoCambio === 2 && cambio.unidadesNuevas > 0 && !cambio.sinPrecio && cambio.devueltas.length > 0
+  // 🔑 SÓLO MIRAR (Bruno 22-nov: «quiero entrar al POS, ver cómo se ven los productos, las ventas, las vistas»): sin caja abierta,
+  // o con la caja de OTRA cuenta, el POS se ve entero pero ⛔ cobra, ⛔ registra un cambio y ⛔ toca la caja. Antes la pantalla ni se
+  // dibujaba. El cobro lo sigue frenando el SERVIDOR (`confirmar`: 409 sinTurno / 403 otraCuenta); el cambio ⛔ pide caja allá
+  // (erp › Caja › Cambio cobra sin ella) ⇒ acá se traba el botón. `undefined` = todavía ⛔ se leyó (⛔ se dibuja).
+  const soloMirar = turno !== undefined && !puedeUsarPOS(turno, perfil)
+  const cambioListoParaCobrar = !soloMirar && enCambio && pasoCambio === 2 && cambio.unidadesNuevas > 0 && !cambio.sinPrecio && cambio.devueltas.length > 0
   /** «Siguiente →»: sin venta pide el PIN de la encargada; con venta pasa directo a lo que se lleva. */
   const siguienteDelCambio = () => {
     if (!cambio.devueltas.length) return
@@ -992,7 +997,7 @@ function POS() {
   }, [cargarAgenda])
 
   const prendas = bor.renglones.reduce((s, r) => s + r.cantidad, 0)
-  const puedeCobrar = bor.renglones.length > 0 && !sinPrecio
+  const puedeCobrar = !soloMirar && bor.renglones.length > 0 && !sinPrecio
   // Si el pedido se vacía o queda una prenda sin precio, se vuelve al pedido.
   const mostrarCobro = enCobro && puedeCobrar
   // A6: al abrir el cobro, la config y la promo de crédito de HOY (una Caja abierta desde ayer traía las de ayer).
@@ -1032,32 +1037,16 @@ function POS() {
   const marco = (hijos: React.ReactNode) => <div style={{ minHeight: '100vh', background: color.bg, padding: space[4], display: 'grid', placeItems: 'start center' }}>{hijos}</div>
   if (errCarga) return marco(<Notice tone="danger">{errCarga}</Notice>)
   if (turno === undefined) return marco(errTurno ? <Notice tone="danger">No se pudo leer la caja: {errTurno}</Notice> : <span style={{ color: color.mut }}>Abriendo la caja…</span>)
-  if (!turno) {
-    return marco(
-      <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
-        {cerradoAca && <AvisoCierre t={cerradoAca} />}
-        <Notice tone="warning">Sin caja abierta: el POS no cobra. Abrir caja desde la pestaña Caja.</Notice>
-        <div>
-          <IrA href="/caja" variant="solid" tone="brand">
-            Ir a la Caja
-          </IrA>
-        </div>
-      </div>,
-    )
-  }
-  if (!puedeUsarPOS(turno, perfil)) {
-    return marco(
-      <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
-        <Notice tone="warning">Caja de {turno.abierto_por ?? 'otra cuenta'}: POS sólo para esa cuenta.</Notice>
-        <div>
-          <IrA href="/caja" iconLeft={<Icono nombre="atras" />}>
-            Caja
-          </IrA>
-        </div>
-      </div>,
-    )
-  }
-
+  const mirarJSX = soloMirar && (
+    <div style={{ display: 'grid', gap: space[2] }}>
+      {cerradoAca && <AvisoCierre t={cerradoAca} />}
+      <Notice tone="warning">
+        {turno
+          ? `Sólo para mirar: la caja la abrió ${turno.abierto_por ?? 'otra cuenta'} y cobra sólo esa cuenta.`
+          : 'Sólo para mirar: no hay una caja abierta. Para cobrar, abrí la caja desde la pestaña Caja.'}
+      </Notice>
+    </div>
+  )
   const sinLlegar = pendientes.filter((v) => v.estado !== 'esperando_pago').length
   const rechazadas = pendientes.filter((v) => v.estado !== 'esperando_pago' && v.reintentable === false).length
   const gnOk = gnSenal ? gnSenal.ok : sinLlegar === 0
@@ -1116,7 +1105,7 @@ pendientes
         />
       )}
 
-      <ModalesTurno
+      {turno && <ModalesTurno
         que={panelTurno}
         turno={turno}
         billetes={billetesDe(config?.reglas)}
@@ -1130,7 +1119,7 @@ pendientes
           setPanelTurno(null)
           setTurno(null)
         }}
-      />
+      />}
     </>
   )
   // 🔴 La prenda repetida (Bruno, 14-oct), «Validar transferencia» y el cobro: UNA sola vez, para los dos formatos.
@@ -1629,6 +1618,7 @@ pendientes
           </div>
 
           <div className="pm-scroll">
+            {mirarJSX}
             {esperasJSX}
             {avisoPrecioLocalJSX}
             {avisoSinLlegarJSX}
@@ -1676,11 +1666,11 @@ pendientes
         <Modal abierto={menuMovil} onCerrar={() => setMenuMovil(false)} titulo={`Caja ${MARCA_CAJA.nombre}`}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: space[2] }}>
             {opcion('Ventas', () => setVerVentas(true))}
-            {opcion('Contar billetes', () => setPanelTurno('contar'))}
-            {opcion('+ Ingreso', () => setPanelTurno('ingreso'))}
-            {opcion('+ Salida', () => setPanelTurno('salida'))}
+            {!soloMirar && opcion('Contar billetes', () => setPanelTurno('contar'))}
+            {!soloMirar && opcion('+ Ingreso', () => setPanelTurno('ingreso'))}
+            {!soloMirar && opcion('+ Salida', () => setPanelTurno('salida'))}
             {opcion(conSonido ? 'Con sonido' : 'Sin sonido', () => cambiarSonido(!conSonido))}
-            {opcion('Cerrar caja', () => setPanelTurno('cerrar'), true)}
+            {!soloMirar && opcion('Cerrar caja', () => setPanelTurno('cerrar'), true)}
           </div>
         </Modal>
       </ModalVarianteContext.Provider>
@@ -1732,7 +1722,7 @@ pendientes
           Caja {MARCA_CAJA.nombre}
         </span>
         <span className="pos-turno" style={{ fontSize: font.base, color: color.sideInk2, whiteSpace: 'nowrap' }}>
-          caja abierta desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}
+          {turno ? `caja abierta desde ${horaAr(turno.abierto_en)} · ${turno.abierto_por ?? ''}` : 'sin caja abierta'}{soloMirar ? ' · sólo mirar' : ''}
         </span>
         <span className={`pos-gn${gnOk ? '' : ' off'}`} title={gnPorque} role="status">
           {enEvento ? (gnOk ? 'Conectado' : 'Sin conexión') : gnOk ? 'Gestión Nube' : 'Gestión Nube sin respuesta'}
@@ -1768,6 +1758,8 @@ pendientes
           <button type="button" className="pos-tbtn" onClick={() => setVerVentas(true)} style={{ height: 36 }}>
             Ventas
           </button>
+          {!soloMirar && (
+            <>
           <button type="button" className="pos-tbtn" onClick={() => setPanelTurno('contar')} style={{ height: 36 }}>
             Contar billetes
           </button>
@@ -1780,6 +1772,8 @@ pendientes
           <button type="button" className="pos-tbtn peligro" onClick={() => setPanelTurno('cerrar')} style={{ height: 36 }}>
             Cerrar caja
           </button>
+            </>
+          )}
         </div>
       </header>
 
@@ -1790,6 +1784,7 @@ pendientes
       )}
       <div className="pos-grid">
         <div style={{ display: 'grid', gap: space[3], minWidth: 0 }}>
+          {mirarJSX}
           {esperasJSX}
           {avisoPrecioLocalJSX}
           {avisoSinLlegarJSX}
