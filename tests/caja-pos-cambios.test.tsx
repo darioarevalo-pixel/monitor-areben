@@ -174,7 +174,7 @@ describe('POS · modo «Cambios»', () => {
     sesion.perfil = { ...antes, name: 'Ana', email: 'ana@zattia.com' }
     try {
       const cobrar = await armarCambioSinVenta()
-      expect(texto()).toContain('Sólo para mirar')
+      expect(texto()).toContain('Vista previa')
       expect(texto()).toContain('Se lleva')
       expect(cobrar.disabled).toBe(true)
     } finally { sesion.perfil = antes }

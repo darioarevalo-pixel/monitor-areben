@@ -108,7 +108,7 @@ describe('POS (/pos)', () => {
     // Con una prenda en el pedido: vacío, «Continuar al cobro» ya está trabado y el test ⛔ probaría nada.
     disco.set('caja:borrador:zattia', JSON.stringify({ id: 'b-mirar', renglones: [PRENDA], email: '' }))
     const t = await montar(<CajaPOS />)
-    expect(t).toContain('Sólo para mirar: la caja la abrió Sofi y cobra sólo esa cuenta.')
+    expect(t).toContain('Vista previa: la caja la abrió Sofi y cobra sólo esa cuenta.')
     expect(t).toContain('Escanear o buscar')
     sinAccionesDeCaja()
   })
@@ -116,7 +116,7 @@ describe('POS (/pos)', () => {
   it('🔴 un admin también sólo mira la caja de otra cuenta', async () => {
     sesion.perfil = { ...sesion.perfil, name: 'Bruno', email: 'bruno@arebensrl.com', admin: true }
     const t = await montar(<CajaPOS />)
-    expect(t).toContain('Sólo para mirar')
+    expect(t).toContain('Vista previa')
     expect(t).toContain('Escanear o buscar')
     sinAccionesDeCaja()
   })
@@ -125,7 +125,7 @@ describe('POS (/pos)', () => {
     turno = null
     disco.set('caja:borrador:zattia', JSON.stringify({ id: 'b-mirar', renglones: [PRENDA], email: '' }))
     const t = await montar(<CajaPOS />)
-    expect(t).toContain('Sólo para mirar: no hay una caja abierta.')
+    expect(t).toContain('Vista previa: sin caja abierta, no se puede cobrar.')
     expect(t).toContain('Escanear o buscar')
     expect(document.querySelector('a[href="/caja"]')).toBeTruthy()
     sinAccionesDeCaja()
@@ -147,13 +147,13 @@ describe('POS (/pos)', () => {
     const caja = document.createElement('div'); document.body.appendChild(caja); raiz = createRoot(caja)
     sesion.perfil = { ...sesion.perfil, name: 'Ana', email: 'ana@zattia.com' }
     const t = await montar(<CajaPOS />)
-    expect(t).toContain('Sólo para mirar')
+    expect(t).toContain('Vista previa')
     expect(await facturarEnVentas()).toBe(false)
   })
 
   it('la dueña de la caja ⛔ ve el cartel y tiene sus acciones', async () => {
     const t = await montar(<CajaPOS />)
-    expect(t).not.toContain('Sólo para mirar')
+    expect(t).not.toContain('Vista previa')
     expect(boton('Cerrar caja')).toBeTruthy()
   })
 
@@ -177,7 +177,7 @@ describe('POS (/pos)', () => {
     try {
       await montar(<CajaPOS />)
       await act(async () => soltar({ turno: TURNO, ultimos: [] }))
-      expect(document.body.textContent).toContain('Sólo para mirar: no hay una caja abierta.')
+      expect(document.body.textContent).toContain('Vista previa: sin caja abierta, no se puede cobrar.')
     } finally {
       vi.mocked(leerTurno).mockImplementation(async () => ({ turno, ultimos: [] }) as never)
     }
@@ -226,7 +226,7 @@ describe('pestaña Caja', () => {
     raiz = createRoot(caja)
     t = await montar(<Caja />)
     // La otra cuenta entra a MIRAR (Bruno 23-nov), ⛔ «Abrir POS».
-    expect(document.querySelector('a[href="/pos?marca=zattia"]')?.textContent).toBe('Entrar a mirar')
+    expect(document.querySelector('a[href="/pos?marca=zattia"]')?.textContent).toBe('Ver POS')
     expect(t).not.toContain('Abrir POS')
     expect(t).toContain('POS sólo para esa cuenta')
     // Cerrar la caja, sí: «desde los dos lados». Contar billetes, ⛔ (el servidor da 403).
@@ -236,11 +236,11 @@ describe('pestaña Caja', () => {
 })
 
 describe('pestaña Caja · entrar sin abrir caja (Bruno 23-nov)', () => {
-  it('🔑 sin caja abierta: «Abrir caja» y, al lado, «Entrar sin abrir caja» al POS (que ahí se ve «Sólo para mirar»)', async () => {
+  it('🔑 sin caja abierta: «Abrir caja» y, al lado, «Ver POS» (la «Vista previa», Bruno 23-nov)', async () => {
     turno = null
     const t = await montar(<Caja />)
     expect(t).toContain('Abrir caja')
-    expect(document.querySelector('a[href="/pos?marca=zattia"]')?.textContent).toBe('Entrar sin abrir caja')
+    expect(document.querySelector('a[href="/pos?marca=zattia"]')?.textContent).toBe('Ver POS')
     expect(t).not.toContain('Abrir POS')
   })
 })

@@ -988,7 +988,7 @@ function POS() {
   const [verVentas, setVerVentas] = useState(false)
   // «Facturar» (Bruno, 22-nov): la venta de la Caja que se factura, con la misma factura a pedido de Areben Gestión.
   const [facturando, setFacturando] = useState<Venta | null>(null)
-  // «Sólo para mirar» (pos-mirar) ⛔ factura: guardar la clienta y la venta a su nombre ESCRIBE en la base real.
+  // La «Vista previa» (pos-mirar) ⛔ factura: guardar la clienta y la venta a su nombre ESCRIBE en la base real.
   const puedeFacturar = usePuedeErp(storeCaja() as MarcaErp)('facturar-venta') && !soloMirar
 
   // Sin el shell, las promos de la Agenda (la del crédito de hoy) las pide el POS.
@@ -1043,8 +1043,8 @@ function POS() {
       {cerradoAca && <AvisoCierre t={cerradoAca} />}
       <Notice tone="warning">
         {turno
-          ? `Sólo para mirar: la caja la abrió ${turno.abierto_por ?? 'otra cuenta'} y cobra sólo esa cuenta.`
-          : 'Sólo para mirar: no hay una caja abierta. Para cobrar, abrí la caja desde la pestaña Caja.'}
+          ? `Vista previa: la caja la abrió ${turno.abierto_por ?? 'otra cuenta'} y cobra sólo esa cuenta.`
+          : 'Vista previa: sin caja abierta, no se puede cobrar. Para cobrar, abrí la caja desde la pestaña Caja.'}
       </Notice>
     </div>
   )
@@ -1723,7 +1723,7 @@ pendientes
           Caja {MARCA_CAJA.nombre}
         </span>
         <span className="pos-turno" style={{ fontSize: font.base, color: color.sideInk2, whiteSpace: 'nowrap' }}>
-          {turno ? `caja abierta desde ${horaAr(turno.abierto_en)} · ${turno.abierto_por ?? ''}` : 'sin caja abierta'}{soloMirar ? ' · sólo mirar' : ''}
+          {turno ? `caja abierta desde ${horaAr(turno.abierto_en)} · ${turno.abierto_por ?? ''}` : 'sin caja abierta'}{soloMirar ? ' · vista previa' : ''}
         </span>
         <span className={`pos-gn${gnOk ? '' : ' off'}`} title={gnPorque} role="status">
           {enEvento ? (gnOk ? 'Conectado' : 'Sin conexión') : gnOk ? 'Gestión Nube' : 'Gestión Nube sin respuesta'}

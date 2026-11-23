@@ -350,6 +350,7 @@ para lo que no es del producto (cupón, seguimiento, caja) y para lo que se esca
 | se dice | ⛔ no se dice | app | dónde | por qué / desde |
 |---|---|---|---|---|
 | `caja` (abrir, cerrar, cajas anteriores) | `turno` · `turnos` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` · `components/erp` · `lib/erp` · `lib/nav.ts` · `lib/nav.datos.ts` | Bruno, 12-oct-2026: la cajera abre y cierra **la caja** |
+| `Vista previa` · `Ver POS` (el POS sin caja propia: se ve entero y ⛔ cobra) | `Sólo para mirar` · `sólo mirar` · `Entrar a mirar` | monitor | `components/caja` · `lib/caja` | Bruno, 23-nov-2026: «sólo para mirar no me gusta nada, está recontra fuera de los vocabularios» |
 | `oferta` · `productos en oferta` | `feria` · `ferias` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct: «feria» es un nombre COMERCIAL de una campaña, ⛔ una regla de la caja |
 | `ingreso` · `+ Ingreso` | `aporte` · `aportes` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct: «+ Salida» y «+ Ingreso» |
 | `Validar transferencia` · `Transferencia pendiente` | `Confirmar transferencia` · `Validando` · `por verificar` · `falta verificar` | monitor | `components/caja` · `lib/caja` · `components/erp` · `lib/erp` | Bruno, 12-oct; 13-oct: «validar» se entiende como el paso intermedio |

@@ -93,14 +93,14 @@ function CajaDeMarca({ store }: { store: string }) {
   const otras = pendientes.filter((v) => v.estado !== 'esperando_pago')
   const esperando = pendientes.length - otras.length
   // 🔑 Sin la caja propia, el POS se MIRA (Bruno 23-nov: «un botón que diga abrir caja y otro ingresar sin apertura»): entero, con
-  // el cartel «Sólo para mirar» y sin cobrar (`soloMirar` en `CajaPOS.tsx`). Antes había que escribir `/pos` a mano.
+  // el cartel «Vista previa» y sin cobrar (`soloMirar` en `CajaPOS.tsx`). Antes había que escribir `/pos` a mano.
   const abrirPOS = esMio ? (
     <IrA href={`/pos?marca=${store}`} variant="solid" tone="brand">
       Abrir POS
     </IrA>
   ) : turno !== undefined ? (
     <IrA href={`/pos?marca=${store}`} variant="outline">
-      {turno ? 'Entrar a mirar' : 'Entrar sin abrir caja'}
+      Ver POS
     </IrA>
   ) : null
   const antes = turno ? (
