@@ -125,8 +125,8 @@ export const SECCIONES_ERP: Seccion[] = [
     pestanias: [
       { key: 'cuentas', label: 'Cuentas y formas de pago', permiso: 'configurar', junta: 'Qué lista', vistas: [{ key: 'cuentas', label: 'Cuentas' }, { key: 'rutas', label: '¿A qué cuenta va?' }] },
       { key: 'reglas', label: 'Descuentos y redondeo', permiso: 'configurar', vistas: [{ key: 'reglas', label: 'Descuentos por forma de pago' }, { key: 'redondeo', label: 'Redondeo' }] },
-      { key: 'estructura', label: 'Marcas, depósitos y puntos de venta', permiso: 'configurar' },
-      { key: 'tokens', label: 'Tokens de la API', permiso: 'configurar' },
+      { key: 'estructura', label: 'Marcas y depósitos', permiso: 'configurar' },
+      { key: 'tokens', label: 'Conexiones', permiso: 'configurar' },
     ],
   },
 ]
@@ -308,8 +308,6 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
     setLinea(k)
     if (marca !== 'zattia') setMarca('zattia')
   }
-  // La tira de Configuración (cuenta · ruta · regla) salta a la pestaña o la vista que corresponde.
-  const irAPieza = (k: 'cuentas' | 'rutas' | 'reglas') => (k === 'reglas' ? ir('configuracion', 'reglas') : ir('configuracion', 'cuentas', k))
   const ajustarPrenda = (p: PrendaAAjustar) => { setAAjustar(p); setPrendaGlobal(null); ir('stock', 'ajustes') }
   const elegirDeLaBusqueda = (d: DestinoBusqueda) => {
     setPanel(null)
@@ -334,8 +332,8 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
     if (k === 'conciliacion') return <ConciliacionDia key={`${marca}/${lineaVista}`} ajustar={ajustarPrenda} alContar={alContar} />
     if (k === 'diferencias') return <DiferenciasDia key={marca} ajustar={ajustarPrenda} alContar={alContar} />
     if (k === 'chequeo') return <ChequeoLibro key={marca} alContar={alContar} />
-    if (k === 'cuentas') return <CuentasErp key={marca} ir={irAPieza} alContar={alContar} />
-    if (k === 'rutas') return <RutasCobro key={`${marca}/${lineaVista}`} ir={irAPieza} alContar={alContar} />
+    if (k === 'cuentas') return <CuentasErp key={marca} alContar={alContar} />
+    if (k === 'rutas') return <RutasCobro key={`${marca}/${lineaVista}`} alContar={alContar} />
     return null
   }
 
@@ -466,7 +464,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
             )}
             {/* 📱 Las pantallas de compu se miran desde el celular, pero se cambian en la compu (Bruno, 29-oct). En la compu ⛔ se ve (globals.css). */}
             {(seccion.key === 'configuracion' || pestania === 'facturacion') && (
-              <div className="erp-aviso-compu" role="note"><span aria-hidden>⌨︎</span><span>Esta pantalla se mira desde acá, pero se <b>cambia en la compu</b>.</span></div>
+              <div className="erp-aviso-compu" role="note"><span aria-hidden>⌨︎</span><span>Para cambiar algo, usá la compu.</span></div>
             )}
             {seccion.key === 'inicio' && <InicioErp key={marca} href={hrefErp} />}
             {seccion.vacia && <EmptyState title={seccion.vacia} />}
@@ -500,7 +498,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
             {/* 🎨 Tanda 3: la cuenta corriente es la vista «Con saldo» de Clientes; su dirección vieja abre ahí. */}
             {(vista === 'clientes' || vista === 'cuenta-corriente') && <ClientesErp key={`${marca}/${pedidoN}/${vista}`} vistaInicial={vista === 'cuenta-corriente' ? 'saldo' : undefined} abrir={aAbrir?.tipo === 'cliente' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
             {pestania === 'proveedores' && <ProveedoresErp key={marca} />}
-            {vista === 'reglas' && <ReglasComerciales key={`${marca}/${lineaVista}`} ir={irAPieza} />}
+            {vista === 'reglas' && <ReglasComerciales key={`${marca}/${lineaVista}`} />}
             {vista === 'redondeo' && <Redondeo key={`${marca}/${lineaVista}`} />}
             {pestania === 'estructura' && <EstructuraErp key={marca} />}
             {pestania === 'tokens' && <TokensApi />}

@@ -168,19 +168,19 @@ export async function simularReglasErp({ marca, body }, deps) {
 /**
  * Escribe la copia de las reglas en `caja_config.reglas.reglasComerciales` (o la apaga), sin pisar otro cambio de la
  * configuración de la Caja hecho al mismo tiempo (mismo candado que `guardarReglas` de `api/_caja.js`: `actualizado_en`).
- * @returns {Promise<{ ok: true, copiadas: number } | { ok: false, error: string }>}
+ * @returns {Promise<{ ok: true, copiadas: number } | { ok: false, error: string, detalle?: string }>}
  */
 async function escribirEnCaja(sb, marca, { prendida, lista, usuario }) {
   for (let i = 0; i < 4; i++) {
     const { data: fila, error } = await sb.from('caja_config').select('reglas, actualizado_en').eq('store', marca).maybeSingle()
-    if (error) return { ok: false, error: `No se pudo leer la configuración de la Caja (${error.message}).` }
+    if (error) return { ok: false, error: 'No se pudo: volvé a intentar.', detalle: error.message }
     if (!fila) return { ok: false, error: 'La Caja de esta marca todavía no se abrió nunca: no tiene configuración.' }
     const ahora = new Date().toISOString()
     const reglasComerciales = prendida ? { prendida: true, lista, copiadasEn: ahora, por: usuario || 'admin' } : { ...(fila.reglas.reglasComerciales || {}), prendida: false, apagadaEn: ahora, apagadaPor: usuario || 'admin' }
     let q = sb.from('caja_config').update({ reglas: { ...fila.reglas, reglasComerciales }, actualizado_por: usuario || null, actualizado_en: ahora }).eq('store', marca)
     q = fila.actualizado_en == null ? q.is('actualizado_en', null) : q.eq('actualizado_en', fila.actualizado_en)
     const up = await q.select('store').maybeSingle()
-    if (up.error) return { ok: false, error: `No se pudo guardar en la Caja (${up.error.message}).` }
+    if (up.error) return { ok: false, error: 'No se pudo: volvé a intentar.', detalle: up.error.message }
     if (up.data) return { ok: true, copiadas: prendida ? lista.length : 0 }
   }
   return { ok: false, error: 'La configuración de la Caja cambió mientras se guardaba: probá de nuevo.' }

@@ -104,7 +104,7 @@ describe('Areben Gestión › el armazón propio', () => {
     const cartel = () => div.querySelector('.erp-aviso-compu')?.textContent ?? null
     for (const ruta of [['configuracion', 'reglas'], ['ventas', 'facturacion'], ['productos', 'redondeo']]) {
       await montar(ruta)
-      expect(cartel(), ruta.join('/')).toContain('se cambia en la compu')
+      expect(cartel(), ruta.join('/')).toContain('usá la compu')
       act(() => root?.unmount()); root = null
     }
     await montar(['ventas'])
