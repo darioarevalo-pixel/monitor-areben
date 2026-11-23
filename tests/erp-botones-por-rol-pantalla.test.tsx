@@ -19,7 +19,7 @@ const V = (o: Record<string, unknown>) => armarFila({
   kind: 'venta', id: 'v1', numero: 301, linea: 'bdi', tipo: 'venta', estado: 'confirmada', origen: 'caja', total: 18990, prueba: true,
   usuario: 'camila', ocurridaEn: '2026-10-18T13:40:00Z', pagos: [{ medio: 'efectivo', monto: 9000 }], ...o,
 }) as FilaVentaLista
-const FILAS_VENTA = [V({})]
+let FILAS_VENTA = [V({})]
 const ficha: FichaDeVenta = {
   venta: { id: 'v1', numero: 301, marca: 'bdi', tipo: 'venta', estado: 'confirmada', origen: 'caja', canal: 'local', deposito: 'local', total: 18990, prueba: true, ocurridaEn: '2026-10-18T13:40:00Z', cliente: null, subtotal: 18990, usuario: 'camila', registradaEn: '2026-10-18T13:40:00Z', origenRef: 'caja:1', gnSaleId: null, ventaOriginalId: null },
   cliente: null, lineas: [], pagos: [], anulacion: null, facturas: [],
@@ -64,10 +64,10 @@ const todo = () => document.body.textContent ?? ''
 const boton = (t: RegExp) => [...document.querySelectorAll('button')].find((b) => t.test(b.textContent ?? '') || t.test(b.getAttribute('aria-label') ?? ''))
 const clic = async (el: Element) => { await act(async () => { (el as HTMLElement).click() }); await act(async () => {}) }
 
-async function montarVentas() {
+async function montarVentas(irACaja = vi.fn()) {
   const { VentasErp } = await import('@/components/erp/ventas/VentasErp')
   const { ConfirmProvider } = await import('@/components/ui')
-  await montar(<ConfirmProvider><VentasErp irACaja={vi.fn()} /></ConfirmProvider>)
+  await montar(<ConfirmProvider><VentasErp irACaja={irACaja} /></ConfirmProvider>)
 }
 async function montarClientes() {
   const { ClientesErp } = await import('@/components/erp/clientes/ClientesErp')
@@ -81,8 +81,26 @@ describe('Ventas: el «⋯» de la fila y la ficha, según el rol', () => {
     await clic(boton(/^Más acciones de la venta #301$/)!)
     expect(todo()).toContain('Ver venta')
     expect(todo()).toContain('Imprimir ticket')
-    for (const t of ['Registrar cobro', 'Cambiar producto', 'Anular…']) expect(todo()).not.toContain(t)
+    for (const t of ['Registrar cobro', 'Cambiar producto', 'Anular…', 'Facturar']) expect(todo()).not.toContain(t)
     expect(boton(/^Editar$/)).toBeUndefined()
+  })
+
+  it('🔑 Facturar en el «⋯» de la FILA (Bruno 23-nov): lleva a la Caja con ESA venta; ⛔ en una ya facturada', async () => {
+    permisos = { ...SOLO_VER, 'facturar-venta': true }
+    const irACaja = vi.fn()
+    await montarVentas(irACaja)
+    await clic(boton(/^Más acciones de la venta #301$/)!)
+    await clic(boton(/^Facturar$/)!)
+    expect(irACaja).toHaveBeenCalledWith('factura', 'v1')
+    act(() => root?.unmount()); root = null; host.remove(); document.body.innerHTML = ''
+    const antes = FILAS_VENTA
+    FILAS_VENTA = [V({ facturaErp: 'B 0003-00000123' })]
+    try {
+      await montarVentas()
+      await clic(boton(/^Más acciones de la venta #301$/)!)
+      expect(todo()).toContain('Imprimir ticket')
+      expect(boton(/^Facturar$/)).toBeUndefined()
+    } finally { FILAS_VENTA = antes }
   })
 
   it('Local (cobra, edita, cambia y anula): el «⋯» trae las cuatro', async () => {

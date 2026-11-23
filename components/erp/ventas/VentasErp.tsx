@@ -272,6 +272,9 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
           { key: 'ficha', label: 'Ver venta', icono: 'abrir', onClick: () => abrirFicha(f) },
           ...(cobra ? [{ key: 'cobro', label: 'Registrar cobro', icono: 'pesos' as const, onClick: () => abrirVentana('cobro', f, false), disabled: !(f.saldo > 0), hint: f.saldo > 0 ? undefined : 'No tiene saldo.' }] : []),
           ...(edita ? [{ key: 'editar', label: 'Editar', icono: 'lapiz' as const, onClick: () => abrirVentana('editar', f, false), disabled: f.anulada }] : []),
+          // Bruno 23-nov: «que esté en los 3 puntitos como opción facturar… si alguien me pide facturar una venta x». Lo mismo
+          // que el ⋯ de la ficha: el flujo de la Caja (A/B, la clienta en el momento) con esa venta elegida.
+          ...(rol('facturar-venta') && !f.facturada && !f.anulada && f.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura', f.id) }] : []),
           { key: 'imprimir', label: 'Imprimir ticket', icono: 'impresora', onClick: () => imprimir(f) },
           ...(rol('cambiar') ? [{ key: 'cambio', label: 'Cambiar producto', icono: 'cambios' as const, onClick: () => irACaja('cambio'), disabled: f.anulada }] : []),
           ...(f.link ? [{ key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir' as const, onClick: () => window.open(f.link!, '_blank', 'noopener') }] : []),
