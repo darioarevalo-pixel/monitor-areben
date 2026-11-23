@@ -10,7 +10,7 @@
  * Devuelven `{ ok: true, … }` o `{ ok: false, error }`. Sólo lanzan si la BASE falla.
  */
 import { randomUUID } from 'node:crypto'
-import { armarAnulacion, armarCambio, armarVenta, esCambioSuelto, movimientosDeAnulacion, mueveStock } from './armar.mjs'
+import { aLaListaDeLaCaja, armarAnulacion, armarCambio, armarVenta, esCambioSuelto, movimientosDeAnulacion, mueveStock } from './armar.mjs'
 import { costosDe } from './costo.mjs'
 import { armarDevolucion, autorizacion, leerDevolucion, pagosDePlata, vueltaDe } from './devolucion.core.mjs'
 import { frena } from '../cuenta/cuenta.core.mjs'
@@ -322,6 +322,18 @@ async function leerParaCambiar(db, ventaId) {
   return { venta: { ...venta, numero: Number(venta.numero) }, lineas: lineas.map(num), tieneCambio: c.hay }
 }
 
+/**
+ * Los renglones que guardó la Caja para una venta traída de GN (`origen = 'gn'`, la cruza `caja_venta.gn_sale_id`). null si la
+ * venta ⛔ es de esas, la base ⛔ tiene la tabla de la Caja o la Caja ⛔ la hizo. Ver `aLaListaDeLaCaja`.
+ */
+async function renglonesDeLaCaja(db, venta) {
+  if (venta?.origen !== 'gn' || venta.gn_sale_id == null) return null
+  const [t] = await q(db, `select to_regclass('caja_venta') is not null as hay`)
+  if (!t.hay) return null
+  const [c] = await q(db, `select renglones from caja_venta where gn_sale_id::text = $1 limit 1`, [String(venta.gn_sale_id)])
+  return c?.renglones ?? null
+}
+
 /** Lo ya devuelto de una venta de GN en cambios sueltos confirmados, por `producto:talle` (contra el DEVUELVE_DE_MAS). */
 async function devueltasDeGN(db, marca, saleId, prueba) {
   const filas = await q(db, `select l.product_id, l.size_id, -sum(l.cantidad)::int as n from venta v join venta_linea l on l.venta_id = v.id
@@ -344,7 +356,9 @@ export async function registrarCambio(db, e) {
     const ya = e && e.origen && e.origen_ref ? await yaRegistrada(db, e.origen, String(e.origen_ref).trim()) : null
     if (ya) return (await mismaVenta(db, ya, ya.marca, ya.total, nuevas - devueltas)) ? respuestaYaExistia(ya) : conflicto(e)
     const suelto = esCambioSuelto(e)
-    const original = suelto ? null : await leerParaCambiar(db, e?.venta_original_id)
+    const leida0 = suelto ? null : await leerParaCambiar(db, e?.venta_original_id)
+    // La historia de GN que hizo la Caja se devuelve a la LISTA que guardó la Caja (⛔ con el redondeo adentro).
+    const original = leida0 ? { ...leida0, lineas: aLaListaDeLaCaja(leida0.lineas, await renglonesDeLaCaja(db, leida0.venta)) } : null
     if (original && e.marca && e.marca !== original.venta.marca) return { ok: false, error: { codigo: 'OTRA_MARCA', mensaje: 'Todavía no se puede hacer un cambio entre marcas', campo: 'marca' } }
     const marca = original ? original.venta.marca : suelto && typeof e.marca === 'string' ? e.marca : null
     const conf = marca ? await leerConf(db, marca) : { marcas: {}, cuentas: [] }

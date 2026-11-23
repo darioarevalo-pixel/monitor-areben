@@ -53,6 +53,13 @@ export const CATALOGO_ID_DESDE = 1_000_000_000
 
 export const lineasDeBase = (base) => (base === 'zattia' ? ['zattia', 'stunned'] : base === 'bdi' ? ['bdi'] : [])
 
+/**
+ * ¿Todas las líneas de la base ya cortaron (`erp_corte`)? Entonces GN ⛔ cuenta para su stock: el sync diario deja de guardar la
+ * foto (BDI desde el 14-nov; Zattia+Stunned desde el 22-nov) y el libro ⛔ la pide (22-nov: libro:bdi falló cada noche por eso).
+ * @param {string} base @param {Record<string, string>} cortes línea → instante
+ */
+export const todasCortaron = (base, cortes) => lineasDeBase(base).length > 0 && lineasDeBase(base).every((l) => Boolean(cortes?.[l]))
+
 export function lineaDe(base, sku) {
   if (base === 'zattia') return sku && /^stu/i.test(String(sku)) ? 'stunned' : 'zattia'
   return 'bdi'

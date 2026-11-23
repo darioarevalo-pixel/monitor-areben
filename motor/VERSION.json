@@ -1,8 +1,8 @@
 {
   "motor": "areben-motor",
   "version": "0.1.0",
-  "commit": "50b042262ac85ebce7dd85ba5fe0e72cab3b0260",
-  "traido_en": "2026-11-22T18:24:49.444Z",
+  "commit": "3343051bfcf3f25bf1a028836095b67c5c7f49ce",
+  "traido_en": "2026-11-23T12:55:09.250Z",
   "archivos": {
     "alerta.mjs": "8c4ea3f813cdd8d8644e9ed0a426d7c6202618971249eca0b41f780e40d904f6",
     "arca/arca.core.js": "a1fb05f868fc29a9bbdfaa413f283e2644bbf8cc1a9275b0fc97933b9ead0d40",
@@ -29,7 +29,7 @@
     "cuentas/cuentas.mjs": "69988976cf28b0988a5d989e7edaab2f3c3c27c7c494939938ae459dae67f225",
     "cuentas/rutas.mjs": "cb4b905a7488b4b71c40c2dfe8102e3d29bb2100aa30ec92dcf210e78028e3b3",
     "db.mjs": "01c415367a1f3373a2d71ba9c4d7d61d5231a51867213cd702abea22b562d98c",
-    "depositos.mjs": "1faca36a025110ecf0fcad95a197787df02be035a46288b174426b19c1eee494",
+    "depositos.mjs": "d0a03fe52b267e5151af71894468962a1738082112a7d3fa58970e54c21799b0",
     "evento.mjs": "1bb1b71032afe54bcbf0fcb2865dab22b4ce42156de28fdb3bbafcad5f9f29d0",
     "ext/contrato.mjs": "321205bea0cc26b4b8cd964e5b2fd5e1a83db95d395d0a830128a1dd978a9ea0",
     "ext/tokens.mjs": "d2f44970dfa9097e560ce38385515e6976e9aad1a730cbaa1e481611bf44a2d2",
@@ -61,7 +61,7 @@
     "tn/venta.mjs": "a2b9ef46b74b34d88dd1e61a41816fe502ccb7dc295c551dbcecf5b55a136512",
     "tn/vinculo-db.mjs": "5a1a3deab44d7da433f5c3d809715fb6b434766d9e420b7ce446f38c6713d460",
     "tn/vinculo.mjs": "cde453304aff70dd1493ee5d47c77945cf9ccfbff73d408b45df359e44d65eef",
-    "venta/armar.mjs": "421fa892925900994cd9c62327539d3e3b5054b5f4ae90e3c6041da280022b26",
+    "venta/armar.mjs": "826b33bc2fea3653adf3d545e6107e492d89c20d709c0671107168914020038a",
     "venta/cliente.mjs": "d342d390dc9f194393b15b9f0dbef1c98771603462eb01ec66d78fcad34cf8dd",
     "venta/cobros.mjs": "420381f86a92784e67cd3b82aa1771edea1a597b67037da14e77ad0bdbb0800b",
     "venta/contraentrega.mjs": "896e2e4f7897d12c42690b5cce8ac7d34325b614a6423264e00830a6b8ab3c20",
@@ -77,7 +77,7 @@
     "venta/proveedor.mjs": "bdbfde6aa0749296f5ddc6723dfb3856ce9596ef75a75fac7b2715479dd6f061",
     "venta/redondeo-db.mjs": "56ef4b54d3159b5f62db3c6743c77c5fabe722a30a7c215f1bbb9b3302582c9e",
     "venta/redondeo.mjs": "5e06ed407a5aa5e5dc32f7bfdaff3d61d48b14f78a79bb0e8a8a448f68a22a13",
-    "venta/registrar.mjs": "6f5485cd1b768fe00828721f30f9baefd151e8945c129c97852659a21d6d28b5",
+    "venta/registrar.mjs": "1546aac6a2878e4093a61ad53502cf60946bfb7894c4a5c4c542d8e9812bf8cb",
     "venta/reglas-db.mjs": "b8d0bf468b3bd5f8bcb966367139025f7c17f0383201a2fc8e4519af9aa6ef50",
     "venta/reglas.mjs": "c356d1743ce274a52b77c11628e4510510e3661360fcb5f18efcca66f5540ad4"
   }
