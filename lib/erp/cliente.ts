@@ -267,6 +267,8 @@ export type FichaDeVenta = {
     cantidad: number; precio: number; descuento: number; rebaja: number; importe: number; devuelta: boolean; lineaOrigenId: string | null
     /** Unidades de esta línea que ya volvieron en cambios confirmados. */
     cambiado: number
+    /** Lo que vale en un cambio: la LISTA de la Caja si la venta es historia de GN con el redondeo adentro (Bruno 22-nov). */
+    importeCambio?: number
     /** El código de barras de la prenda (espejo `inventario`): lo que se escanea en el desarme. */
     codigo: string | null
     /** Corregida (motor sql/088): nació de una corrección / la cantidad vendida si después se sacó algo. */

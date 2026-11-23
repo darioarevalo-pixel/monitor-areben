@@ -113,6 +113,7 @@ import { armarConciliacion, TIENDAS as TIENDAS_CONCILIACION } from '../lib/erp/c
 import { entradaInvalida } from '../lib/erp/entrada.core.js'
 import { NO_SIN_PAGAR, STATUS_POR_COBRAR, armarPedidosSinPagar, cobradosEnGN } from '../lib/erp/pedidos-tn.core.js'
 import { ARMADO, DEVUELTA } from '../motor/venta/pago-tn.mjs'
+import { aLaListaDeLaCaja } from '../motor/venta/armar.mjs'
 import { esEntregadoSinCobrarTN } from '../motor/venta/pago-tn.mjs'
 import { armarPrecioDeProducto, leerCarga, leerSoltar, lineaDelProducto, sinCostos } from '../lib/erp/precio.core.js'
 import { configPg } from '../lib/pg.core.js'
@@ -812,7 +813,26 @@ export async function fichaDeVenta({ marca, id, deCaja = false }) {
   }
   // «GN la vendió sin crédito» (A, 20-oct): la mayorista en sombra que el ERP habría frenado. Aviso, ⛔ error.
   const sinCreditoGN = f.detalle?.cuenta_autoriza?.motivo === 'gn'
-  return { ...armarFicha(f, { nombres, cambios: cambios.data || [], original: original.data, cambiadas: cambiadasDe(devueltas.data), montos, devolucion }), sinCreditoGN }
+  const ficha = armarFicha(f, { nombres, cambios: cambios.data || [], original: original.data, cambiadas: cambiadasDe(devueltas.data), montos, devolucion })
+  return { ...ficha, lineas: conImporteDelCambio(ficha.lineas, await renglonesDeLaCaja(sb, f)), sinCreditoGN }
+}
+
+/**
+ * 🔑 El cambio devuelve a la LISTA (Bruno 22-nov): la historia de GN que hizo la Caja trae el redondeo para arriba sumado al
+ * renglón (`armarVentaGN`); el motor la devuelve a la lista que guardó la Caja (`aLaListaDeLaCaja`, `registrarCambio`). Estos
+ * son esos renglones, con la MISMA búsqueda que el motor (`caja_venta.gn_sale_id`). null si la venta ⛔ es de esas.
+ */
+async function renglonesDeLaCaja(sb, v) {
+  if (v?.origen !== 'gn' || v.gn_sale_id == null) return null
+  const { data, error } = await sb.from('caja_venta').select('renglones').eq('gn_sale_id', String(v.gn_sale_id)).limit(1)
+  if (error) throw new Error(`caja_venta: ${error.message}`)
+  return data?.[0]?.renglones ?? null
+}
+
+/** Cada línea de la ficha con `importeCambio`: lo que vale en un cambio (la ficha sigue mostrando lo que se cobró). */
+export function conImporteDelCambio(lineas, renglones) {
+  const aLista = aLaListaDeLaCaja(lineas.map((l) => ({ product_id: l.producto, size_id: l.talle, cantidad: l.cantidad, importe: l.importe })), renglones)
+  return lineas.map((l, i) => ({ ...l, importeCambio: aLista[i].importe }))
 }
 
 /**
@@ -991,7 +1011,7 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
     // El suelto es de la línea de sus productos, permitido si esa línea cortó, y REAL (`prueba: false`): ⛔ una llave.
     let marcaVenta, prueba, devueltas, diferencia, original_gn = null
     if (c.modo === 'erp') {
-      const [orig] = (await db.query('select prueba, marca from venta where id = $1', [c.ventaId])).rows
+      const [orig] = (await db.query('select prueba, marca, origen, gn_sale_id from venta where id = $1', [c.ventaId])).rows
       marcaVenta = orig ? orig.marca : marca
       prueba = orig ? orig.prueba === true : true
       // 🔴 Revisión 10-nov: la venta DE PRUEBA de una línea que ya cortó es la copia del paralelo de una venta de GN. Cambiarla
@@ -1000,9 +1020,11 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
         return { status: 409, error: 'Venta de prueba: buscala con su número de Gestión Nube.' }
       }
       devueltas = c.devueltas
-      // La diferencia con la MISMA cuenta que el motor (lo devuelto al precio que se pagó).
-      const lineas = (await db.query('select id, cantidad, importe from venta_linea where venta_id = $1', [c.ventaId])).rows
-        .map((l) => ({ id: l.id, cantidad: Number(l.cantidad), importe: Number(l.importe) }))
+      // La diferencia con la MISMA cuenta que el motor: lo devuelto al precio que se pagó, y la historia de GN que hizo la Caja a
+      // la lista que guardó la Caja (`aLaListaDeLaCaja`: sin esto la pantalla y el motor difieren en el redondeo ⇒ 409).
+      const leidas = (await db.query('select id, product_id, size_id, cantidad, importe from venta_linea where venta_id = $1', [c.ventaId])).rows
+        .map((l) => ({ id: l.id, product_id: l.product_id, size_id: l.size_id, cantidad: Number(l.cantidad), importe: Number(l.importe) }))
+      const lineas = aLaListaDeLaCaja(leidas, await renglonesDeLaCaja(sb, orig))
       diferencia = diferenciaDeCambio({ lineas, devueltas: c.devueltas.map((d) => ({ lineaId: d.linea_id, cantidad: d.cantidad })), nuevas: c.nuevas })
     } else {
       const cortes = await cortesDe(db)

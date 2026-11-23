@@ -11,7 +11,8 @@ import { REGLAS_INICIALES } from '../lib/caja/core.core.js'
 type Fila = Record<string, unknown>
 const tablas: Record<string, Fila[]> = {}
 let cortes: Array<{ linea: string; instante: string }> = []
-let ventaOriginal: { prueba: boolean; marca: string } | null = null
+let ventaOriginal: { prueba: boolean; marca: string; origen?: string; gn_sale_id?: string } | null = null
+let lineasOriginal: Fila[] = []
 const consultas: Array<{ sql: string; params: unknown[] }> = []
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -39,7 +40,8 @@ vi.mock('pg', () => ({
       async query(sql: string, params: unknown[] = []) {
         consultas.push({ sql, params })
         if (/from erp_corte/.test(sql)) return { rows: cortes }
-        if (/select prueba, marca from venta where id/.test(sql)) return { rows: ventaOriginal ? [ventaOriginal] : [] }
+        if (/select prueba, marca(, origen, gn_sale_id)? from venta where id/.test(sql)) return { rows: ventaOriginal ? [ventaOriginal] : [] }
+        if (/from venta_linea where venta_id/.test(sql)) return { rows: lineasOriginal }
         return { rows: [] }
       }
     },
@@ -208,6 +210,20 @@ describe('🔴 cambio contra una venta de Areben Gestión DE PRUEBA (revisión 1
     ventaOriginal = { prueba: true, marca: 'bdi' }
     await desdeErp('bdi')
     expect(registrado()).toEqual([{ marca: 'bdi', prueba: true }])
+  })
+
+  it('🔑 historia de GN de la Caja con el redondeo adentro: el servidor cuenta lo devuelto a la LISTA de la Caja, como el motor (sin esto, 409)', async () => {
+    cortes = [STUNNED, BDI]
+    ventaOriginal = { prueba: false, marca: 'bdi', origen: 'gn', gn_sale_id: '31773' }
+    lineasOriginal = [{ id: LINEA, product_id: 7, size_id: 10, cantidad: 1, importe: 15500 }]
+    tablas.caja_venta = [{ gn_sale_id: '31773', renglones: [{ product_id: 7, size_id: 10, cantidad: 1, importe: 14990 }] }]
+    // Se lleva una de 20.043 y manda un total equivocado a propósito: el 409 devuelve la cuenta del servidor. A la lista: 20.043 −
+    // 14.990 = 5.053 en efectivo ⇒ 4.300; con lo cobrado (15.500, salto agrandado para que el redondeo de la Caja ⛔ lo tape) ⇒ 3.900.
+    const r = await cambio('bdi', { ventaId: VENTA, devueltas: [{ lineaId: LINEA, cantidad: 1 }], items: [{ product_id: 8, size_id: 10, cantidad: 1, precio: 20043 }], pagos: [{ cuenta: 12921, monto: 5053 }], total: 999999 }) as { status?: number; total?: number }
+    expect(r.status).toBe(409)
+    expect(r.total).toBe(4300)
+    lineasOriginal = []
+    delete tablas.caja_venta
   })
 
   it('una venta REAL de Areben Gestión, con la línea cortada, se cambia real', async () => {

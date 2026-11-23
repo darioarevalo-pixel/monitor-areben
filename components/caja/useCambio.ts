@@ -57,11 +57,11 @@ export function ventaDeGn(g: VentaGnCambio): VentaOriginal & { total: number } {
   }
 }
 
-/** Una venta del ERP (su ficha): cada línea con su importe exacto y cuántas unidades ya se cambiaron. */
+/** Una venta del ERP (su ficha): cada línea con lo que vale en el cambio (`importeCambio`: la lista, ⛔ el redondeo) y cuántas unidades ya se cambiaron. */
 export function ventaDeFicha(f: FichaDeVenta): VentaOriginal & { total: number } {
   return {
     origen: { tipo: 'erp', ventaId: f.venta.id, numero: f.venta.numero, cliente: f.cliente?.nombre ?? null, prueba: f.venta.prueba, gnSaleId: f.venta.gnSaleId, marca: f.venta.marca },
-    vendidas: f.lineas.filter((l) => l.cantidad > 0 && !l.devuelta).map((l) => ({ clave: l.id, productId: Number(l.producto), sizeId: Number(l.talle), sku: l.sku, nombre: l.nombre ?? `Producto ${l.producto}`, talle: l.talleNombre ?? l.talle, cantidad: l.cantidad, precio: Math.round((l.importe / l.cantidad) * 100) / 100, cambiado: l.cambiado, lineaId: l.id, importe: l.importe })),
+    vendidas: f.lineas.filter((l) => l.cantidad > 0 && !l.devuelta).map((l) => { const importe = l.importeCambio ?? l.importe; return { clave: l.id, productId: Number(l.producto), sizeId: Number(l.talle), sku: l.sku, nombre: l.nombre ?? `Producto ${l.producto}`, talle: l.talleNombre ?? l.talle, cantidad: l.cantidad, precio: Math.round((importe / l.cantidad) * 100) / 100, cambiado: l.cambiado, lineaId: l.id, importe } }),
     total: f.venta.total,
   }
 }
