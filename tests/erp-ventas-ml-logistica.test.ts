@@ -71,6 +71,11 @@ describe('Ventas: el estado de Mercado Libre sale de Logística', () => {
     expect(r.filas[0].estadoKey).toBe('sin_estado_ml')
   })
 
+  it('🔴 las de PRUEBA ⛔ aparecen nunca: eran la copia de la venta real de GN (Bruno, 23-nov: «sin filtro»)', async () => {
+    const { r } = await lista([ventaMl(), ventaMl({ id: 'v-prueba', numero: 1622, origen: 'caja', prueba: true, detalle: {} })], [])
+    expect(r.filas.map((f) => f.id)).toEqual(['v-2038'])
+  })
+
   it('sin ventas de Mercado Libre ⛔ se consulta Logística', async () => {
     const { sb } = await lista([ventaMl({ origen: 'caja', detalle: {} })], [])
     expect(sb.consultas).not.toContain('logistica_pedido')

@@ -9,7 +9,7 @@
  * 🔑 Botones (diseño §4): íconos A LA IZQUIERDA ($ cobro · lápiz editar · impresora · ⋯). La impresora (Bruno, 29-oct) reemplaza a
  * la factura: reimprime el ticket IDÉNTICO al del POS (`lib/erp/ticket-erp.ts`); facturar sigue en Ventas › Facturación. Desde la FILA, $ y Editar abren
  * SÓLO su ventana (⛔ la ficha detrás). Un botón sólo si la acción VIVE en el ERP: lo de afuera dice «↗».
- * 🔑 Todo lo del motor hoy es «Prueba» (en paralelo con GN, que es el que sirve): se dice arriba, siempre.
+ * 🔑 Las ventas de PRUEBA ⛔ llegan a esta lista (las saca el servidor, Bruno 23-nov): eran la copia de cada venta real de GN.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'

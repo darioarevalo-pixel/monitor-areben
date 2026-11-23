@@ -189,7 +189,9 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
   const r = rangoDeDias(desde, hasta)
   const t0 = Date.now(), tiempos = {}
   const marcar = (k) => { tiempos[k] = Date.now() - t0 }
-  const deLinea = (q) => (linea ? q.eq('marca', linea) : q)
+  // 🔑 Las de PRUEBA ⛔ entran nunca, ni con filtro (Bruno, 23-nov: «que queden ocultos y sin filtro, no tiene sentido verlos
+  // dos veces»): cada venta del paralelo ya está como la real traída de GN (Zattia 2→21-nov: 672 de prueba junto a 722 `gn`).
+  const deLinea = (q) => (linea ? q.eq('marca', linea) : q).eq('prueba', false)
   const leer = (cols) => leerTodo(sb, 'venta_ficha', (q) => deLinea(q.select(cols).gte('ocurrida_en', r.desde).lt('ocurrida_en', r.hasta)).order('ocurrida_en', { ascending: false }).order('id'))
   // Con la 027 la vista trae lo editable y las notas vigentes; sin ella (otra base, antes de aplicarla) sigue con lo de antes.
   const ventas = await leer(`${COLUMNAS_LISTA}, ${COLUMNAS_027}`).catch(() => leer(COLUMNAS_LISTA))
