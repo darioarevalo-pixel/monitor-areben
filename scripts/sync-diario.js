@@ -11,7 +11,7 @@ import { crearClienteGN } from './lib/gn-fetch.mjs';
 import { revisarCostos, sinCostoSiNoSeVe } from './lib/costos-espejo.mjs';
 import { guardarFotoDelDia } from './lib/stock-foto.mjs';
 import { esDeLineas } from '../lib/erp/inventario-espejo.core.js';
-import { lineasCortadasDe } from './lib/lineas-cortadas.mjs';
+import { gnApagadoPara, lineasCortadasDe } from './lib/lineas-cortadas.mjs';
 
 /**
  * Lo que salió mal SIN frenar el sync (una purga, el refresco de vistas, el
@@ -49,8 +49,21 @@ loadEnv();
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
 const GN_TOKEN    = process.env.GN_TOKEN;
-if (!SUPABASE_URL || !SUPABASE_KEY || !GN_TOKEN) {
-  console.error('Faltan variables de entorno: SUPABASE_URL, SUPABASE_KEY, GN_TOKEN');
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.error('Faltan variables de entorno: SUPABASE_URL, SUPABASE_KEY');
+  process.exit(1);
+}
+
+// 🔑 Pasado el corte de BDI (+ un día de gracia: `gnSeSaltea`, lib/erp/corte.core.js) GN ⛔ tiene nada de esta base (medido
+// 22-nov: 0 ventas cargadas en GN desde el corte): el catálogo, el stock y las ventas los copian del motor los pasos siguientes
+// del workflow. Se saltea SÓLO lo de GN; las vistas se refrescan igual. Es lo mismo que ya hacía `sync-diario-zattia.js`: hasta el
+// 23-nov este sync bajaba GN todos los días y reescribía `productos` de BDI (Bruno 23-nov: «hay que desconectar todo de gn»).
+// Va ANTES de pedir el token: la baja puede sacarlo. 🔴 Sin poder leer los cortes, rojo (⛔ adivina).
+let gnApagado;
+try { gnApagado = await gnApagadoPara('bdi'); }
+catch (e) { console.error(`ERROR: no se pudo leer erp_corte: ${e.message}`); process.exit(1); }
+if (!gnApagado && !GN_TOKEN) {
+  console.error('Falta GN_TOKEN (BDI todavía lee GN: ver erp_corte).');
   process.exit(1);
 }
 
@@ -61,7 +74,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Cliente de GN compartido (scripts/lib/gn-fetch.mjs): esta era la copia BUENA —la única con
 // reintento de errores de red— y es la que quedó como implementación única para las diez.
-const { fetchAllPages, fetchAllPagesStreaming } = crearClienteGN({ token: GN_TOKEN, pausaPagina: 400 });
+// Con GN apagado ⛔ se arma (sin token, `crearClienteGN` tira): `main` va a `soloVistas` y nadie lo llama.
+const { fetchAllPages, fetchAllPagesStreaming } = gnApagado
+  ? { fetchAllPages: null, fetchAllPagesStreaming: null }
+  : crearClienteGN({ token: GN_TOKEN, pausaPagina: 400 });
 
 // ── Sync functions ────────────────────────────────────────────────────────────
 
@@ -321,7 +337,20 @@ async function syncVentas(fromDate) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+async function soloVistas() {
+  console.log('=== Sincronización diaria — BDI ===');
+  console.log('BDI ya vive entera en Areben Gestión: GN ⛔ se lee (catálogo, stock y ventas: los pasos siguientes, del motor).');
+  console.log('\n[vistas] Refrescando vistas materializadas...');
+  const vistas = await refrescarVistas(supabase);
+  console.log(`Vistas: ${vistas.ok.length}/${vistas.ok.length + vistas.fallaron.length} al día`);
+  if (vistas.fallaron.length) {
+    for (const f of vistas.fallaron) console.error(`  - vista ${f.vista}: ${f.error}`);
+    process.exit(1);
+  }
+}
+
 async function main() {
+  if (gnApagado) return soloVistas();
   const now = new Date().toISOString();
   const today = now.substring(0, 10);
 
