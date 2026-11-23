@@ -70,9 +70,11 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   useEffect(() => {
     if (esPedido) return
     let vivo = true
-    Promise.all([leerFichaDeVenta(marca, fila.id), leerExtraDeVenta(marca, fila.id)])
-      .then(([f, x]) => { if (vivo) { setFicha(f); setExtra(x); setError(null) } })
-      .catch((e) => vivo && setError(e instanceof Error ? e.message : 'No se pudo leer la venta.'))
+    // ⚡ 23-nov (Bruno: «la ficha abre muy lento… 5 s»): la ficha se muestra apenas llega la venta; el historial, GN y las
+    // cuentas (`venta-extra`) se completan cuando llegan. Antes esperaba a las DOS: en BDI ~0,9 s la venta y ~2,1 s lo otro.
+    const fallo = (e: unknown) => { if (vivo) setError(e instanceof Error ? e.message : 'No se pudo leer la venta.') }
+    leerFichaDeVenta(marca, fila.id).then((f) => { if (vivo) { setFicha(f); setError(null) } }).catch(fallo)
+    leerExtraDeVenta(marca, fila.id).then((x) => { if (vivo) setExtra(x) }).catch(fallo)
     return () => { vivo = false }
   }, [marca, fila.id, esPedido, version])
 
@@ -161,9 +163,10 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const menu: AccionMenu[] = esPedido ? [] : [
     ...(puedeErp('facturar-venta') && ficha?.facturada && v?.estado === 'anulada' && !ficha.acreditadaEntera ? [{ key: 'nc', label: 'Hacer nota de crédito', icono: 'factura' as const, tone: 'danger' as const, onClick: () => void hacerNC() }] : []),
     ...(puedeErp('facturar-venta') && !fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura', fila.id) }] : []),
-    ...(puede.corregir && puedeErp('corregir-precio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, onClick: abrirCorregir }] : []),
+    // Corregir precio y forma de pago usan lo de `venta-extra` (correcciones, cuentas reales): esperan a que llegue.
+    ...(puede.corregir && puedeErp('corregir-precio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, disabled: !extra || !ficha, onClick: abrirCorregir }] : []),
     ...(puede.corregirProductos && puedeErp('corregir-precio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' && !['tn', 'ml', 'mayorista'].includes(fila.origen) ? [{ key: 'productos', label: 'Corregir productos…', icono: 'lapiz' as const, onClick: () => setCorrigiendoProductos(true) }] : []),
-    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir forma de pago…', icono: 'pesos' as const, onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
+    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir forma de pago…', icono: 'pesos' as const, disabled: !extra, onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
     ...(puedeErp('anular') ? [{ key: 'anular', label: 'Anular…', icono: 'anular' as const, tone: 'danger' as const, disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) }] : []),
   ]
   // 📱 En el celular los botones de arriba bajan al pie: la principal es cobrar; lo demás, al «⋯».

@@ -22,7 +22,7 @@ import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
 import { BotonActualizar, BuscadorLista, ChipEstado, FiltroOpciones, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { usePantallaAngosta } from '@/lib/movil'
-import { leerListaDeVentas, type FilaVentaLista, type MarcaErp, type QueSabeElMotor } from '@/lib/erp/cliente'
+import { leerListaDeVentas, ultimaListaDeVentas, type FilaVentaLista, type MarcaErp, type QueSabeElMotor } from '@/lib/erp/cliente'
 import {
   COBRO, COLUMNAS, ESTADO, PERIODOS, VISTAS, accionesDeFila, alternarColumna, contarVistas, filtrar, moverColumna,
   PEDIDO_VIEJO_DIAS, mismoTramoDelMesPasado, normalizarPrefs, ordenar, plata, rangoDePeriodo, resumen, variacion, vendidoPorDia,
@@ -93,7 +93,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
   const [periodos] = useState(() => conMesesAnteriores(PERIODOS, diaArgentino(Date.now())))
   const abrirRef = useRef({ abrir, alAbrir })
   useEffect(() => { abrirRef.current = { abrir, alAbrir } })
-  const [datos, setDatos] = useState<{ filas: FilaVentaLista[]; puede: QueSabeElMotor; tnLeidaEn: string | null; clave: string } | null>(null)
+  const [leidos, setDatos] = useState<{ filas: FilaVentaLista[]; puede: QueSabeElMotor; tnLeidaEn: string | null; clave: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const [vista, setVista] = useState('todas')
@@ -159,6 +159,14 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
     leerListaDeVentas(marca, r.desde, r.hasta, linea).then((d) => { if (vivo) setMesPasado({ filas: d.filas, clave: claveAntes }) }).catch(() => {})
     return () => { vivo = false }
   }, [esAdmin, periodo, marca, linea, hoy, claveAntes, mesPasado?.clave])
+  // ⚡ Mientras se lee, la última lista de este período (en memoria) se muestra YA, con ↻ girando (Bruno 23-nov: «que se vea
+  // lo más rápido posible»). Sin una en memoria queda la de antes, como siempre.
+  const datos = useMemo(() => {
+    if (leidos?.clave === clave) return leidos
+    const r = rangoDePeriodo(periodo, hoy)
+    const previa = ultimaListaDeVentas(marca, r.desde, r.hasta, linea)
+    return previa ? { filas: previa.filas, puede: previa.puede, tnLeidaEn: previa.tnLeidaEn ?? null, clave: `previa|${clave}` } : leidos
+  }, [leidos, clave, periodo, marca, linea, hoy])
   const cargando = datos?.clave !== clave
 
   const puede = datos?.puede ?? { editar: false, notas: false, cobrar: false }

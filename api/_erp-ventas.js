@@ -521,11 +521,15 @@ export async function extraDeVenta({ marca, id }, deps = {}) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   if (!/^[0-9a-f-]{36}$/i.test(String(id || ''))) return { status: 400, error: 'Venta inválida' }
   const sb = deps.sb || (() => { const { url, key } = cfgDeMarca(marca); return createClient(url, key) })()
+  // ⚡ 23-nov: el historial del motor sólo necesita el id ⇒ arranca YA, a la par de todo lo demás (iba ÚLTIMO, en fila).
+  // La base de BDI está en us-west-2 y la función en iad1: cada viaje en fila cuesta. Medido: ficha BDI 2,1 s vs Zattia 0,6 s.
+  const motor = delMotorParaLaFicha(marca, id, deps)
+  motor.catch(() => {}) // si la venta ⛔ existe se sale antes de esperarlo: que un rechazo ⛔ quede sin atender
   let { data: v, error } = await sb.from('venta_ficha').select(`${COLUMNAS_LISTA}, ${COLUMNAS_027}`).eq('id', id).maybeSingle()
   if (error) ({ data: v, error } = await sb.from('venta_ficha').select(COLUMNAS_LISTA).eq('id', id).maybeSingle())
   if (error) throw new Error(`venta_ficha: ${error.message}`)
   if (!v) return { status: 404, error: 'La venta no existe.' }
-  const [a, cuentas, destinos] = await Promise.all([deAfuera(sb, [v]), cuentasDeCobro(sb, v.marca), destinosDeCobro(marca, v.marca, v.canal, deps)])
+  const [a, cuentas, destinos, delMotor] = await Promise.all([deAfuera(sb, [v]), cuentasDeCobro(sb, v.marca), destinosDeCobro(marca, v.marca, v.canal, deps), motor])
   const g = a.deVenta(v)
   const o = a.orden(v)
   const fg = a.facGn(g)
@@ -539,7 +543,7 @@ export async function extraDeVenta({ marca, id }, deps = {}) {
     // 🔑 La ENTREGA QUE COBRA (motor sql/039): si Logística cobró al entregar, la venta lo lleva en `detalle.entrega` (quién, cuándo, con qué; la transferencia queda «por verificar»).
     cobroEnEntrega: v.detalle?.entrega ? { entrego: v.detalle.entrega.entrego ?? null, fecha: v.detalle.entrega.fecha ?? null, formaPago: v.detalle.entrega.forma_pago ?? null, porVerificar: v.detalle.entrega.por_verificar === true } : null,
     tn: o ? { numero: o.numero, estado: o.estado, envioTipo: o.envio_tipo, creadaEn: o.creada_en, actualizadaEn: o.actualizada_en, link: ADMIN[o.tienda] ? `${ADMIN[o.tienda]}/orders/${o.tn_id}` : null } : null,
-    facturas, cuentas, ...destinos, ...(await delMotorParaLaFicha(marca, id, deps)),
+    facturas, cuentas, ...destinos, ...delMotor,
   }
 }
 

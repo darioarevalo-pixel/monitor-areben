@@ -34,6 +34,7 @@ const leerCuentasCorrientes = vi.fn(async () => ({ hoy: '2026-10-19', prueba: tr
 vi.mock('@/lib/erp/cliente', () => ({
   leerPermisos: async () => ({ permisos: { bdi: permisos, zattia: permisos } }),
   leerListaDeVentas: async () => ({ filas: FILAS_VENTA, desde: '2026-10-01', hasta: '2026-10-18', puede: { editar: true, notas: true, cobrar: true, corregir: true, corregirMedio: true } }),
+  ultimaListaDeVentas: () => null,
   leerFichaDeVenta: async () => ficha,
   leerExtraDeVenta: async () => ({ clienteGn: null, gnNumero: null, gnEstado: null, clienteId: null, vendedor: null, entrega: null, facturar: null, tn: null, facturas: [], cuentas: [], ediciones: [], notas: [], nota: null, motor: null }),
   anularVenta: vi.fn(), notaDeCreditoDeVenta: vi.fn(), editarVentaErp: vi.fn(), guardarNotaDeVenta: vi.fn(), cobrarVentaErp: vi.fn(),
