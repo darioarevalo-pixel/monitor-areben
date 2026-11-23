@@ -225,11 +225,23 @@ describe('pestaña Caja', () => {
     document.body.appendChild(caja)
     raiz = createRoot(caja)
     t = await montar(<Caja />)
-    expect(document.querySelector('a[href="/pos?marca=zattia"]')).toBeNull()
+    // La otra cuenta entra a MIRAR (Bruno 23-nov), ⛔ «Abrir POS».
+    expect(document.querySelector('a[href="/pos?marca=zattia"]')?.textContent).toBe('Entrar a mirar')
+    expect(t).not.toContain('Abrir POS')
     expect(t).toContain('POS sólo para esa cuenta')
     // Cerrar la caja, sí: «desde los dos lados». Contar billetes, ⛔ (el servidor da 403).
     expect(t).toContain('Cerrar caja')
     expect(t).not.toContain('Contar billetes')
+  })
+})
+
+describe('pestaña Caja · entrar sin abrir caja (Bruno 23-nov)', () => {
+  it('🔑 sin caja abierta: «Abrir caja» y, al lado, «Entrar sin abrir caja» al POS (que ahí se ve «Sólo para mirar»)', async () => {
+    turno = null
+    const t = await montar(<Caja />)
+    expect(t).toContain('Abrir caja')
+    expect(document.querySelector('a[href="/pos?marca=zattia"]')?.textContent).toBe('Entrar sin abrir caja')
+    expect(t).not.toContain('Abrir POS')
   })
 })
 
