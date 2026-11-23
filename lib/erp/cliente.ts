@@ -558,9 +558,18 @@ export type FilaVentaLista = {
   paraDesarmar?: boolean
 }
 export type QueSabeElMotor = { editar: boolean; notas: boolean; cobrar: boolean; corregir?: boolean; corregirProductos?: boolean; corregirMedio?: boolean }
+type ListaDeVentas = { filas: FilaVentaLista[]; desde: string; hasta: string; puede: QueSabeElMotor; tnLeidaEn?: string | null }
+const consultaDeLista = (marca: MarcaErp, desde: string, hasta: string, linea: '' | 'zattia' | 'stunned') =>
+  `&vista=ventas-lista&marca=${marca}&desde=${desde}&hasta=${hasta}${linea ? `&linea=${linea}` : ''}`
+/** ⚡ 23-nov (Bruno: «que se vea lo más rápido posible»): la última lista leída de cada período, SÓLO en memoria (se va al
+ *  recargar): al volver a ERP › Ventas se muestra al instante mientras se lee la nueva. ⛔ reemplaza la lectura. */
+const ultimaLista = new Map<string, ListaDeVentas>()
+export const ultimaListaDeVentas = (marca: MarcaErp, desde: string, hasta: string, linea: '' | 'zattia' | 'stunned' = '') =>
+  ultimaLista.get(consultaDeLista(marca, desde, hasta, linea)) ?? null
 export const leerListaDeVentas = (marca: MarcaErp, desde: string, hasta: string, linea: '' | 'zattia' | 'stunned' = '', { reusar = false } = {}) => {
-  const consulta = `&vista=ventas-lista&marca=${marca}&desde=${desde}&hasta=${hasta}${linea ? `&linea=${linea}` : ''}`
-  return compartida(consulta, reusar, () => pedir<{ filas: FilaVentaLista[]; desde: string; hasta: string; puede: QueSabeElMotor; tnLeidaEn?: string | null }>(null, `${consulta}&nc=${Date.now()}`, 'No se pudieron leer las ventas.'))
+  const consulta = consultaDeLista(marca, desde, hasta, linea)
+  return compartida(consulta, reusar, () => pedir<ListaDeVentas>(null, `${consulta}&nc=${Date.now()}`, 'No se pudieron leer las ventas.')
+    .then((d) => { ultimaLista.set(consulta, d); return d }))
 }
 
 export type ExtraDeVenta = {
