@@ -19,6 +19,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",
     "@vercel/blob": "^2.6.1",
+    "@vercel/functions": "3.11.3",
     "jsbarcode": "^3.12.3",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
