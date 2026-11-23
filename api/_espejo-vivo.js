@@ -1,13 +1,17 @@
-// El espejo EN VIVO: cada 10 minutos copia del ERP al espejo el catálogo (`productos`), el stock (`inventario`) y las ventas
-// (`ventas` / `venta_detalles`) de las líneas que ya cortaron. Bruno, 23-nov: «en vivo seria ideal». Qué se escribe y por
-// qué sólo lo que cambió: `lib/erp/espejo-vivo.core.js`. Las copias son las MISMAS de la noche (`scripts/lib/erp-espejo-copias.mjs`,
-// `scripts/lib/erp-ventas-copia.mjs`); la de la noche sigue entera y arregla lo que esta se pierda.
+// El espejo EN VIVO: copia del ERP al espejo el catálogo (`productos`), el stock (`inventario`) y las ventas
+// (`ventas` / `venta_detalles`) de las líneas que ya cortaron, CUANDO EL LIBRO SE MUEVE. Bruno, 23-nov: «en vivo seria ideal» y
+// «¿no podemos aprovechar algún movimiento y sumarnos en esa, en vez de crear uno solo?» ⇒ ⛔ hay reloj propio: lo pide el
+// MOTOR desde su vuelta de cada minuto, cuando ve movimientos nuevos en el libro de una base (motor `lib/espejo-monitor.mjs`).
+// Qué se escribe y por qué sólo lo que cambió: `lib/erp/espejo-vivo.core.js`. Las copias son las MISMAS de la noche
+// (`scripts/lib/erp-espejo-copias.mjs`, `scripts/lib/erp-ventas-copia.mjs`); la de la noche sigue entera.
 //
-//   GET ?recurso=espejo-vivo&tarea=copiar   → { ok, bases: { bdi, zattia } }   (el cron de vercel.json, cada 10 min)
+//   POST ?recurso=espejo-vivo&tarea=copiar&base=bdi|zattia   (`x-erp-llave: ERP_LLAVE_MONITOR`, la llave que ya comparten)
+//   GET  ?recurso=espejo-vivo&tarea=copiar[&base=…]          (`Authorization: Bearer CRON_SECRET`, a mano)
+//   → { ok, bases: { <base>: … } }
 //
-// ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js`. Sin sesión: lo llama el cron de Vercel y se defiende con
-// `CRON_SECRET`, igual que el vigía. ⛔ Por GitHub Actions: sus crons llegan con horas de atraso.
-// 🔴 Una base que falla o frena contesta 500 (queda en los logs de Vercel); la otra se copia igual.
+// ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js`. Sin sesión.
+// 🔴 Una base que falla o frena contesta 500: el motor lo reintenta y, si sigue, abre su alerta.
+import { timingSafeEqual } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { configPg } from '../lib/pg.core.js'
 import { cortesDeFilas, lineasEnErp, SQL_CORTES } from '../lib/erp/corte.core.js'
@@ -47,21 +51,32 @@ export async function copiarBase(base, { env = process.env, ahora = new Date() }
   }
 }
 
-export default async function handler(req, res, { copiar = copiarBase } = {}) {
-  if (req.method !== 'GET' || String((req.query || {}).tarea || '') !== 'copiar') {
-    return res.status(400).json({ error: 'Sólo GET con tarea=copiar (lo llama el cron).' })
-  }
-  const esperado = process.env.CRON_SECRET || ''
-  if (!esperado) return res.status(503).json({ error: 'La copia no está configurada (CRON_SECRET).' })
-  if (String(req.headers.authorization || '') !== `Bearer ${esperado}`) return res.status(401).json({ error: 'no autorizado' })
+const igual = (a, b) => {
+  const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || ''))
+  return x.length > 0 && x.length === y.length && timingSafeEqual(x, y)
+}
 
-  const nombres = Object.keys(BASES)
+export default async function handler(req, res, { copiar = copiarBase } = {}) {
+  const q = req.query || {}
+  if (!['GET', 'POST'].includes(req.method) || String(q.tarea || '') !== 'copiar') {
+    return res.status(400).json({ error: 'Sólo tarea=copiar (lo pide Areben Gestión).' })
+  }
+  const llave = process.env.ERP_LLAVE_MONITOR || ''
+  const cron = process.env.CRON_SECRET || ''
+  if (!llave && !cron) return res.status(503).json({ error: 'La copia no está configurada (ERP_LLAVE_MONITOR).' })
+  const h = req.headers || {}
+  const ok = (llave && igual(h['x-erp-llave'], llave)) || (cron && igual(h.authorization, `Bearer ${cron}`))
+  if (!ok) return res.status(401).json({ error: 'no autorizado' })
+  const pedida = q.base ? String(q.base) : ''
+  if (pedida && !BASES[pedida]) return res.status(400).json({ error: `base desconocida: ${pedida}` })
+
+  const nombres = pedida ? [pedida] : Object.keys(BASES)
   const hechas = await Promise.allSettled(nombres.map((b) => copiar(b)))
   const bases = {}
   let mal = false
-  hechas.forEach((h, i) => {
-    if (h.status === 'fulfilled') { bases[nombres[i]] = h.value; if (h.value.freno) mal = true }
-    else { bases[nombres[i]] = { error: String((h.reason && h.reason.message) || h.reason) }; mal = true }
+  hechas.forEach((r, i) => {
+    if (r.status === 'fulfilled') { bases[nombres[i]] = r.value; if (r.value.freno) mal = true }
+    else { bases[nombres[i]] = { error: String((r.reason && r.reason.message) || r.reason) }; mal = true }
   })
   if (mal) console.error('[espejo-vivo]', JSON.stringify(bases))
   return res.status(mal ? 500 : 200).json({ ok: !mal, bases })

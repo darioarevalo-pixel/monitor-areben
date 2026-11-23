@@ -61,41 +61,49 @@ describe('ventasRecientes', () => {
   })
 })
 
-describe('handler (lo llama el cron de Vercel)', () => {
+describe('handler (lo pide el motor cuando el libro se mueve)', () => {
   afterEach(() => vi.unstubAllEnvs())
   const res = () => {
-    const r = { code: 0, body: null as null | { bases: Record<string, { lineas?: string[], error?: string }> }, status(c: number) { r.code = c; return r }, json(b: unknown) { r.body = b; return r } }
+    const r = { code: 0, body: null as null | { bases: Record<string, { lineas?: string[], error?: string }> }, status(c: number) { r.code = c; return r }, json(b: unknown) { r.body = b as typeof r.body; return r } }
     return r
   }
-  const req = (auth?: string, tarea = 'copiar') => ({ method: 'GET', query: { recurso: 'espejo-vivo', tarea }, headers: auth ? { authorization: auth } : {} })
+  const req = (headers: Record<string, string>, query: Record<string, string> = {}, method = 'POST') =>
+    ({ method, query: { recurso: 'espejo-vivo', tarea: 'copiar', ...query }, headers })
 
-  it('🔴 sin CRON_SECRET está CERRADO (503); otro secreto 401; otra tarea 400', async () => {
+  it('🔴 sin llaves está CERRADO (503); otra llave 401; otra tarea o base 400 — y ⛔ copia', async () => {
     const copiar = vi.fn()
-    vi.stubEnv('CRON_SECRET', '')
-    const r = res(); await handler(req('Bearer x'), r, { copiar }); expect(r.code).toBe(503)
-    vi.stubEnv('CRON_SECRET', 'el-bueno')
-    const r2 = res(); await handler(req('Bearer otro'), r2, { copiar }); expect(r2.code).toBe(401)
-    const r3 = res(); await handler(req('Bearer el-bueno', 'otra'), r3, { copiar }); expect(r3.code).toBe(400)
+    vi.stubEnv('ERP_LLAVE_MONITOR', ''); vi.stubEnv('CRON_SECRET', '')
+    const r = res(); await handler(req({ 'x-erp-llave': 'x' }), r, { copiar }); expect(r.code).toBe(503)
+    vi.stubEnv('ERP_LLAVE_MONITOR', 'la-llave')
+    const r2 = res(); await handler(req({ 'x-erp-llave': 'otra' }), r2, { copiar }); expect(r2.code).toBe(401)
+    const r3 = res(); await handler(req({ 'x-erp-llave': 'la-llave' }, { tarea: 'otra' }), r3, { copiar }); expect(r3.code).toBe(400)
+    const r4 = res(); await handler(req({ 'x-erp-llave': 'la-llave' }, { base: 'stunned' }), r4, { copiar }); expect(r4.code).toBe(400)
     expect(copiar).not.toHaveBeenCalled()
   })
 
-  it('🔴 una base que falla da 500 y la otra se copia igual', async () => {
-    vi.stubEnv('CRON_SECRET', 'el-bueno')
+  it('con la llave del motor y `base`, copia SÓLO esa base', async () => {
+    vi.stubEnv('ERP_LLAVE_MONITOR', 'la-llave')
+    const copiar = vi.fn(async () => ({ lineas: ['zattia', 'stunned'], freno: null }))
+    const r = res(); await handler(req({ 'x-erp-llave': 'la-llave' }, { base: 'zattia' }), r, { copiar })
+    expect(r.code).toBe(200)
+    expect(copiar.mock.calls).toEqual([['zattia']])
+  })
+
+  it('🔴 a mano (GET con CRON_SECRET) copia las dos; una que falla da 500 y la otra se copia igual', async () => {
+    vi.stubEnv('ERP_LLAVE_MONITOR', 'la-llave'); vi.stubEnv('CRON_SECRET', 'el-bueno')
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const copiar = vi.fn(async (b: string) => { if (b === 'zattia') throw new Error('motor caído'); return { lineas: ['bdi'], freno: null } })
-    const r = res(); await handler(req('Bearer el-bueno'), r, { copiar })
+    const r = res(); await handler(req({ authorization: 'Bearer el-bueno' }, {}, 'GET'), r, { copiar })
     expect(copiar).toHaveBeenCalledTimes(2)
     expect(r.code).toBe(500)
     expect(r.body!.bases.bdi.lineas).toEqual(['bdi'])
     expect(r.body!.bases.zattia.error).toMatch(/motor caído/)
   })
 
-  it('un freno (p. ej. la limpieza del stock) también da 500; todo bien, 200', async () => {
-    vi.stubEnv('CRON_SECRET', 'el-bueno')
+  it('un freno (p. ej. la limpieza del stock) también da 500', async () => {
+    vi.stubEnv('ERP_LLAVE_MONITOR', 'la-llave')
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const r = res(); await handler(req('Bearer el-bueno'), r, { copiar: async () => ({ freno: 'sacaría 900 de 1000' }) })
+    const r = res(); await handler(req({ 'x-erp-llave': 'la-llave' }, { base: 'bdi' }), r, { copiar: async () => ({ freno: 'sacaría 900 de 1000' }) })
     expect(r.code).toBe(500)
-    const r2 = res(); await handler(req('Bearer el-bueno'), r2, { copiar: async () => ({ lineas: [], nada: true }) })
-    expect(r2.code).toBe(200)
   })
 })

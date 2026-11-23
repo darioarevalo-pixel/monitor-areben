@@ -253,7 +253,7 @@ const RECURSOS = {
   'repo-armado': repoArmado,
   // El vigía de erp.arebensrl.com, sin sesión: lo llama el cron de vercel.json con CRON_SECRET.
   'vigia-erp': vigiaErp,
-  // El espejo en vivo: la copia del ERP cada 10 minutos (cron de vercel.json, con CRON_SECRET). Ver api/_espejo-vivo.js.
+  // El espejo en vivo: la copia del ERP cuando el libro se mueve (la pide el motor, con ERP_LLAVE_MONITOR). Ver api/_espejo-vivo.js.
   'espejo-vivo': espejoVivo,
   // Quién soy según el Monitor: la recarga de la página cuando bdi-catalogo no contesta.
   sesion,
