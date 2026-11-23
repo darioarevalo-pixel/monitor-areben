@@ -76,10 +76,12 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
 
 ## 🔴 Desde el corte de la línea, Reclamos ⛔ escribe en GN (23-nov-2026)
 
-Bruno: «hay que desconectar todo de gn». Hasta acá, «Descontar regaladas» (`proposito:'reclamo'`) y «Procesar cambio»
+🟡 **EN PAUSA: Reclamos y Post-venta ⛔ se usan (Bruno 23-nov).** Se dejó ordenado para cuando vuelvan.
+
+Bruno: «hay que desconectar todo de gn». Hasta acá, «Descontar lo que se queda» (`descontarRegaladas`, `proposito:'reclamo'`) y «Procesar cambio»
 (`accion:'cambio_real'`) creaban la venta en GN **aunque la línea ya estuviera en Areben Gestión** ⇒ la prenda bajaba en GN y
 ⛔ en el libro. Ahora, en `api/crear-venta.js`, por el corte de la línea del PRODUCTO (BDI, Zattia y Stunned):
-- **Regaladas** ⇒ ajuste `regalo` APLICADO en el ERP (`reclamoAlErp`, `reclamoErpDe`), ref `reclamo-<id>-regaladas:<depósito>`;
+- **«Descontar lo que se queda»** (en el código, «regaladas») ⇒ ajuste `regalo` APLICADO en el ERP (`reclamoAlErp`, `reclamoErpDe`), ref `reclamo-<id>-regaladas:<depósito>`;
   la «venta» que vuelve es `Areben Gestión A-n`. Igual que la falla y el canje.
 - **Cambio** ⇒ FRENA con 409 y manda a hacerlo en la Caja (⇄ Cambios): la venta del cambio cobra plata y todavía ⛔ tiene camino
   al ERP desde acá (`cambioErpDe`). ▶️ Pendiente: decidir con Bruno cómo entra al ERP (`registrarCambio` del motor).
