@@ -131,6 +131,26 @@ describe('POS (/pos)', () => {
     sinAccionesDeCaja()
   })
 
+  it('🔴 sólo mirar ⛔ factura (guardar la clienta y la venta a su nombre escribe en la base real); la dueña sí', async () => {
+    const { leerVentasTurno } = await import('@/lib/caja/cliente')
+    const enErp = { ventas: [{ id: 'a0000000-0000-4000-8000-000000000009', estado: 'en_erp', destino: 'erp', erp_numero: 31, total: 10000, subtotal: 10000, pagos: [{ cuenta: 12921, monto: 10000 }], renglones: [], creada_en: new Date().toISOString(), gn_number: null, usuario: 'Sofi', email: null, paga_con: null }] }
+    const facturarEnVentas = async () => {
+      vi.mocked(leerVentasTurno).mockResolvedValueOnce(enErp as never)
+      await act(async () => [...document.querySelectorAll('button.pos-tbtn')].find((b) => b.textContent?.trim() === 'Ventas')!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+      await hastaQue(() => (document.body.textContent || '').includes('#31'))
+      return [...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Facturar')
+    }
+    await montar(<CajaPOS />)
+    expect(await facturarEnVentas()).toBe(true)
+    act(() => raiz.unmount())
+    document.body.innerHTML = ''
+    const caja = document.createElement('div'); document.body.appendChild(caja); raiz = createRoot(caja)
+    sesion.perfil = { ...sesion.perfil, name: 'Ana', email: 'ana@zattia.com' }
+    const t = await montar(<CajaPOS />)
+    expect(t).toContain('Sólo para mirar')
+    expect(await facturarEnVentas()).toBe(false)
+  })
+
   it('la dueña de la caja ⛔ ve el cartel y tiene sus acciones', async () => {
     const t = await montar(<CajaPOS />)
     expect(t).not.toContain('Sólo para mirar')

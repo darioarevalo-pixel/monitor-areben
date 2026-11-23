@@ -988,7 +988,8 @@ function POS() {
   const [verVentas, setVerVentas] = useState(false)
   // «Facturar» (Bruno, 22-nov): la venta de la Caja que se factura, con la misma factura a pedido de Areben Gestión.
   const [facturando, setFacturando] = useState<Venta | null>(null)
-  const puedeFacturar = usePuedeErp(storeCaja() as MarcaErp)('facturar-venta')
+  // «Sólo para mirar» (pos-mirar) ⛔ factura: guardar la clienta y la venta a su nombre ESCRIBE en la base real.
+  const puedeFacturar = usePuedeErp(storeCaja() as MarcaErp)('facturar-venta') && !soloMirar
 
   // Sin el shell, las promos de la Agenda (la del crédito de hoy) las pide el POS.
   const cargarAgenda = useAgenda((st) => st.cargar)
