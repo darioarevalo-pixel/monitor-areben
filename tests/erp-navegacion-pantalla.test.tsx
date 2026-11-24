@@ -131,12 +131,12 @@ describe('Areben Gestión › el armazón propio', () => {
     expect(setMarca).toHaveBeenCalledWith('zattia')
     expect(radios().find((b) => b.textContent === 'Stunned')!.getAttribute('aria-checked')).toBe('false') // la marca de este test sigue siendo bdi
   })
-  it('el local (⛔ admin) ve SÓLO Stunned: la línea Zattia queda oculta hasta que Zattia pase a Areben Gestión (Bruno, 30-oct)', async () => {
+  it('el local (⛔ admin) ve Zattia y Stunned: Zattia se cortó el 22-nov (Bruno 24-nov; antes quedaba oculta, 30-oct)', async () => {
     sesion = { marca: 'zattia', perfil: { name: 'local', admin: false } }; admin = false
     await montar([])
-    expect(div.querySelectorAll('[aria-label="Marca"] [role="radio"]')).toHaveLength(0) // una sola opción ⇒ sin selector
-    expect(div.querySelector('.erp-movil-marca')?.textContent).toContain('Stunned')
-    expect(div.querySelector('.erp-movil-marca')?.textContent).not.toContain('Zattia')
+    const opciones = [...div.querySelectorAll('[aria-label="Marca"] [role="radio"]')].map((b) => b.textContent)
+    expect(opciones).toContain('Zattia')
+    expect(opciones).toContain('Stunned')
   })
   it('⌘K y el botón «Buscar» abren el buscador global; «?» los atajos; Esc cierra (🎨 26-oct)', async () => {
     await montar(['ventas', 'ventas'])

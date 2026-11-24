@@ -26,7 +26,7 @@ import { leerCorteDeLinea } from '@/lib/erp/cliente'
 import { usarMarcaCaja } from '@/lib/caja/marca'
 import { CUENTAS } from '@/lib/cuentas'
 import type { Marca } from '@/lib/nav.datos'
-import { esAdmin, perfilVistoComo, puedeVer, type Perfil } from '@/lib/permisos'
+import { perfilVistoComo, puedeVer, type Perfil } from '@/lib/permisos'
 import { CambioCaja } from './CambioCaja'
 import { FacturaCaja } from './FacturaCaja'
 import { Facturacion } from './Facturacion'
@@ -256,9 +256,9 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
   // Selector BDI · Zattia · Stunned (diseño §9). 🔴 Stunned no es una `Marca`: es marca zattia + línea `stunned` (`docs/lineas.md`).
   const [linea, setLineaEstado] = useState<LineaErp>(lineaElegida)
   const setLinea = (l: LineaErp) => { elegirLinea(l); setLineaEstado(l) }
-  // 🎯 Bruno 30-oct: la línea Zattia queda oculta para el local (⛔ admin) hasta que Zattia pase al ERP ⇒ ven sólo Stunned.
-  const soloStunned = !esAdmin(perfil)
-  const lineaVista: LineaErp = marca === 'zattia' ? (soloStunned || linea === 'stunned' ? 'stunned' : 'zattia') : ''
+  // 🎯 Bruno 30-oct: la línea Zattia quedó oculta para el local hasta que Zattia pasara al ERP. Zattia se cortó el 22-nov ⇒
+  // Bruno 24-nov («los usuarios del local no tienen acceso al erp de zattia»): el local ve Zattia y Stunned, como el admin.
+  const lineaVista: LineaErp = marca === 'zattia' ? (linea === 'stunned' ? 'stunned' : 'zattia') : ''
   const itemActual = seccion.pestanias.find((p) => p.key === pestania)
   // 🔑 Lo que el rol ⛔ puede abrir ⛔ se dibuja (menú, pestañas, vistas, «Más»); una sección que se queda sin ítems, tampoco.
   const puede = usePuedeErp(marca === 'bdi' ? 'bdi' : 'zattia')
@@ -300,7 +300,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
   const vistasDeAca = paraVer(itemActual?.vistas).filter((v) => !((transferenciaEnErp || !corteLeido) && v.key === 'mover'))
   // Contadores rojos del menú y de las pestañas: los mismos números de «Para hacer» de Inicio (la marca como Inicio: BDI o Zattia).
   const contadores = useContadoresErp(marca === 'bdi' ? 'bdi' : 'zattia', lineaVista)
-  const opciones = marcas.flatMap((m): Opcion[] => m === 'bdi' ? [{ key: 'bdi', titulo: 'BDI' }] : (soloStunned ? [] : [{ key: 'zattia', titulo: 'Zattia' } as Opcion]).concat({ key: 'stunned', titulo: 'Stunned' }))
+  const opciones = marcas.flatMap((m): Opcion[] => m === 'bdi' ? [{ key: 'bdi', titulo: 'BDI' }] : [{ key: 'zattia', titulo: 'Zattia' } as Opcion].concat({ key: 'stunned', titulo: 'Stunned' }))
   const opcionActiva = marca === 'bdi' ? 'bdi' : lineaVista === 'stunned' ? 'stunned' : 'zattia'
   const elegirOpcion = (k: 'bdi' | 'zattia' | 'stunned') => {
     if (k === 'bdi') { setMarca('bdi'); return }
