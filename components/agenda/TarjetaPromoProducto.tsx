@@ -14,7 +14,6 @@ const dm = (f: string) => `${f.slice(8, 10)}/${f.slice(5, 7)}`
 
 export function TarjetaPromoProducto({ promo }: { promo: PromoProducto }) {
   const [abierto, setAbierto] = useState(false)
-  const hayDetalle = promo.excluye.length > 0 || !!promo.nota
 
   return (
     <div style={{ border: `1px solid ${color.line}`, borderRadius: radius.xl, padding: space[3], background: color.bg2 }}>
@@ -24,13 +23,8 @@ export function TarjetaPromoProducto({ promo }: { promo: PromoProducto }) {
         {promo.hasta && <span style={{ fontSize: font.sm, color: color.mut }}>hasta el {dm(promo.hasta)}</span>}
       </div>
 
-      <div style={{ fontSize: font.xl, fontWeight: weight.heavy, color: color.brand, lineHeight: 1.2, marginTop: space[1] }}>
-        {promo.detalle}
-      </div>
-
-      {hayDetalle && (
-        <>
-          <button
+      {/* Bruno, 23-nov: en la tarjeta va SÓLO el título; la regla y lo que queda afuera, adentro. */}
+      <button
             onClick={() => setAbierto((v) => !v)}
             style={{
               // `height: auto`: la regla `.shell-content button` le fija a todo botón un renglón.
@@ -49,12 +43,11 @@ export function TarjetaPromoProducto({ promo }: { promo: PromoProducto }) {
           </button>
           {abierto && (
             <div style={{ marginTop: space[2], color: color.ink2, fontSize: font.base, display: 'grid', gap: space[1.5] }}>
+              <div style={{ fontWeight: weight.semibold, color: color.ink }}>{promo.detalle}</div>
               {promo.nota && <div>{promo.nota}</div>}
               {promo.excluye.length > 0 && <div>No aplica a: {promo.excluye.join(', ')}.</div>}
             </div>
           )}
-        </>
-      )}
     </div>
   )
 }
