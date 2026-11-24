@@ -318,12 +318,6 @@ export async function productosParaElPanel({ pedidoId = '', q = '', usuario = nu
 const statusDe = (codigo) => (codigo === 'NO_ENCONTRADO' ? 404
   : ['ANULADO', 'VENDIDO_EN_GN', 'EN_PREPARACION', 'DESPACHADO', 'SIN_ENTRAR', 'FALTA_CLIENTE', 'TIENE_PAGOS', 'SIN_PRECIO', 'SIN_TALLE', 'SIN_RENGLONES', 'CAMBIO_DE_LLAVE', 'SIN_CUENTA_CORRIENTE', 'CONFLICTO_IDEMPOTENCIA'].includes(codigo) ? 409 : 400)
 
-/** Darío (admin): el único que pone precio a mano en el pedido (18-nov: «solo yo, soy el único que usa el CRM»). */
-export function esDario(perfil) {
-  const n = String(perfil?.name || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim()
-  return !!perfil?.admin && n === 'DARIO AREVALO'
-}
-
 export const ACCIONES_PEDIDO = ['pedido-entrar', 'pedido-cambiar', 'pedido-a-preparar', 'pedido-anular', 'pedido-envio']
 
 /**

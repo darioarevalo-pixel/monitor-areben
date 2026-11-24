@@ -99,7 +99,7 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
     `cyber.json`, `lotes.json`; la cuenta pura en `lib/erp/precio-tienda.core.js`, COPIA de `index.html` del catálogo): pack
     (se cambia por packs enteros; ⛔ pack y suelta del mismo diseño), oferta (Cyber o margen < `ofertaMargen`), precio por
     modelo, y descuento por monto sobre TODO el pedido (sólo a lo regular; aparece o se va). Lo que ya estaba conserva su
-    precio salvo lo regular, que recalcula el %. Precio a mano: sólo Darío (`esDario`), sólo en lo nuevo. El motor respeta
+    precio salvo lo regular, que recalcula el %. Precio a mano: quien cambia el pedido (24-nov: con `esDario` el panel de WhatsApp lo escondía; el panel es sólo de Darío), sólo en lo nuevo. El motor respeta
     el `precio` que le llega (areben-motor 804c692). Packs vendidos ⇒ `lotes:vendidos` del catálogo por
     `POST /api/config?accion=packs-panel` con `PANEL_LLAVE_CATALOGO` (en los DOS proyectos de Vercel); sin llave guarda y
     avisa. Promos por cantidad (`descuentos.promos`, por `producto.categoria`) también: 🔴 sin ellas, el 18-nov un cambio le
