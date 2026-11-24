@@ -54,7 +54,7 @@ function bajarCsv(filas: FilaComparacion[], marca: MarcaErp) {
   URL.revokeObjectURL(url)
 }
 
-export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = false }: { ajustar: (p: PrendaAAjustar) => void; irAConciliacion: () => void; alContar?: AlContar; /** La línea ya cortó (`erp_corte`). */ enErp?: boolean }) {
+export function ComparacionStock({ ajustar, irAConciliacion, alContar }: { ajustar: (p: PrendaAAjustar) => void; irAConciliacion: () => void; alContar?: AlContar }) {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const usuario = perfil?.name ?? null
@@ -95,10 +95,9 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = f
   const mostrar = tanda.de === mirada ? tanda.n : DE_A
 
   // La línea cortada vive en el ERP: la columna de Gestión Nube ⛔ le dice nada (Bruno, 28-oct). Stunned ⛔ espera la lectura del corte.
-  const sinGn = enErp || tienda === 'stunned'
   // 📱 En el celular la tarjeta arma lo suyo con TODAS las columnas: las de `prefs` son de la compu.
   const angosta = usePantallaAngosta()
-  const columnas = (angosta ? prefs.orden : prefs.visibles).filter((k) => !(sinGn && k === 'gn')).map((k) => {
+  const columnas = (angosta ? prefs.orden : prefs.visibles).filter((k) => k !== 'gn').map((k) => {
     const [titulo, ancho, ordena] = COLUMNAS[k as keyof typeof COLUMNAS]
     return { key: k, titulo, ancho, ordena: !!ordena, derecha: ['para', 'tn', 'dif', 'gn', 'ped'].includes(k), movil: MOVIL[k] ?? 'oculta' }
   })
@@ -126,7 +125,6 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = f
   const nombreVista = VISTAS.find(([k]) => k === vista)?.[1] ?? ''
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      {!sinGn && <Notice tone="warning">{TIENDA[tiendaEnvio]}: el stock de la tienda lo manda Gestión Nube.</Notice>}
       <Notice tone="neutral">
         {datos?.ml ? <>Mercado Libre: {datos.ml.noCierran} publicaciones no coinciden ({datos.ml.fecha.split('-').reverse().slice(0, 2).join('/')}). <Button variant="outline" onClick={irAConciliacion}>Ver en Conciliación</Button></> : <>Mercado Libre: <Button variant="outline" onClick={irAConciliacion}>Ver en Conciliación</Button></>}
       </Notice>
@@ -139,7 +137,7 @@ export function ComparacionStock({ ajustar, irAConciliacion, alContar, enErp = f
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en la comparación" placeholder="Producto, SKU o código de barras" />
           <PanelColumnas
-            columnas={prefs.orden.filter((k) => !(sinGn && k === 'gn')).map((k) => ({ key: k, titulo: COLUMNAS[k as keyof typeof COLUMNAS][0], visible: prefs.visibles.includes(k), fija: !!COLUMNAS[k as keyof typeof COLUMNAS][3] }))}
+            columnas={prefs.orden.filter((k) => k !== 'gn').map((k) => ({ key: k, titulo: COLUMNAS[k as keyof typeof COLUMNAS][0], visible: prefs.visibles.includes(k), fija: !!COLUMNAS[k as keyof typeof COLUMNAS][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
             onRestablecer={() => setPrefs({ ...normalizarPrefs(null) })}

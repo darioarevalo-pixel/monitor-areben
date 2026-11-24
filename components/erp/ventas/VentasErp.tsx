@@ -201,7 +201,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
   const setHoja = (n: number) => setHojaDe({ filtro, n })
   const deLaHoja = useMemo(() => filas.slice((hoja - 1) * POR_HOJA, hoja * POR_HOJA), [filas, hoja])
   const elegidas = filas.filter((f) => seleccion.has(f.id))
-  const vendedores = useMemo(() => [...new Set((datos?.filas ?? []).map((f) => f.vendio).filter((x) => x && x !== '—' && x !== 'Tienda Nube' && x !== 'Desde Gestión Nube'))].sort(), [datos])
+  const vendedores = useMemo(() => [...new Set((datos?.filas ?? []).map((f) => f.vendio).filter((x) => x && x !== '—' && x !== 'Tienda Nube' && x !== 'Sistema anterior'))].sort(), [datos])
   const nombrePeriodo = periodos.find(([k]) => k === periodo)?.[1] ?? ''
 
   const irACobranzas = () => window.open('/cobranzas', '_blank', 'noopener')
@@ -246,7 +246,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
     }
     if (k === 'p') return <ChipEstado mapa={COBRO} k={f.cobroKey} />
     if (k === 'total') return <b>{plata(f.total)}</b>
-    if (k === 'fac') return f.factura ? <span style={{ color: color.ink2 }}>{f.factura.numero}{f.factura.de === 'gn' && <span style={{ marginLeft: 4, fontSize: font.xs, color: color.mut2 }}>Gestión Nube</span>}</span> : <span style={{ color: color.mut2 }}>—</span>
+    if (k === 'fac') return f.factura ? <span style={{ color: color.ink2 }}>{f.factura.numero}{f.factura.de === 'gn' && <span style={{ marginLeft: 4, fontSize: font.xs, color: color.mut2 }}>Sistema anterior</span>}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'ven') return <span style={{ color: color.ink2 }}>{f.vendio}</span>
     if (k === 'nota') return f.nota ? <span style={{ color: 'var(--mo-warning-ink)' }} title={`Nota · ${f.nota.de}`}>{f.nota.texto}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'linea') return <span style={{ color: color.ink2 }}>{{ bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }[f.linea] ?? f.linea}</span>

@@ -120,12 +120,12 @@ describe('ajustesDeConteo', () => {
   })
   it('frena: una prenda de una línea SIN corte (la línea la decide el servidor)', () => {
     const r: any = ajustesDeConteo(b({ erp: { ref: 'abcdef-1234', renglones: [{ product_id: 1, size_id: 10, sku: 'RBE-1', dif: 1 }] } }), 'zattia', lineas, ['stunned'], new Map())
-    expect(r.error).toMatch(/Gestión Nube/)
+    expect(r.error).toMatch(/todavía no está en Areben Gestión/)
     const desconocido: any = ajustesDeConteo(b({ erp: { ref: 'abcdef-1234', renglones: [{ product_id: 99, size_id: 10, dif: 1 }] } }), 'zattia', lineas, ['stunned'], new Map())
     expect(desconocido.error).toMatch(/catálogo/)
   })
   it('frena: depósito desconocido, sin ref, repetida, dif inválida', () => {
-    expect((ajustesDeConteo(b({ ubicacion: 'Deposito Minorista' }), 'zattia', lineas, ['stunned'], new Map()) as any).error).toMatch(/Depósito/)
+    expect((ajustesDeConteo(b({ ubicacion: 'Deposito Minorista' }), 'zattia', lineas, ['stunned'], new Map()) as any).error).toMatch(/Ubicación desconocida/)
     expect((ajustesDeConteo(b({ erp: { ref: 'x', renglones: [{ product_id: 2, size_id: 20, dif: 1 }] } }), 'zattia', lineas, ['stunned'], new Map()) as any).error).toMatch(/identificador/)
     const dos = [{ product_id: 2, size_id: 20, dif: 1 }, { product_id: 2, size_id: 20, dif: 1 }]
     expect((ajustesDeConteo(b({ erp: { ref: 'abcdef-1234', renglones: dos } }), 'zattia', lineas, ['stunned'], new Map()) as any).error).toMatch(/dos veces/)

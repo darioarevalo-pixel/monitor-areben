@@ -8,7 +8,7 @@ describe('ERP › menú y direcciones', () => {
     // Stock 9 → 4 (diseño §9): las nueve de antes son VISTAS de cuatro pestañas.
     const todas = SECCIONES_ERP.flatMap((s) => s.pestanias.flatMap((p) => p.vistas?.map((v) => v.key) ?? [p.key]))
     expect(new Set(todas).size).toBe(todas.length)
-    expect(todas.sort()).toEqual(['ajustes', 'cajas', 'cambio', 'cargar-gasto', 'chequeo', 'cheques', 'clientes', 'cobros', 'comparacion', 'conciliacion', 'cuenta-corriente', 'cuentas', 'diferencias', 'estructura', 'factura', 'facturacion', 'gastos', 'ingresos', 'mover', 'movimientos', 'por-producto', 'precios', 'productos', 'proveedores', 'redondeo', 'reglas', 'rutas', 'stock', 'tokens', 'transferencias', 'ventas', 'vincular'])
+    expect(todas.sort()).toEqual(['ajustes', 'cajas', 'cambio', 'cargar-gasto', 'chequeo', 'cheques', 'clientes', 'cobros', 'comparacion', 'conciliacion', 'cuenta-corriente', 'cuentas', 'estructura', 'factura', 'facturacion', 'gastos', 'ingresos', 'mover', 'movimientos', 'por-producto', 'precios', 'productos', 'proveedores', 'redondeo', 'reglas', 'rutas', 'stock', 'tokens', 'transferencias', 'ventas', 'vincular'])
     expect(SECCIONES_ERP.find((s) => s.key === 'stock')!.pestanias.map((p) => p.key)).toEqual(['stock', 'transferencias', 'ajustes', 'diferencias'])
   })
 
@@ -33,7 +33,8 @@ describe('ERP › menú y direcciones', () => {
   it('🔴 Diferencias: tocar «Con Tienda Nube y Mercado Libre» (la primera vista) la abre, ⛔ cae en «Con Gestión Nube» (prueba del corte, 28-oct)', () => {
     const href = hrefErp('stock', 'diferencias', 'comparacion')
     expect(resolverRutaErp(href.split('/').slice(2))).toMatchObject({ pestania: 'diferencias', vista: 'comparacion', valida: true })
-    expect(resolverRutaErp(hrefErp('stock', 'diferencias', 'diferencias').split('/').slice(2))).toMatchObject({ vista: 'diferencias', valida: true })
+    // 23-nov: «Con Gestión Nube» se sacó: su dirección vieja ⛔ es válida.
+    expect(resolverRutaErp(['stock', 'diferencias', 'diferencias']).valida).toBe(false)
     // Y TODAS: la dirección de cada vista vuelve a esa vista.
     for (const sec of SECCIONES_ERP.filter((x) => x.key !== 'inicio')) for (const p of sec.pestanias) for (const v of p.vistas ?? [{ key: null }]) {
       expect(resolverRutaErp(hrefErp(sec.key, p.key, v.key).split('/').slice(2)), `${sec.key}/${p.key}/${v.key}`).toMatchObject({ pestania: p.key, vista: v.key })

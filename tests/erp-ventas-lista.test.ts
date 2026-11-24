@@ -147,7 +147,7 @@ describe('la fila, las vistas y el resumen', () => {
     expect(accionesDeFila(filas[2], { cobrar: true }).cobro.label).toBe('Registrar cobro · saldo $ 93.200')
     expect(accionesDeFila(filas[0]).cobro).toMatchObject({ verde: false, label: 'Cobrada · ver cobros' })
     expect(accionesDeFila(filas[3]).editar).toMatchObject({ activo: false })
-    expect(accionesDeFila(filas[1]).factura).toMatchObject({ verde: true, label: 'Factura B 00005-00012351 (de Gestión Nube)' })
+    expect(accionesDeFila(filas[1]).factura).toMatchObject({ verde: true, label: 'Factura B 00005-00012351 (sistema anterior)' })
   })
 })
 

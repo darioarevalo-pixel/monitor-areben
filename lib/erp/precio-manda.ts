@@ -14,8 +14,8 @@ export function useAvisoPrecio(): { largo: string; corto: string; antes: boolean
   return prueba
     ? {
         antes: true,
-        largo: 'Mientras Gestión Nube funcione, no cambia lo que cobra la Caja ni lo que muestra Tienda Nube.',
-        corto: 'mientras Gestión Nube funcione, no cambia la Caja ni Tienda Nube',
+        largo: 'Todavía no cambia lo que cobra la Caja ni lo que muestra Tienda Nube.',
+        corto: 'todavía no cambia la Caja ni Tienda Nube',
       }
     : {
         antes: false,

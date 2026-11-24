@@ -106,7 +106,7 @@ describe('el cambio (erp › Caja)', () => {
     // Cambio SUELTO (Bruno, 27-oct): la venta de GN viaja por número y la prenda por producto y talle; el precio ⛔ (lo pone el servidor).
     const gn = leerCambiar({ id, gnVentaId: '30982', devueltas: [{ productId: 7, sizeId: 3, cantidad: 1, precio: 1 }], pagos: [] })
     expect([gn.modo, gn.ventaId, gn.gnVentaId, gn.devueltas]).toEqual(['gn', null, '30982', [{ product_id: 7, size_id: 3, cantidad: 1, sku: null }]])
-    expect(leerCambiar({ id, gnVentaId: '30982x', devueltas: [{ productId: 7, sizeId: 3, cantidad: 1 }] }).error).toMatch(/Gestión Nube/)
+    expect(leerCambiar({ id, gnVentaId: '30982x', devueltas: [{ productId: 7, sizeId: 3, cantidad: 1 }] }).error).toMatch(/sistema anterior/)
     // Sin ticket: el precio lo pone la cajera y el PIN es obligatorio.
     expect(leerCambiar({ id, sinTicket: true, devueltas: [{ productId: 7, sizeId: 3, cantidad: 1, precio: 15000 }] }).error).toMatch(/PIN/)
     expect(leerCambiar({ id, sinTicket: true, devueltas: [{ productId: 7, sizeId: 3, cantidad: 1 }], pin: '1234', pinPersona: 'ana' }).error).toMatch(/precio/)

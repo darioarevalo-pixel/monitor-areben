@@ -71,7 +71,7 @@ export function ChequeoLibro({ alContar }: { alContar?: AlContar }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap' }}>
         <p style={{ margin: 0, color: color.mut, fontSize: font.sm, flex: '1 1 320px' }}>
-          Las mismas reglas que se revisan cada noche, sobre todos los movimientos de stock{marca === 'zattia' ? ' de Zattia y Stunned' : ' de BDI'}. Un error hay que arreglarlo; «Para mirar» es una pista (mientras siga Gestión Nube, un stock negativo es esperable).
+          Las mismas reglas que se revisan cada noche, sobre todos los movimientos de stock{marca === 'zattia' ? ' de Zattia y Stunned' : ' de BDI'}. Un error hay que arreglarlo; «Para mirar» es una pista.
         </p>
         <Button variant="outline" disabled={revisando} onClick={() => setVuelta((n) => n + 1)}>{revisando ? 'Revisando…' : 'Revisar ahora'}</Button>
       </div>

@@ -39,10 +39,10 @@ beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REAC
 afterEach(() => { act(() => root?.unmount()); root = null; host?.remove(); document.body.innerHTML = ''; localStorage.clear(); vi.clearAllMocks() })
 
 const irAConciliacion = vi.fn()
-async function montar(enErp = false) {
+async function montar() {
   const { ComparacionStock } = await import('@/components/erp/stock/ComparacionStock')
   host = document.createElement('div'); document.body.appendChild(host)
-  await act(async () => { root = createRoot(host); root.render(<ComparacionStock ajustar={() => {}} irAConciliacion={irAConciliacion} enErp={enErp} />) })
+  await act(async () => { root = createRoot(host); root.render(<ComparacionStock ajustar={() => {}} irAConciliacion={irAConciliacion} />) })
   await act(async () => {})
 }
 const todo = () => document.body.textContent ?? ''
@@ -87,11 +87,8 @@ describe('Comparación con TN y ML', () => {
     expect(todo()).not.toContain('se lee cada 2 horas')
   })
 
-  it('con la línea cortada dice que vive en Areben Gestión y ⛔ muestra Gestión Nube; sin cortar, sí', async () => {
+  it('⛔ nombra a Gestión Nube (23-nov: suscripción cancelada)', async () => {
     await montar()
-    expect(todo()).toContain('lo manda Gestión Nube')
-    act(() => root?.unmount()); host.remove(); root = null
-    await montar(true)
     expect(todo()).not.toContain('Gestión Nube')
   })
 

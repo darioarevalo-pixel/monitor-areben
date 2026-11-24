@@ -352,12 +352,12 @@ export function FacturaCaja({ ventaInicial = null, cajaInicial = null, store: st
                 )}
               </Field>
             )}
-            <Field label={clase === 'A' ? 'CUIT' : 'DNI o CUIT (opcional)'} style={{ flex: '1 1 180px' }}>
-              <Input value={doc} onChange={(e) => { setDoc(e.target.value); setDeFicha(null) }} inputMode="numeric" placeholder={clase === 'A' ? '30-12345678-9' : 'Vacío = sin identificar'} />
+            <Field label={clase === 'A' ? 'CUIT' : 'DNI o CUIT'} style={{ flex: '1 1 180px' }}>
+              <Input value={doc} onChange={(e) => { setDoc(e.target.value); setDeFicha(null) }} inputMode="numeric" placeholder={clase === 'A' ? '30-12345678-9' : 'Opcional'} />
             </Field>
             {clase === 'B' && (
-              <Field label="Nombre y apellido (opcional)" hint="Con el DNI o CUIT, la clienta queda guardada y la venta a su nombre." style={{ flex: '2 1 220px' }}>
-                <Input value={nombre} onChange={(e) => setNombre(e.target.value)} maxLength={120} disabled={!docLimpio} placeholder={docLimpio ? '' : 'Primero el DNI o CUIT'} />
+              <Field label="Nombre y apellido" hint="Con el DNI o CUIT, la clienta queda guardada y la venta a su nombre." style={{ flex: '2 1 220px' }}>
+                <Input value={nombre} onChange={(e) => setNombre(e.target.value)} maxLength={120} disabled={!docLimpio} placeholder={docLimpio ? 'Opcional' : 'Primero el DNI o CUIT'} />
               </Field>
             )}
             {clase === 'A' && (

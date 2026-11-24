@@ -195,7 +195,7 @@ function NuevoGasto({ onCerrar, onGuardar }: {
         <Field label="Fecha"><Input type="date" value={f.fecha} onChange={(e) => poner('fecha', e.target.value)} /></Field>
         <Field label="Monto" hint="Con signo menos corrige uno cargado de más. Ej.: 21.000 o -21.000"><Input inputMode="decimal" value={f.monto} onChange={(e) => poner('monto', e.target.value)} placeholder="$ 0" /></Field>
         <Field label="Detalle" hint="De qué es el gasto"><Input value={f.detalle} onChange={(e) => poner('detalle', e.target.value)} placeholder="Cadete · 6 envíos" /></Field>
-        <Field label="Cuenta (opcional)" hint="De dónde salió la plata"><Input value={f.cuenta} onChange={(e) => poner('cuenta', e.target.value)} placeholder="Caja de efectivo" /></Field>
+        <Field label="Cuenta" hint="De dónde salió la plata"><Input value={f.cuenta} onChange={(e) => poner('cuenta', e.target.value)} placeholder="Opcional · ej.: Caja de efectivo" /></Field>
       </div>
     </Modal>
   )

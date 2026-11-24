@@ -63,7 +63,7 @@ async function completarFicha(pg, ficha, datos) {
  */
 export async function facturaLibrePanel({ body, usuario, quien = usuario }, deps) {
   if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
-  if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Se factura desde acá el día que BDI pasa a Areben Gestión. Hasta entonces, en Gestión Nube.' }
+  if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Todavía no disponible.' }
   if (!usuario) return { status: 400, error: 'Falta quién lo hace' }
   const p = leerFacturaLibre(body)
   if (p.error) return { status: 400, error: p.error }
@@ -178,7 +178,7 @@ export async function conFacturacion(r, deps = {}) {
  */
 export async function facturarPedidoPanel({ body, usuario, quien = usuario }, deps) {
   if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
-  if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Se factura desde acá el día que BDI pasa a Areben Gestión. Hasta entonces, en Gestión Nube.' }
+  if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Todavía no disponible.' }
   if (!usuario) return { status: 400, error: 'Falta quién lo hace' }
   const pedidoId = String(body?.pedidoId ?? '')
   if (!UUID.test(pedidoId)) return { status: 400, error: 'Falta el pedido' }
@@ -274,7 +274,7 @@ function motivoDeLaBase(e) {
  */
 export async function partePedidoPanel({ body, usuario, quien = usuario }, deps) {
   if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
-  if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Se factura desde acá el día que BDI pasa a Areben Gestión. Hasta entonces, en Gestión Nube.' }
+  if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Todavía no disponible.' }
   if (!usuario) return { status: 400, error: 'Falta quién lo hace' }
   const x = leerParte(body)
   if (x.error) return { status: 400, error: x.error }

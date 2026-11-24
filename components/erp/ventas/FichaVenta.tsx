@@ -306,7 +306,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             </DatoFicha>
             {extra?.entrega && <DatoFicha titulo="Entrega">{[ENTREGA[extra.entrega.tipo], extra.entrega.direccion].filter(Boolean).join(' · ')}</DatoFicha>}
             {extra?.cobroEnEntrega && <DatoFicha titulo="Contraentrega">{[extra.cobroEnEntrega.formaPago ? COBRO_EN_ENTREGA[extra.cobroEnEntrega.formaPago] : null, extra.cobroEnEntrega.entrego, extra.cobroEnEntrega.fecha ? cuandoCorto(extra.cobroEnEntrega.fecha) : null].filter(Boolean).join(' · ')}</DatoFicha>}
-            {extra?.gnNumero && <DatoFicha titulo="En Gestión Nube">{`venta ${extra.gnNumero}`}</DatoFicha>}
+            {extra?.gnNumero && <DatoFicha titulo="Sistema anterior">{`venta ${extra.gnNumero}`}</DatoFicha>}
           </DatosFicha>
 
           <section style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>

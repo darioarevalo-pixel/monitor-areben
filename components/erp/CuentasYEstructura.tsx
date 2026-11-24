@@ -130,7 +130,7 @@ function DepositoEvento() {
     <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, padding: 16, display: 'flex', flexDirection: 'column', gap: space[2] }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap' }}>
         <div>
-          <b style={{ color: color.ink }}>Depósito Evento · Stunned</b>
+          <b style={{ color: color.ink }}>Evento · Stunned</b>
           <div style={{ color: color.mut, fontSize: font.sm }}>
             {!ev ? 'No se pudo leer.' : ev.activo ? `Activo · ${ev.unidades} ${ev.unidades === 1 ? 'unidad' : 'unidades'}` : 'Desactivado'}
             {' · '}Para eventos. Se desactiva con el stock en 0.
@@ -168,7 +168,7 @@ export function EstructuraErp() {
                 {(f.linea ?? f.tienda) && <div style={chico}>{f.linea ?? f.tienda}</div>}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={chico}>Depósitos</span>
+                <span style={chico}>Ubicaciones</span>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {f.depositos.length ? f.depositos.map((d) => (
                     <span key={d.id} title={d.vende ? undefined : 'Sin venta'} style={{ padding: '4px 10px', borderRadius: 999, fontSize: font.sm, border: `1px solid ${d.vende ? 'var(--mo-brand-border)' : color.line}`, background: d.vende ? 'var(--mo-brand-bg)' : color.bg2, color: d.vende ? color.ink : color.mut }}>
@@ -193,7 +193,7 @@ export function EstructuraErp() {
           ))}
         </div>
       )}
-      {datos && marca === 'zattia' && <div style={chico}>Stunned comparte depósitos y punto de venta con Zattia.</div>}
+      {datos && marca === 'zattia' && <div style={chico}>Stunned comparte ubicaciones y punto de venta con Zattia.</div>}
     </div>
   )
 }

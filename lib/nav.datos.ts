@@ -876,7 +876,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "erp",
     "area": "erp",
     "label": "Areben Gestión",
-    "info": "Lo que reemplaza a Gestión Nube: Stunned ya vende, cambia y cobra desde acá. Lo ve quien tenga tildado Areben Gestión en la marca. Facturación: el tope del mes (lo que entró a cuentas de Areben), lo ya facturado en Gestión Nube y en el monitor, y las ventas sin factura, que se facturan con ARCA en grupos. Mientras no se habilite, factura en el ambiente de prueba de ARCA, sin validez fiscal.",
+    "info": "Ventas, stock, productos, clientes y facturación de las tres marcas. Lo ve quien tenga tildado Areben Gestión en la marca.",
     "brands": [
       "bdi",
       "zattia"

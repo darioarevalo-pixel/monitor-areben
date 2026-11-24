@@ -293,7 +293,7 @@ export function Facturacion() {
     if (k === 'comp') return <b style={{ color: color.ink }} title={f.comprobante}>{f.comprobante}</b>
     if (k === 'cae') return <span style={{ color: color.mut, fontVariantNumeric: 'tabular-nums' }}>{f.cae || '—'}</span>
     if (k === 'de') {
-      if (f.de === 'gn') return <ChipEstado mapa={{ x: [f.estado && f.estado !== 'APROBADO' ? 'warning' : 'neutral', `Gestión Nube${f.estado && f.estado !== 'APROBADO' ? ` · ${f.estado.toLowerCase()}` : ''}`] }} k="x" />
+      if (f.de === 'gn') return <ChipEstado mapa={{ x: [f.estado && f.estado !== 'APROBADO' ? 'warning' : 'neutral', `Sistema anterior${f.estado && f.estado !== 'APROBADO' ? ` · ${f.estado.toLowerCase()}` : ''}`] }} k="x" />
       const anulada = f.vista === 'facturas' && conNC.has(`${marca}:${f.ventaId}`)
       return <ChipEstado mapa={{ x: anulada ? ['danger', 'Areben Gestión · anulada con nota de crédito'] : ['success', f.emitida?.ambiente === 'produccion' ? 'Areben Gestión' : 'Areben Gestión · de prueba'] }} k="x" />
     }
@@ -350,7 +350,7 @@ export function Facturacion() {
         <>
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
             <TileResumen oscuro titulo="Tope del mes de Areben" valor={pesosCortos(datos.techo)} nota={datos.estado === 'cerrado' ? 'Fijo desde el cierre' : 'Cambia hasta cerrar el mes'} />
-            <TileResumen titulo="Facturado" valor={pesosCortos(datos.facturado)} nota={`${pctTope != null ? `${pctTope} % del tope · ` : ''}Gestión Nube ${pesosCortos(datos.facturadoGN)} · Areben Gestión ${pesosCortos(datos.facturadoMonitor)}`} />
+            <TileResumen titulo="Facturado" valor={pesosCortos(datos.facturado)} nota={`${pctTope != null ? `${pctTope} % del tope · ` : ''}${datos.facturadoGN ? `Sistema anterior ${pesosCortos(datos.facturadoGN)} · ` : ''}Areben Gestión ${pesosCortos(datos.facturadoMonitor)}`} />
             <TileResumen titulo="Pendiente de facturar" valor={pesosCortos(datos.pendiente)} nota={datos.pendiente < 0 ? 'se facturó de más' : 'las dos marcas'} />
             <TileResumen tono={tonoDeConteo(grupos.sin.length)} titulo={`Sin factura en ${NOMBRE_MARCA[tienda]}`} valor={grupos.sin.length.toLocaleString('es-AR')} nota={`ventas · ${pesosCortos(sumaSin)}`} />
           </div>

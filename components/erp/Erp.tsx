@@ -38,7 +38,6 @@ import { TransferenciasStock } from './stock/TransferenciasStock'
 import { MoverYRecibir } from './stock/MoverYRecibir'
 import { RecepcionesStock } from './stock/RecepcionesStock'
 import { ComparacionStock } from './stock/ComparacionStock'
-import { DiferenciasDia } from './DiferenciasDia'
 import { ConciliacionDia } from './ConciliacionDia'
 import { ChequeoLibro } from './ChequeoLibro'
 import { AjustesStock } from './AjustesStock'
@@ -112,7 +111,7 @@ export const SECCIONES_ERP: Seccion[] = [
       { key: 'stock', label: 'Stock', vistas: [{ key: 'stock', label: 'Productos' }, { key: 'movimientos', label: 'Movimientos' }] },
       { key: 'transferencias', label: 'Transferencias', vistas: [{ key: 'transferencias', label: 'Transferencias' }, { key: 'mover', label: 'Nueva transferencia' }] },
       { key: 'ajustes', label: 'Ingresos y ajustes', junta: 'Tipo', vistas: [{ key: 'ajustes', label: 'Ajustes' }, { key: 'ingresos', label: 'Ingresos de mercadería' }] },
-      { key: 'diferencias', label: 'Diferencias', junta: 'Contra qué', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre', permiso: 'configurar' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Con Gestión Nube' }, { key: 'chequeo', label: 'Chequeo de movimientos', permiso: 'configurar' }] },
+      { key: 'diferencias', label: 'Diferencias', junta: 'Contra qué', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre', permiso: 'configurar' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'chequeo', label: 'Chequeo de movimientos', permiso: 'configurar' }] },
     ],
   },
   { key: 'productos', titulo: 'Productos', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }, { key: 'precios', label: 'Precios' }, { key: 'vincular', label: 'Vincular', permiso: 'configurar' }] },
@@ -125,7 +124,7 @@ export const SECCIONES_ERP: Seccion[] = [
     pestanias: [
       { key: 'cuentas', label: 'Cuentas y formas de pago', permiso: 'configurar', junta: 'Qué lista', vistas: [{ key: 'cuentas', label: 'Cuentas' }, { key: 'rutas', label: '¿A qué cuenta va?' }] },
       { key: 'reglas', label: 'Descuentos y redondeo', permiso: 'configurar', vistas: [{ key: 'reglas', label: 'Descuentos por forma de pago' }, { key: 'redondeo', label: 'Redondeo' }] },
-      { key: 'estructura', label: 'Marcas y depósitos', permiso: 'configurar' },
+      { key: 'estructura', label: 'Marcas y ubicaciones', permiso: 'configurar' },
       { key: 'tokens', label: 'Conexiones', permiso: 'configurar' },
     ],
   },
@@ -298,7 +297,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
   // Darío 19-nov: en Ventas las dos vistas son la MISMA información de dos formas ⇒ interruptor al lado del título
   // («Por venta | Por producto»), ⛔ la fila de pestañas. Por ahora sólo acá.
   const comoInterruptor = seccion.key === 'ventas' && pestania === 'ventas'
-  const vistasDeAca = paraVer(itemActual?.vistas).filter((v) => !((transferenciaEnErp || !corteLeido) && v.key === 'mover') && !((lineaEnErp || lineaVista === 'stunned') && v.key === 'diferencias'))
+  const vistasDeAca = paraVer(itemActual?.vistas).filter((v) => !((transferenciaEnErp || !corteLeido) && v.key === 'mover'))
   // Contadores rojos del menú y de las pestañas: los mismos números de «Para hacer» de Inicio (la marca como Inicio: BDI o Zattia).
   const contadores = useContadoresErp(marca === 'bdi' ? 'bdi' : 'zattia', lineaVista)
   const opciones = marcas.flatMap((m): Opcion[] => m === 'bdi' ? [{ key: 'bdi', titulo: 'BDI' }] : (soloStunned ? [] : [{ key: 'zattia', titulo: 'Zattia' } as Opcion]).concat({ key: 'stunned', titulo: 'Stunned' }))
@@ -326,11 +325,10 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
 
   // Las listas de una pantalla junta (`ListasJuntas`): todas montadas, cada una con su número; el filtro elige cuál se ve.
   const parteJunta = (k: string, alContar: AlContar) => {
-    if (k === 'ajustes') return <AjustesStock key={aAjustar ? `${aAjustar.linea}/${aAjustar.producto}/${aAjustar.talle}` : `lista/${lineaVista}`} pedida={aAjustar} alContar={alContar} enErp={lineaEnErp} />
+    if (k === 'ajustes') return <AjustesStock key={aAjustar ? `${aAjustar.linea}/${aAjustar.producto}/${aAjustar.talle}` : `lista/${lineaVista}`} pedida={aAjustar} alContar={alContar} />
     if (k === 'ingresos') return <RecepcionesStock key={marca} alContar={alContar} />
-    if (k === 'comparacion') return <ComparacionStock key={marca} ajustar={ajustarPrenda} irAConciliacion={() => ir('stock', 'diferencias', 'conciliacion')} alContar={alContar} enErp={lineaEnErp} />
+    if (k === 'comparacion') return <ComparacionStock key={marca} ajustar={ajustarPrenda} irAConciliacion={() => ir('stock', 'diferencias', 'conciliacion')} alContar={alContar} />
     if (k === 'conciliacion') return <ConciliacionDia key={`${marca}/${lineaVista}`} ajustar={ajustarPrenda} alContar={alContar} />
-    if (k === 'diferencias') return <DiferenciasDia key={marca} ajustar={ajustarPrenda} alContar={alContar} />
     if (k === 'chequeo') return <ChequeoLibro key={marca} alContar={alContar} />
     if (k === 'cuentas') return <CuentasErp key={marca} alContar={alContar} />
     if (k === 'rutas') return <RutasCobro key={`${marca}/${lineaVista}`} alContar={alContar} />
@@ -436,7 +434,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
             {/* 🐛 Bruno 10-nov: en Stunned salía «modo paralelo» los primeros segundos ⇒ se dibuja recién leído el corte (si la lectura falla, `leida` igual se pone y el cartel sale: el prudente). */}
             {seccion.key !== 'inicio' && corteLeido && !lineaEnErp && (
               <p style={{ margin: 0, padding: '0 8px', lineHeight: '20px', fontSize: 12, color: 'var(--mo-info)', background: 'var(--mo-info-bg)', borderRadius: 4, borderLeft: `3px solid ${COLOR_DE_MARCA[opcionActiva]}` }}>
-                {`${lineaVista === 'stunned' ? 'Stunned' : CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy.`}
+                {`${lineaVista === 'stunned' ? 'Stunned' : CUENTAS[marca].nombre} · todavía no está en Areben Gestión.`}
               </p>
             )}
             {seccion.key !== 'inicio' && (

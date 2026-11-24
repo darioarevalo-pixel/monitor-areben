@@ -13,7 +13,6 @@
  *   POST {recurso:'erp', accion:'nota-debito', facturaId, monto}      SUMA `monto` (IVA incl.) a una factura del monitor con ND (ARCA)
  *   POST {recurso:'erp', accion:'cerrar', mes}                      congela el techo del mes
  *   GET  ?recurso=erp&vista=pedidos-tn&marca=…                      los pedidos de TN abiertos y sin pagar (retienen stock)
- *   GET  ?recurso=erp&vista=diferencias&marca=…&fecha=YYYY-MM-DD    lo que el libro ⛔ explicó ese día + la sobreventa
  *   GET  ?recurso=erp&vista=conciliacion&tienda=bdi|zattia|stunned&fecha=…  lo que ⛔ cierra contra TN y GN ese día (motor sql/024)
  *   GET  ?recurso=erp&vista=stock-lista&marca=bdi|zattia              la lista de Stock: cada prenda por depósito (`api/_erp-stock.js`)
  *   GET  ?recurso=erp&vista=cargar-venta&marca=…  ·  POST { accion: 'cargar-venta' }   Ventas › Cargar venta (`api/_erp-cargar.js`, sólo admin)
@@ -108,7 +107,7 @@ import { POR_PEDIDO, facturarLote } from '../motor/arca/lote.core.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import { stockDeVariante } from '../lib/erp/stock.core.js'
 import { TOPE_FILAS, pedidoDeBusqueda, prendasEncontradas } from '../lib/erp/buscar-prenda.core.js'
-import { armarDiferencias, leerFecha } from '../lib/erp/diferencias.core.js'
+import { leerFecha } from '../lib/erp/dia.core.js'
 import { armarConciliacion, TIENDAS as TIENDAS_CONCILIACION } from '../lib/erp/conciliacion.core.js'
 import { entradaInvalida } from '../lib/erp/entrada.core.js'
 import { NO_SIN_PAGAR, STATUS_POR_COBRAR, armarPedidosSinPagar, cobradosEnGN } from '../lib/erp/pedidos-tn.core.js'
@@ -728,24 +727,6 @@ export async function historialDePrenda({ marca, producto, talle }) {
 const PG_DE_MARCA = { bdi: 'DATABASE_URL_BDI', zattia: 'DATABASE_URL_ZATTIA' }
 
 /**
- * La SOBREVENTA: las variantes × depósito con el libro en NEGATIVO hoy. Se suma en la base (por pg, con la
- * conexión del motor: supabase-js ⛔ agrupa). Sin la conexión ⇒ null (la pantalla dice que falta).
- */
-async function negativosDelLibro(marca) {
-  const conexion = process.env[PG_DE_MARCA[marca]]
-  if (!conexion) return null
-  const { default: pg } = await import('pg')
-  const db = new pg.Client({ ...configPg(conexion), connectionTimeoutMillis: 5000, statement_timeout: 15000 })
-  await db.connect()
-  try {
-    return (await db.query(`select linea, product_id, size_id, deposito, sum(cantidad)::int as nivel from stock_movimiento
-      group by 1, 2, 3, 4 having sum(cantidad) < 0 order by 5 limit 300`)).rows
-  } finally {
-    await db.end().catch(() => {})
-  }
-}
-
-/**
  * Ventas propias (las que escribe el motor, `motor/venta/`): busca por número, cliente o fecha. Lee
  * directo de la base (contrato de la venta, §2); ⛔ escribe. Stunned vive en la base de Zattia.
  */
@@ -1017,7 +998,7 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
       // 🔴 Revisión 10-nov: la venta DE PRUEBA de una línea que ya cortó es la copia del paralelo de una venta de GN. Cambiarla
       // dejaba el cambio de prueba y ⛔ movía el stock, callado. Se cambia como venta de Gestión Nube (real).
       if (prueba && orig && lineaEnErp(await cortesDe(db), orig.marca)) {
-        return { status: 409, error: 'Venta de prueba: buscala con su número de Gestión Nube.' }
+        return { status: 409, error: 'Venta de prueba: buscala con su número del sistema anterior.' }
       }
       devueltas = c.devueltas
       // La diferencia con la MISMA cuenta que el motor: lo devuelto al precio que se pagó, y la historia de GN que hizo la Caja a
@@ -1040,7 +1021,7 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
         lineasDevueltas = []
         for (const d of c.devueltas) {
           const l = porPrenda.get(`${d.product_id}:${d.size_id}`)
-          if (!l) return { status: 400, error: `Ese producto no está en la venta ${g.venta.numero} de Gestión Nube, o su marca todavía cambia allá.` }
+          if (!l) return { status: 400, error: `Ese producto no está en la venta ${g.venta.numero} del sistema anterior.` }
           devueltas.push({ product_id: d.product_id, size_id: d.size_id, sku: l.sku, cantidad: d.cantidad, precio: l.precio })
           lineasDevueltas.push(l.linea)
         }
@@ -1141,8 +1122,8 @@ export async function ventaGnDeCambio({ sb, db, store, gnVentaId, lineas: cortad
   if (!error && !(vs || []).length) ({ data: vs, error } = await sb.from('ventas').select(cols).eq('number', n).limit(1))
   if (error) throw new Error(`ventas: ${error.message}`)
   const v = (vs || [])[0]
-  if (!v) return { status: 404, error: `No está la venta ${n} de Gestión Nube (puede tardar unos minutos en llegar).` }
-  if (/anul|cancel/i.test(String(v.sale_state || ''))) return { status: 409, error: `La venta ${v.number ?? v.id} de Gestión Nube está anulada.` }
+  if (!v) return { status: 404, error: `No está la venta ${n} del sistema anterior.` }
+  if (/anul|cancel/i.test(String(v.sale_state || ''))) return { status: 409, error: `La venta ${v.number ?? v.id} del sistema anterior está anulada.` }
   const { data: det, error: e2 } = await sb.from('venta_detalles').select('product_id, size_id, size, product_name, quantity, unit_price, total').eq('sale_id', v.id)
   if (e2) throw new Error(`venta_detalles: ${e2.message}`)
   const skus = await skusDeVariantes(sb, det || [])
@@ -1155,7 +1136,7 @@ export async function ventaGnDeCambio({ sb, db, store, gnVentaId, lineas: cortad
   const lineas = conSku.map((l, i) => ({ ...l, linea: deCadaUna[i] })).filter((l) => cortadas.includes(l.linea))
   if (!lineas.length) {
     const marcas = cortadas.map((l) => ETIQUETA_LINEA[l] || l).join(' ni de ') || 'marcas que ya cambien acá'
-    return { status: 409, error: `La venta ${v.number ?? v.id} de Gestión Nube no tiene productos de ${marcas}.` }
+    return { status: 409, error: `La venta ${v.number ?? v.id} del sistema anterior no tiene productos de ${marcas}.` }
   }
   return { venta: { id: String(v.id), numero: v.number ?? String(v.id), fecha: v.date_sale ?? null, cliente: v.client_name ?? null, prueba: false }, lineas }
 }
@@ -1209,7 +1190,7 @@ export async function facturarVentaPropia({ marca, body, usuario }, deps = {}) {
       // La factura que GN ya le hizo (la cajera la facturó en el POS de GN) también cuenta.
       const gn = await b.from('ventas_factura_gn').select('venta_id').eq('venta_id', clave).limit(1)
       if (gn.error) throw new Error(`ventas_factura_gn: ${gn.error.message}`)
-      if (gn.data.length) return { status: 409, error: 'Esa venta ya está facturada en Gestión Nube.' }
+      if (gn.data.length) return { status: 409, error: 'Esa venta ya está facturada en el sistema anterior.' }
     }
 
     // 🔑 La clienta se guarda y la venta queda a su nombre ANTES de pedir el CAE (Bruno, 22-nov: «crear cliente, asociar la
@@ -1544,34 +1525,6 @@ async function esperarTransferencia({ sb, db, marca, c, espera, usuario }) {
   if (d.estado === 'llego') return { llego: true, mp: { pago_id: String(d.pago.id), cruce: d.por, pago_en: d.pago.cuando, diferencia: d.pago.diferencia || 0, por: usuario || null } }
   const recientes = pagosRecientes({ monto: espera, desde, pagos, reclamados, cuantos: RECIENTES_CAJA })
   return { llego: false, para: { desde, cruce: d, recientes } }
-}
-
-/**
- * Las diferencias de un día del libro (pestaña `erp › Diferencias`, sólo lectura): `stock_diff` del día
- * (el último calculado si ⛔ se pide), su resumen, los días que hay para elegir y la sobreventa de hoy.
- */
-export async function diferenciasDelDia({ marca, fecha: pedida }) {
-  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
-  const f = leerFecha(pedida)
-  if (f.error) return { status: 400, error: f.error }
-  const { url, key } = cfgDeMarca(marca)
-  const b = createClient(url, key)
-  const dias = await b.from('stock_libro_dia').select('fecha, resumen, foto_desde, foto_hasta').order('fecha', { ascending: false }).limit(30)
-  if (dias.error) throw new Error(`stock_libro_dia: ${dias.error.message}`)
-  const fecha = f.fecha ?? dias.data[0]?.fecha ?? null
-  const dia = dias.data.find((d) => d.fecha === fecha) ?? null
-  const [filas, negativos] = await Promise.all([
-    fecha ? leerTodo(b, 'stock_diff', (x) => x.select('product_id, size_id, deposito, linea, delta_gn, delta_libro, nivel_gn, nivel_libro, clase, explicacion').eq('fecha', fecha).order('product_id')) : [],
-    negativosDelLibro(marca).catch((e) => ({ error: e.message })),
-  ])
-  const negs = Array.isArray(negativos) ? negativos : []
-  const ids = [...new Set([...filas, ...negs].map((r) => Number(r.product_id)))]
-  const nombres = await nombresDeVariantes(b, ids)
-  return {
-    fecha, dias: dias.data.map((d) => d.fecha), fotoDesde: dia?.foto_desde ?? null, fotoHasta: dia?.foto_hasta ?? null,
-    ...armarDiferencias({ filas, nombres, resumen: dia?.resumen, negativos: negs }),
-    sobreventaSinConexion: negativos === null, sobreventaError: negativos && !Array.isArray(negativos) ? negativos.error : null,
-  }
 }
 
 /**
@@ -1941,11 +1894,6 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET' && req.query.vista === 'pedidos-tn') {
       const r = await pedidosSinPagar({ marca: String(req.query.marca || '') })
-      return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
-    }
-
-    if (req.method === 'GET' && req.query.vista === 'diferencias') {
-      const r = await diferenciasDelDia({ marca: String(req.query.marca || ''), fecha: req.query.fecha })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)
     }
 
@@ -2360,7 +2308,7 @@ export default async function handler(req, res) {
       // 🔑 Sólo las líneas de esta base que ya cortaron (`erp_corte`): las otras todavía cambian en Gestión Nube.
       const r = await conMotor(marca, 'El cambio', async (db) => {
         const lineas = lineasEnErp(await cortesDe(db), marca)
-        if (!lineas.length) return { status: 400, error: `Los cambios de ${ETIQUETA_LINEA[marca] || marca} todavía se hacen en Gestión Nube.` }
+        if (!lineas.length) return { status: 400, error: `Los cambios de ${ETIQUETA_LINEA[marca] || marca} todavía no están disponibles.` }
         return ventaGnDeCambio({ sb: createClient(url, key), db, store: marca, gnVentaId: String(req.query.id || ''), lineas })
       })
       return res.status(r.status || 200).json(r.status ? { error: r.error } : r)

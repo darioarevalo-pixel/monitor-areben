@@ -184,22 +184,6 @@ export type HistorialDePrenda = { filas: FilaHistorial[]; depositos: Array<{ dep
 export const leerHistorialDePrenda = (marca: MarcaErp, producto: string, talle: string) =>
   pedir<HistorialDePrenda>(null, `&vista=historial-prenda&marca=${marca}&producto=${producto}&talle=${talle}&nc=${Date.now()}`, 'No se pudieron leer los movimientos del producto.')
 
-export type FilaDiferencia = {
-  producto: string; talle: string; nombre: string | null; talleNombre: string | null; linea: string; deposito: string
-  clase: string; explicacion: string | null; deltaGN: number; deltaLibro: number; nivelGN: number; nivelLibro: number; diferencia: number
-}
-export type DiferenciasDelDia = {
-  fecha: string | null; dias: string[]; fotoDesde: string | null; fotoHasta: string | null
-  grupos: Array<{ clase: string; nombre: string; mirar: string; filas: FilaDiferencia[]; unidades: number }>
-  explicadas: Array<{ clase: string; nombre: string; variantes: number }>
-  desconocidas: number; inexplicadas: number
-  sobreventa: Array<{ producto: string; talle: string; nombre: string | null; talleNombre: string | null; linea: string; deposito: string; nivelLibro: number }>
-  sobreventaSinConexion: boolean; sobreventaError: string | null
-}
-
-export const leerDiferencias = (marca: MarcaErp, fecha: string | null) =>
-  pedir<DiferenciasDelDia>(null, `&vista=diferencias&marca=${marca}${fecha ? `&fecha=${fecha}` : ''}&nc=${Date.now()}`, 'No se pudieron leer las diferencias del día.')
-
 export type TiendaErp = 'bdi' | 'zattia' | 'stunned'
 export type FilaConciliacion = {
   tipo: string; clase: string; clave: string; dias: number
@@ -350,7 +334,7 @@ export type VentaGnCambio = {
   lineas: Array<{ product_id: number; size_id: number; sku: string | null; nombre: string | null; talle: string | null; cantidad: number; precio: number; cambiado: number; linea: string }>
 }
 export const leerVentaGnCambio = (id: string, marca: MarcaErp) =>
-  pedir<VentaGnCambio>(null, `&vista=venta-gn-cambio&marca=${marca}&id=${encodeURIComponent(id)}&nc=${Date.now()}`, 'No se pudo leer la venta de Gestión Nube.')
+  pedir<VentaGnCambio>(null, `&vista=venta-gn-cambio&marca=${marca}&id=${encodeURIComponent(id)}&nc=${Date.now()}`, 'No se pudo leer la venta del sistema anterior.')
 
 /** El PIN de la encargada, probado antes de seguir (el cambio sin ticket); el servidor lo vuelve a verificar al confirmar. */
 export const verificarPin = (persona: string, pin: string, marca: MarcaErp) =>
@@ -1215,9 +1199,9 @@ export type QuedaEnDeposito = { product_id: number; size_id: number; sku: string
 export const leerCorteDeLinea = (linea: TiendaErp) =>
   pedir<{ en_erp: boolean }>(null, `&vista=corte&marca=${linea}&nc=${Date.now()}`, 'No se pudo leer el corte de la línea.')
 export const leerDepositos = (linea: TiendaErp) =>
-  pedir<{ depositos: DepositoErp[] }>(null, `&vista=depositos&marca=${linea}&nc=${Date.now()}`, 'No se pudieron leer los depósitos.')
+  pedir<{ depositos: DepositoErp[] }>(null, `&vista=depositos&marca=${linea}&nc=${Date.now()}`, 'No se pudieron leer las ubicaciones.')
 export const activarDeposito = (linea: TiendaErp, deposito: string, activar: boolean) =>
-  pedir<{ ok: true; ya?: boolean; depositos: DepositoErp[] }>(post({ accion: activar ? 'deposito-activar' : 'deposito-desactivar', linea, deposito }), '', activar ? 'No se pudo activar el depósito.' : 'No se pudo desactivar el depósito.')
+  pedir<{ ok: true; ya?: boolean; depositos: DepositoErp[] }>(post({ accion: activar ? 'deposito-activar' : 'deposito-desactivar', linea, deposito }), '', activar ? 'No se pudo activar la ubicación.' : 'No se pudo desactivar la ubicación.')
 
 // ── ERP › Configuración › Tokens de la API (`api/_erp-tokens.js`, motor sql/071) — sólo admin ──
 export type TokenApi = {

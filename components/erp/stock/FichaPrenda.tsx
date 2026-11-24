@@ -105,10 +105,10 @@ export function FichaPrenda({ marca, prenda, onCerrar, ajustar }: {
       </DatosFicha>
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
-        <h3 style={h3}>Por depósito</h3>
+        <h3 style={h3}>Por ubicación</h3>
         {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : (
-          <div role="table" aria-label="Stock por depósito" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 64px', columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
-            {['Depósito', 'Stock'].map((t, i) => <span key={i} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: i ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>)}
+          <div role="table" aria-label="Stock por ubicación" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 64px', columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
+            {['Ubicación', 'Stock'].map((t, i) => <span key={i} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: i ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>)}
             {s.depositos.filter((d) => d.deposito !== 'deposito_mayorista' || d.libro !== 0).map((d) => (
               <div key={d.deposito} role="row" style={{ display: 'contents' }}>
                 <span role="cell" style={{ padding: '8px 0', borderBottom: `1px solid ${color.bg2}` }}>{nombreDe(NOMBRE_DEPOSITO, d.deposito)}</span>

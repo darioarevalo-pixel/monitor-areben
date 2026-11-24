@@ -107,7 +107,7 @@ describe('cambio desde una venta de Gestión Nube, por el corte de la línea', (
     cortes = HOY
     expect(await desdeGn('zattia', 1, [3])).toMatchObject({ ok: true })
     expect(registrado()).toEqual([{ marca: 'stunned', prueba: false }])
-    expect(await desdeGn('zattia', 2, [4])).toMatchObject({ status: 400, error: expect.stringMatching(/todavía cambia allá/) })
+    expect(await desdeGn('zattia', 2, [4])).toMatchObject({ status: 400, error: expect.stringMatching(/no está en la venta .* del sistema anterior/) })
     expect(registrarCambio).toHaveBeenCalledTimes(1)
   })
 
@@ -201,7 +201,7 @@ describe('🔴 cambio contra una venta de Areben Gestión DE PRUEBA (revisión 1
   it('con la línea cortada, la copia de prueba ⛔ se cambia (dejaba el cambio de prueba y el stock sin mover)', async () => {
     cortes = [STUNNED, BDI]
     ventaOriginal = { prueba: true, marca: 'bdi' }
-    expect(await desdeErp('bdi')).toMatchObject({ status: 409, error: 'Venta de prueba: buscala con su número de Gestión Nube.' })
+    expect(await desdeErp('bdi')).toMatchObject({ status: 409, error: 'Venta de prueba: buscala con su número del sistema anterior.' })
     expect(registrarCambio).not.toHaveBeenCalled()
   })
 

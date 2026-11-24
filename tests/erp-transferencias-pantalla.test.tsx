@@ -48,7 +48,7 @@ const clic = async (el: Element) => { await act(async () => { (el as HTMLElement
 const filaDe = (t: string) => [...host.querySelectorAll('[role="row"]')].find((r) => r.textContent?.includes(t))!
 
 describe('la lista de transferencias', () => {
-  it('sin abiertas entra a Todas; barrita, productos pedidas → enviadas y el número de Gestión Nube', async () => {
+  it('sin abiertas entra a Todas; barrita, productos pedidas → enviadas y sin Gestión Nube', async () => {
     await montar()
     expect(leerTransferencias).toHaveBeenCalledTimes(1)
     expect(boton(/^Todas/).getAttribute('aria-pressed') ?? boton(/^Todas/).getAttribute('aria-selected')).toBe('true')
@@ -58,7 +58,7 @@ describe('la lista de transferencias', () => {
     expect(t).toContain('Transferida con faltantes')
     expect(t).toContain('4 → 3')
     expect(filaDe('T-7745').textContent).toContain('Local')
-    expect(todo()).toMatch(/«Recibida» todavía no se controla/)
+    expect(todo()).not.toContain('Gestión Nube')
   })
 
   it('la fila abre la ficha al costado con cada producto; la de antes de Areben Gestión lo dice', async () => {

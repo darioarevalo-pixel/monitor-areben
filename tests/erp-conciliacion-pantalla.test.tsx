@@ -55,7 +55,7 @@ describe('ConciliacionDia', () => {
     expect(texto()).not.toContain('Gestión Nube')
     expect(texto()).not.toContain('Areben Gestión contra')
   })
-  it('dice cuánto coincide, el diff de Gestión Nube, Mercado Libre sin conexión, y cada clase como vista con su número', async () => {
+  it('dice cuánto coincide, sin Gestión Nube, Mercado Libre sin conexión, y cada clase como vista con su número', async () => {
     await montar()
     expect(leerConciliacion).toHaveBeenCalledWith('zattia', null)
     expect(texto()).toMatch(/No coinciden3del 18\/10/)
@@ -63,10 +63,10 @@ describe('ConciliacionDia', () => {
     expect(texto()).toContain('80.0%')
     expect(texto()).toContain('1 de 20 pedidos no coinciden (7 días)')
     expect(texto()).toContain('Coinciden los 20 pedidos (7 días)')
-    expect(texto()).toMatch(/Con Gestión Nube\d+sin explicar/)
+    expect(texto()).not.toContain('Gestión Nube')   // 23-nov: sin el cuadro de Gestión Nube
     expect(texto()).not.toContain('Stock: Mercado Libre')   // Zattia ⛔ vende en ML: sin tarjeta
     expect(boton(/^Areben Gestión dice otro stock/).textContent).toContain('1')
-    expect(boton(/^Cancelado con la venta activa en Gestión Nube/).textContent).toContain('1')
+    expect(boton(/^Cancelado con la venta activa en el sistema anterior/).textContent).toContain('1')
     await clic(boton(/^Areben Gestión dice otro stock/))
     expect(texto()).toContain('(1 vienen de días anteriores)')
     expect(host.querySelectorAll('[role="row"]').length).toBeGreaterThan(0)

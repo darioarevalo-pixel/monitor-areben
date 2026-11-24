@@ -56,7 +56,7 @@ const COLUMNAS: ColumnaLista[] = [
   { key: 'n', titulo: 'Nº', ancho: '70px', movil: 'oculta' },
   { key: 'h', titulo: 'Fecha', ancho: '110px', movil: 'chico' },
   { key: 'motivo', titulo: 'Motivo', ancho: 'minmax(200px, 1.6fr)', movil: 'titulo' },
-  { key: 'dep', titulo: 'Depósito', ancho: '150px', movil: 'chico' },
+  { key: 'dep', titulo: 'Ubicación', ancho: '150px', movil: 'chico' },
   { key: 'quien', titulo: 'Responsable', ancho: '120px', movil: 'oculta' },
   { key: 'estado', titulo: 'Estado', ancho: '120px', movil: 'chico' },
   { key: 'prendas', titulo: 'Productos', ancho: '90px', derecha: true, movil: 'oculta' },
@@ -352,14 +352,14 @@ export function AjustesStock({ pedida = null, alContar, enErp: _enErp = false }:
                 </Select>
               </Field>
             )}
-            <Field label="Depósito">
+            <Field label="Ubicación">
               <Select value={borrador.deposito} onChange={(e) => setBorrador({ ...borrador, deposito: e.target.value })}>
                 {DEPOSITOS[base].map((d) => <option key={d} value={d}>{deposito(d)}</option>)}
               </Select>
             </Field>
             <div style={{ flex: '1 1 220px' }}>
-              <Field label={borrador.motivo === 'otro' ? 'Detalle (obligatorio)' : 'Detalle (opcional)'}>
-                <Input value={borrador.detalle} maxLength={200} onChange={(e) => setBorrador({ ...borrador, detalle: e.target.value })} placeholder={borrador.motivo === 'fallado' ? 'Ej.: costura abierta' : borrador.motivo === 'otro' ? 'Ej.: apareció en el depósito' : ''} />
+              <Field label="Detalle">
+                <Input value={borrador.detalle} maxLength={200} onChange={(e) => setBorrador({ ...borrador, detalle: e.target.value })} placeholder={borrador.motivo === 'otro' ? 'Obligatorio · ej.: apareció en el depósito' : borrador.motivo === 'fallado' ? 'Opcional · ej.: costura abierta' : 'Opcional'} />
               </Field>
             </div>
           </div>

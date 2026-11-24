@@ -133,7 +133,7 @@ describe('Ingresos y ajustes', () => {
     await act(async () => {})
     expect(texto()).toContain('Escribí el porqué')
     expect(boton('Ingresar 2 unidades').disabled).toBe(true)
-    const porque = [...host.querySelectorAll('input')].find((i) => i.closest('label, div')?.textContent?.includes('Detalle (obligatorio)')) as HTMLInputElement
+    const porque = [...host.querySelectorAll('input')].find((i) => i.closest('label, div')?.textContent?.includes('Detalle') && i.placeholder.startsWith('Obligatorio')) as HTMLInputElement
     escribir(porque, 'apareció en el depósito')
     await act(async () => {})
     await click(boton('Ingresar 2 unidades'))

@@ -46,7 +46,7 @@ describe('ERP › Stock › Transferencias', () => {
       { product_id: 9, size_id: 3, sku: 'Z-9', deposito: 'deposito', cantidad: -2, ocurrido_en: '2026-10-20T15:00:00Z', detalle: { foto: 'x' } },
       { product_id: 9, size_id: 3, sku: 'Z-9', deposito: 'local', cantidad: 2, ocurrido_en: '2026-10-20T15:00:00Z', detalle: { foto: 'x' } },
     ])
-    expect(f).toMatchObject({ desdeTexto: 'Depósito', haciaTexto: 'Local', origenTexto: 'A mano en Gestión Nube', estadoTexto: 'Hecha en Gestión Nube', enviadas: 2, numero: null, paso: 4 })
+    expect(f).toMatchObject({ desdeTexto: 'Depósito', haciaTexto: 'Local', origenTexto: 'A mano en el sistema anterior', estadoTexto: 'Hecha en el sistema anterior', enviadas: 2, numero: null, paso: 4 })
   })
 
   it('Stunned vive en la base de Zattia: cada fila trae su línea y el filtro deja sólo la elegida', () => {

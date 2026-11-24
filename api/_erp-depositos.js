@@ -15,16 +15,16 @@ const motor = () => import('../motor/stock/deposito.mjs')
 export async function depositosDeLinea({ linea }, deps) {
   if (!LINEAS.includes(linea)) return { status: 400, error: 'Línea inválida' }
   const m = await motor()
-  return deps.conMotor(baseDe(linea), 'Los depósitos', async (pg) => ({ depositos: await m.depositosDe(pg, { linea }) }))
+  return deps.conMotor(baseDe(linea), 'Las ubicaciones', async (pg) => ({ depositos: await m.depositosDe(pg, { linea }) }))
 }
 
 export async function accionDeDeposito({ body, usuario }, deps) {
   const linea = String(body.linea || '')
   if (!LINEAS.includes(linea)) return { status: 400, error: 'Línea inválida' }
   const deposito = String(body.deposito || '')
-  if (!/^[a-z_]{1,40}$/.test(deposito)) return { status: 400, error: 'Falta el depósito' }
+  if (!/^[a-z_]{1,40}$/.test(deposito)) return { status: 400, error: 'Falta la ubicación' }
   const m = await motor()
-  return deps.conMotor(baseDe(linea), 'Los depósitos', async (pg) => {
+  return deps.conMotor(baseDe(linea), 'Las ubicaciones', async (pg) => {
     const verbo = body.accion === 'deposito-activar' ? m.activarDeposito : m.desactivarDeposito
     const r = await verbo(pg, { linea, deposito, usuario })
     if (r.ok) return { ...r, depositos: await m.depositosDe(pg, { linea }) }
