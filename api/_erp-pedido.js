@@ -11,6 +11,7 @@
  *     reservaría dos veces. Se prende el día del corte de BDI, junto con apagar esa copia.
  * Sin la sql/064 en la base, las lecturas contestan vacío (`falta064`) en vez de romper.
  */
+import { filtrarPorModelo, separarModelo } from '../lib/erp/buscar-modelo.core.js'
 import { panelAbierto } from './_erp-clientes.js'
 import { cortesDeCaja } from './_caja-corte.js'
 import { cuentaDelPedido, packDe, packsEnRenglones, precioDeTienda, promoDe, renglonGuardado, soloPack } from '../lib/erp/precio-tienda.core.js'
@@ -291,22 +292,24 @@ export async function productosParaElPanel({ pedidoId = '', q = '', usuario = nu
   if (!UUID.test(String(pedidoId))) return { status: 400, error: 'Falta el pedido' }
   const texto = String(q || '').trim().slice(0, 80)
   if (texto.length < 2) return { prendido: true, productos: [] }
+  // «templado premium 16 pro max»: el producto va al motor y el modelo deja sólo ese talle (Darío 24-nov).
+  const { producto, modelo } = separarModelo(texto)
   const reglas = leerReglas(deps)
   return deps.conMotor('bdi', 'Buscar el producto', async (pg) => {
     const { productosParaPedido } = await import('../motor/pedido/venta.mjs')
-    const r = await productosParaPedido(pg, { pedido_id: String(pedidoId), q: texto })
+    const r = await productosParaPedido(pg, { pedido_id: String(pedidoId), q: producto })
     if (!r.ok) return { status: r.error?.codigo === 'NO_ENCONTRADO' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo buscar.' }
     const R = await reglas
-    if (!R || !r.productos.length) return { prendido: true, productos: r.productos, tienda: !!R }
+    if (!R || !r.productos.length) return { prendido: true, productos: filtrarPorModelo(r.productos, modelo), tienda: !!R }
     // Con los precios de la tienda (Darío 18-nov): cada talle con su precio y qué es; el pack, si tiene.
     const datos = await datosDeProductos(pg, 'bdi', r.productos.map((p) => p.product_id))
     return {
       prendido: true, tienda: true,
-      productos: r.productos.map((p) => {
+      productos: filtrarPorModelo(r.productos.map((p) => {
         const d = datos.get(String(p.product_id))
         const variantes = p.variantes.map((v) => ({ ...v, ...precioDeTienda(R, { product_id: p.product_id, size_id: v.size_id, lista: p.precio, costo: d?.costo ?? null }) }))
         return { ...p, variantes, pack: packDe(R, p.product_id, p.variantes), soloPack: soloPack(R, p.product_id), promo: promoDe(R, p.product_id, d?.categoria ?? null) }
-      }),
+      }), modelo),
     }
   })
 }

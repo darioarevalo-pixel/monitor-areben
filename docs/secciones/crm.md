@@ -81,6 +81,8 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
     SKU o código, con el stock del depósito del pedido y el precio de la lista **mayorista** — el MISMO que cobra el cambio.
     🔴 Sin precio mayorista cargado se ve pero ⛔ se agrega (el motor contesta SIN_PRECIO). El agregado viaja en el mismo
     «Guardar» (`tests/pedido-agregar-producto.test.tsx`). ⛔ el buscador de la Caja: lee el espejo de GN y no trae ese precio.
+    Entiende el MODELO (Darío 24-nov): «templado premium 16 pro max» / «16pm» ⇒ el producto va al motor y sólo queda ese
+    talle (exacto primero; sin coincidencia, todo). Sin número ⛔ hay modelo («airpods pro»). `lib/erp/buscar-modelo.core.js`.
   - **Número desconocido** (Darío §1): con pedidos «sin entrar» y el chat sin cliente, la tarjeta pregunta «¿Es de un cliente
     que ya tenés?» — buscar (`clientes-panel`, fichas CON id) y elegir anota el número con quién es (`anotar-whatsapp`).
     «Es nuevo» = **nombre; el CUIT/DNI es OPCIONAL** (Darío/Bruno 15-nov; era obligatorio desde el 31-oct) y se completa al
