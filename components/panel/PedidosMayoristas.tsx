@@ -30,7 +30,8 @@ import { cuentaDelPedido } from '@/lib/erp/precio-tienda.core.js'
 import { esAprobador } from '@/lib/reposicion/armado.core.js'
 import { usePerfilOpcional } from '@/components/SesionProvider'
 import { copiarAlPortapapeles } from '@/lib/portapapeles'
-import { Bloque, BotonPaso, Cuando, Paso, Renglon } from './pasos-pedido'
+import { Bloque, BotonLink, BotonPaso, Cuando, Paso, Renglon } from './pasos-pedido'
+import { linksDePedidos, type LinkPedido } from '@/lib/crm/pedidos-catalogo'
 
 const plata = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 const diaMes = (iso: string) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}` }
@@ -98,6 +99,16 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
   useEffect(() => {
     for (const id of abiertos ? abiertos.split(',') : []) adelantarPedidoPanel(id)
   }, [abiertos])
+  // 🔗 El link que recibió la clienta al confirmar en la tienda (Darío 24-nov), para volver a pasárselo. Sólo los que salieron
+  // de la tienda lo tienen (y dura 90 días); si no hay, el botón ⛔ aparece.
+  const numeros = conAlgo.map((p) => String(p.numero ?? '')).filter(Boolean).sort().join(',')
+  const [links, setLinks] = useState<Record<string, LinkPedido>>({})
+  useEffect(() => {
+    if (!numeros) return
+    let vivo = true
+    linksDePedidos(numeros.split(',')).then((l) => vivo && setLinks(l))
+    return () => { vivo = false }
+  }, [numeros])
   if (!conAlgo.length && !pedidos.sinEntrar.length) return null
   const aPreparacion = async (p: PedidoDelCliente) => {
     setEnviando(p.id)
@@ -149,6 +160,7 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
                   {p.unidades} u · {plata(p.total)}{p.etapa === 'anulado' ? ' · Anulado' : p.pago ? <> · <b style={{ color: tonoPago(p.pago) }}>{textoPago(p.pago).toLowerCase()}</b></> : ''}
                 </div>
               </button>
+              {links[String(p.numero)] && <BotonLink l={{ link: links[String(p.numero)].link, total: p.total }} />}
               {pagar
                 ? <Button size="sm" variant="solid" tone="brand" onClick={() => setPagando({ ventaId: p.venta_id as string, numero: p.numero, falta: (p.pago as PagoPedido).falta })}>$ Cargar pago</Button>
                 : enviar && <Button size="sm" variant="solid" tone="success" disabled={enviando === p.id} onClick={() => void aPreparacion(p)}>Enviar a preparación</Button>}
