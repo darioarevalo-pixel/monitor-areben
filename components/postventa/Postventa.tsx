@@ -29,6 +29,7 @@ import { EditarFalla } from './EditarFalla'
 import { Devoluciones } from '@/components/reclamos/Reclamos'
 import { ArmarCambio } from '@/components/reclamos/ArmarCambio'
 import { DondeVa } from './GuiaPostventa'
+import { Redespacho } from './Redespacho'
 
 /**
  * **Cambios vuelve a ser una pestaña, pero no vuelve a ser un registro aparte.**
@@ -403,6 +404,8 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
 
           {!esAdmin && <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>Cargá acá el producto con falla; descuenta de <b>{modo === 'deposito' ? 'Depósito' : 'Local'}</b> cuando la prenda está en los dos lados · si el sistema la tiene de un solo lado, se descuenta de ahí. Administración recibe y confirma la falla.</div>}
 
+          {/* 🚚 Lo aprietan Local y Depósito (Bruno 24-nov): ⛔ Administración, que tiene Reclamos entero. */}
+          {!esAdmin && <Redespacho marca={marca} />}
           {formCarga}
           {avisos}
 

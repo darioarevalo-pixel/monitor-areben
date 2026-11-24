@@ -42,6 +42,28 @@ antes de deployar: las 4 del Local ⛔ no se mueven, las 3 del Depósito pasan a
 sección —⛔ no el desempate de `origenDe`, que probaría el otro lado—. La unidad está en la mano de
 quien la carga, y que el negativo quede de ese lado es lo que después deja arreglarlo.
 
+## 🚚 Redespacho por falla (24-nov-2026)
+
+> «me gustaria hacer el movimiento mas corto posible, y luego vemos como vamos ganando terreno, pq si tiene muchos
+> pasos, no lo saben usar» — Bruno
+
+A la clienta le llegó algo con falla y se le manda otro **desde el depósito**. Antes del corte se hacía en GN: venta
+al cliente «Falla» con ubicación Depósito. Desde el corte, la única orden que Logística recibe para eso es el
+**reemplazo de un reclamo** (`GET /internal-orders` del motor, `reason: replacement`). Así que el redespacho **es un
+reclamo**, armado en un toque:
+
+- Botón **«Redespacho por falla»** arriba de «Fallas del local» y «Fallas de depósito», y **«🚚 Redespacho»** en Inicio
+  (`?redespacho=1` abre la tarjeta). Lo aprietan **Local y Depósito** (Bruno 24-nov) ⇒ la acción está en
+  `ACCIONES_DE_LA_BANDEJA`: Depósito entra a Reclamos sólo por esa puerta.
+- `components/postventa/Redespacho.tsx` → `redespachar` → `action: 'redespacho'` (`api/_reclamos.js`): crea el reclamo
+  **resuelto, `otra_unidad`, motivo `falla`**, y descuenta con `fallaAlErp` (ajuste `fallado`, ref
+  `devolucion-<id>-reemplazo:<depósito>`, **siempre del depósito**: es de donde sale lo que se despacha).
+- 🔴 **El ref es el contrato con Logística** (`tests/redespacho.test.ts`): con otro ref el stock baja igual y la orden
+  ⛔ llega. Si el ERP ⛔ descuenta (sin stock en el depósito, línea sin cortar), **el reclamo se elimina**: ⛔ queda un
+  reemplazo sin orden.
+- ⛔ Todavía no: lo que vuelve de la clienta, el motivo detallado, la decisión de Administración. El caso queda en
+  Reclamos (`gn_venta_reemplazo_*` = `A-<ajuste>`) para seguirlo desde ahí.
+
 ## Reglas que el código no dice
 
 - 🔑 **La falla de una línea que YA ESTÁ EN EL ERP ⛔ va a GN** (Bruno 30-oct-2026): «está en el ERP» = fila en `erp_corte` y el
@@ -71,5 +93,6 @@ quien la carga, y que el negativo quede de ese lado es lo que después deja arre
 ## Pendiente
 
 - ▶️ El botón que falta: **rehacer la venta técnica** de una falla cargada sin credencial.
+- ✅ 24-nov: `descontarReemplazo` anota el ajuste del ERP (`A-n`) en `gn_venta_reemplazo_*`: antes quedaba en null y el botón seguía a la vista.
 - ▶️ `pasarAFallas`, `descontarReemplazo` y `descontarRegaladas` (`lib/reclamos/cliente.ts`)
   **siguen fijando `'deposito'`**: misma forma, y ahí muerde en BDI.

@@ -137,6 +137,8 @@ export function Inicio() {
     ve('postventa-local') && { label: 'Cargar falla', ruta: '/postventa-local', destacado: true },
     ve('cambios-local') && { label: 'Cargar cambio', ruta: '/cambios-local', destacado: true },
     ve('postventa-deposito') && { label: 'Falla (depósito)', ruta: '/postventa-deposito' },
+    // 🚚 Al lado de la falla, porque es lo mismo visto desde la clienta (Bruno 24-nov): abre la tarjeta directo.
+    (ve('postventa-local') || ve('postventa-deposito')) && { label: '🚚 Redespacho', ruta: ve('postventa-local') ? '/postventa-local?redespacho=1' : '/postventa-deposito?redespacho=1' },
     ve('reposicion') && { label: '🔁 Reposición', ruta: '/reposicion' },
     ve('postventa') && { label: '🧾 Post-venta', ruta: '/postventa' },
     ve('solicitudes') && { label: '📋 Solicitudes', ruta: '/solicitudes' },
