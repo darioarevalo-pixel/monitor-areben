@@ -48,7 +48,7 @@ describe('api/_erp-permisos-rol.js', () => {
     const sinTabla = { conMotor: async () => { throw Object.assign(new Error('no existe'), { code: '42P01' }) } }
     const r = await ponerRolesErp({ body: { marca: 'bdi', permiso: 'cuentas', roles: [] }, usuario: 'x' }, sinTabla)
     expect(r.status).toBe(409)
-    expect(r.error).toMatch(/049/)
+    expect(r.error).toBe('Todavía no disponible.')
     const db = dbCon()
     const ok = await restablecerRolesErp({ body: { marca: 'zattia', permiso: 'cobrar' } }, { conMotor: conMotor(db) })
     expect(ok.ok).toBe(true)

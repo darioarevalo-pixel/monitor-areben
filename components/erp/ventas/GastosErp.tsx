@@ -40,7 +40,7 @@ const dia = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 
 function bajarCsv(filas: FilaGasto[], marca: string, desde: string, hasta: string) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Fecha', 'Tipo', 'Detalle', 'Cuenta', 'Carga', 'Quién', 'Monto'].map(c).join(';')]
+  const renglones = [['Fecha', 'Tipo', 'Detalle', 'Cuenta', 'Carga', 'Responsable', 'Monto'].map(c).join(';')]
   for (const f of filas) renglones.push([f.fecha, TIPO_GASTO[f.tipo], f.detalle, f.cuenta, f.carga === 'automatica' ? 'Automática' : 'A mano', f.quien, String(f.monto).replace('.', ',')].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -140,7 +140,7 @@ export function GastosErp() {
           vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={vista === 'a_mano' ? 'Ningún gasto cargado a mano en el período.' : 'No hay gastos en el período.'} /></div> : null}
         />
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo los gastos…' : `${nombrePeriodo}: ${res ? pesos(res.total) : '—'}`}
+          {cargando && !datos ? 'Leyendo…' : `${nombrePeriodo}: ${res ? pesos(res.total) : '—'}`}
         </div>
       </div>
 
@@ -188,7 +188,7 @@ function NuevoGasto({ onCerrar, onGuardar }: {
   }
   return (
     <Modal abierto onCerrar={onCerrar} titulo="Nuevo gasto"
-      pie={<><Button variant="outline" onClick={onCerrar}>Cancelar</Button><Button disabled={guardando} onClick={() => void guardar()}>{guardando ? 'Cargando…' : 'Cargar gasto'}</Button></>}>
+      pie={<><Button variant="outline" onClick={onCerrar}>Cancelar</Button><Button disabled={guardando} onClick={() => void guardar()}>{guardando ? 'Leyendo…' : 'Cargar gasto'}</Button></>}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
         <Field label="Tipo"><Select value={f.tipo} onChange={(e) => poner('tipo', e.target.value)}>{TIPOS_A_MANO.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</Select></Field>

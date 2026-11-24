@@ -240,7 +240,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           )}
         </>
       ) : !ficha ? (
-        <span style={{ color: color.mut }}>Leyendo la venta…</span>
+        <span style={{ color: color.mut }}>Leyendo…</span>
       ) : (
         <>
           {v?.prueba && <Notice tone="warning">Venta de prueba: no mueve el stock.</Notice>}
@@ -327,7 +327,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           <Button tone="danger" disabled={trabajando || !ficha || motivo.trim().length < MOTIVO_MINIMO || !!ficha?.puedeAnular || faltaClienta} onClick={() => void confirmarAnular()}>Anular venta</Button>
         </>}
       >
-        {ficha?.puedeAnular ? <Notice tone="warning">{ficha.puedeAnular}</Notice> : !dev ? <span style={{ color: color.mut }}>Leyendo la venta…</span> : (
+        {ficha?.puedeAnular ? <Notice tone="warning">{ficha.puedeAnular}</Notice> : !dev ? <span style={{ color: color.mut }}>Leyendo…</span> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: space[3], marginBottom: space[3] }}>
             <DatoFicha titulo="Los productos">{textoDeVuelta(dev.vueltaSiAnula, { deposito: NOMBRE_DEPOSITO[v!.deposito as keyof typeof NOMBRE_DEPOSITO] ?? v!.deposito, prueba: !!v?.prueba })}</DatoFicha>
             {hayQueElegir ? (

@@ -46,7 +46,7 @@ function entrada(body) {
   if (!PERMISOS_EDITABLES.includes(permiso) || !(permiso in ERP_PERMISOS)) return { status: 400, error: 'Ese permiso no se puede repartir entre roles' }
   return { marca, permiso }
 }
-const sinTabla = { status: 409, error: 'Los roles todavía no están disponibles: falta actualizar la base (049).' }
+const sinTabla = { status: 409, error: 'Todavía no disponible.' } // sin la migración (E.3: el detalle, sólo para Bruno)
 
 /** `body`: `{ marca, permiso, roles }`. Guarda los roles de UN permiso en la base de esa marca. */
 export async function ponerRolesErp({ body, usuario }, { conMotor }) {

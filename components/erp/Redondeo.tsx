@@ -40,8 +40,8 @@ const COLUMNAS: ColumnaLista[] = [
   { key: 'viene', titulo: 'Próximo cambio', ancho: 'minmax(200px, 1fr)', movil: 'oculta' },
 ]
 const COLUMNAS_CAMBIOS: ColumnaLista[] = [
-  { key: 'puesta', titulo: 'Cuándo', ancho: '104px', movil: 'chico' },
-  { key: 'por', titulo: 'Quién', ancho: '130px', movil: 'oculta' },
+  { key: 'puesta', titulo: 'Fecha', ancho: '104px', movil: 'chico' },
+  { key: 'por', titulo: 'Responsable', ancho: '130px', movil: 'oculta' },
   { key: 'canal', titulo: 'Canal', ancho: '140px', movil: 'titulo' },
   { key: 'vale', titulo: 'Redondea', ancho: 'minmax(220px, 1.4fr)', movil: 'chico' },
   { key: 'desdeCambio', titulo: 'Vale desde', ancho: '104px', movil: 'chico' },

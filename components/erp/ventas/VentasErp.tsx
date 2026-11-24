@@ -353,7 +353,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
           </div>
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo las ventas…' : `${filas.length.toLocaleString('es-AR')} de ${(conteo.todas ?? 0).toLocaleString('es-AR')}`}
+          {cargando && !datos ? 'Leyendo…' : `${filas.length.toLocaleString('es-AR')} de ${(conteo.todas ?? 0).toLocaleString('es-AR')}`}
           {filas.some((f) => f.kind === 'pedido') && ' · Pedidos sin pagar: todos los abiertos, de cualquier fecha.'}
         </div>
       </div>

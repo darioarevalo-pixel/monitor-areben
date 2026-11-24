@@ -50,7 +50,7 @@ const diaCorto = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
 
 function bajarCsv(filas: FilaCobro[], marca: MarcaErp, desde: string, hasta: string) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Cuándo', 'Qué', 'Cliente', 'Forma de pago', 'Cuenta', 'Entra a', 'Monto', 'Quién', 'Comisión', 'Se acredita', 'Anulado', 'Línea'].map(c).join(';')]
+  const renglones = [['Fecha', 'Qué', 'Cliente', 'Forma de pago', 'Cuenta', 'Entra a', 'Monto', 'Responsable', 'Comisión', 'Se acredita', 'Anulado', 'Línea'].map(c).join(';')]
   for (const f of filas) {
     renglones.push([cuandoCorto(f.cuando), f.que, f.cliente, f.medioTexto, f.cuenta, f.entraA, String(f.monto).replace('.', ','), f.quien,
       f.comision == null ? '' : String(f.comision).replace('.', ','), f.acreditaEl, f.anulado ? 'sí' : '', LINEA[f.linea] ?? f.linea].map(c).join(';'))
@@ -205,7 +205,7 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
         <TileResumen titulo="Cobrado" valor={$(res.cobrado)} oscuro nota={`${nombrePeriodo} · ${libro}`} />
         <TileResumen titulo="Ingreso de plata" valor={$(res.entro)} nota={`${res.cobros.toLocaleString('es-AR')} ${res.cobros === 1 ? 'cobro' : 'cobros'} con plata`} />
         <TileResumen titulo="Salida de plata" valor={$(res.salio)} nota="vueltos y devoluciones" />
-        <TileResumen titulo="Quedó debiendo" valor={$(res.debe)} nota={res.saldo ? `${$(res.saldo)} con saldo a favor` : 'no ingresó plata'} />
+        <TileResumen titulo="Quedó debiendo" valor={$(res.debe)} nota={res.saldo ? `${$(res.saldo)} a favor` : 'no ingresó plata'} />
         <TileResumen titulo="Contraentrega" valor={$(res.calle)} nota={res.enLaCalle ? `${res.enLaCalle.toLocaleString('es-AR')} en la calle, desde el ${diaCorto(diaArgentino(Date.parse(res.calleDesde ?? '')))}` : 'nada en la calle'} />
       </div>
       {medios.length > 0 && (
@@ -251,7 +251,7 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
           </div>
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo los cobros…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
+          {cargando && !datos ? 'Leyendo…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
         </div>
       </div>
 
@@ -281,14 +281,14 @@ export function CobrosErp({ abrirVenta, abrirCliente }: {
             ) : (
             <DatosFicha>
               <DatoFicha titulo="Monto"><b style={{ fontVariantNumeric: 'tabular-nums' }}>{$exacto(ficha.monto)}</b></DatoFicha>
-              <DatoFicha titulo={ficha.clase === 'entrega' ? 'En la calle desde' : 'Cuándo'}>{cuandoCorto(ficha.cuando)}</DatoFicha>
+              <DatoFicha titulo={ficha.clase === 'entrega' ? 'En la calle desde' : 'Fecha'}>{cuandoCorto(ficha.cuando)}</DatoFicha>
               <DatoFicha titulo="Cliente">{ficha.cliente ?? '—'}</DatoFicha>
               <DatoFicha titulo="Forma de pago">{ficha.medioTexto}</DatoFicha>
               <DatoFicha titulo="Cuenta">{ficha.cuenta}</DatoFicha>
               <DatoFicha titulo="Entra a">{ficha.entraA ?? '—'}</DatoFicha>
               <DatoFicha titulo="Comisión">{ficha.comision == null ? '—' : $exacto(ficha.comision)}</DatoFicha>
               <DatoFicha titulo="Se acredita">{ficha.acreditaEl ? diaCorto(ficha.acreditaEl) : '—'}</DatoFicha>
-              <DatoFicha titulo="Quién">{ficha.quien ?? '—'}</DatoFicha>
+              <DatoFicha titulo="Responsable">{ficha.quien ?? '—'}</DatoFicha>
               <DatoFicha titulo="Línea">{LINEA[ficha.linea] ?? ficha.linea}</DatoFicha>
               {ficha.ref && <DatoFicha titulo="Referencia">{ficha.ref}</DatoFicha>}
             </DatosFicha>

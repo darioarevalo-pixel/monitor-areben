@@ -46,7 +46,7 @@ describe('Areben Gestión › el armazón propio', () => {
     await montar(['ventas', 'cobros'])
     const textos = () => [...div.querySelectorAll('nav.erp-menu a')].map((a) => a.textContent)
     // «Cargar un gasto» (caja chica, Bruno 30-oct): el local SÍ; la lista de Gastos ⛔.
-    expect(textos()).toEqual(['Inicio', 'Ventas', 'Ventas', 'Cobros', 'Cajas', 'Facturación', 'Cargar un gasto', 'Abrir la Caja↗', 'Stock', 'Productos', 'Clientes', 'Volver al monitor'])
+    expect(textos()).toEqual(['Inicio', 'Ventas', 'Ventas', 'Cobros', 'Cajas', 'Facturación', 'Cargar un gasto', 'Caja↗', 'Stock', 'Productos', 'Clientes', 'Volver al monitor'])
     act(() => root?.unmount()); root = null
     await montar(['ventas', 'cargar-gasto'])
     expect(replace).not.toHaveBeenCalled()

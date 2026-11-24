@@ -151,7 +151,7 @@ export function CambioCaja() {
           {!ventas.length ? <EmptyState title="No hay ventas para cambiar con esa búsqueda." /> : (
             <TableWrap>
               <table>
-                <THead><Tr><Th>Nº</Th><Th>Cuándo</Th><Th>Cliente</Th><Th style={{ textAlign: 'right' }}>Total</Th></Tr></THead>
+                <THead><Tr><Th>Nº</Th><Th>Fecha</Th><Th>Cliente</Th><Th style={{ textAlign: 'right' }}>Total</Th></Tr></THead>
                 <TBody>
                   {ventas.map((v) => (
                     <Tr key={v.clave} onClick={() => void abrir(v)} style={{ cursor: 'pointer' }}>
@@ -254,7 +254,7 @@ export function CambioCaja() {
               <div style={{ fontSize: 18 }}>
                 {diferencia > 0
                   ? <>
-                    {saldoUsado > 0 && <>Con saldo a favor: <MoneyText value={saldoUsado} strong /> · </>}
+                    {saldoUsado > 0 && <>A favor: <MoneyText value={saldoUsado} strong /> · </>}
                     {resto > 0 && (cobrado.total > 0 && cobrado.total - saldoUsado !== resto
                       ? <>A pagar: <MoneyText value={cobrado.total - saldoUsado} strong /> <span style={{ fontSize: 14 }}>· {cobrado.total - saldoUsado < resto ? 'sin descuento' : 'sin recargo'} <MoneyText value={resto} /></span></>
                       : <>A pagar: <MoneyText value={resto} strong /></>)}

@@ -1,6 +1,192 @@
+# AREBEN — LO COMÚN: las palabras y la forma de trabajo de todos los sistemas
+
+Versión: 2026-11-23e (en el repo `monitor-areben` desde el 23-nov; reemplaza a `VOCABULARIO.md`)
+Dueño: **Areben Gestión** (el ERP; repo `monitor-areben`). Decidido por Bruno el 23-nov-2026: *«ordenar todo desde ERP para
+el resto de los sistemas, y que sea uniforme la forma de trabajo»*.
+
+🔑 **Este es EL archivo.** Reemplaza a `VOCABULARIO.md` (que queda adentro, entero, en la Parte 2) y al glosario/manual de
+Darío (que se funde acá cuando llegue). Cada sistema lo **copia o lo lee de acá**; ⛔ ningún sistema tiene su versión propia.
+Si una palabra o una regla cambia, cambia ACÁ primero y después se copia.
+
+---
+
+## A · A qué sistemas aplica
+
+| sistema | repo / dónde | quién lo toca | cómo recibe este archivo |
+|---|---|---|---|
+| **Areben Gestión** (ERP + monitor) — **el dueño** | `monitor-areben` | Bruno, Darío, sesiones de Claude | es la fuente: `AREBEN-COMUN.md` en la raíz del repo (desde 23-nov) |
+| **Maketa** (marketing: piezas, publicación, informes) | `areben-marketing` | Bruno, sesiones de Claude | copia idéntica (hoy `VOCABULARIO.md`) |
+| **Catálogo / tienda** (lo que escribe en Tienda Nube) | `bdi-catalogo` | Darío | ❓ hoy ⛔ tiene copia: sumarla |
+| **Lo de Darío** (su glosario/manual y «muchas otras cosas») | notas de sus sesiones + `~/Bruno/erp-textos/` | Darío | ✅ fundido en §E (23-nov) |
+| **Logística** (la app de Ger) | ❓ | Ger | ❓ preguntar si se suma |
+| **Producción / dashboard** | `areben-produccion`, `areben-dashboard*` | el hermano de Bruno | ❓ preguntar si se suma |
+
+⛔ **HC Arévalo** (la app médica) ⛔ es de Areben: queda afuera.
+
+---
+
+## B · Cómo se cambia este archivo
+
+1. **Cada corrección de Bruno (o de Darío, con el OK de Bruno) sobre una palabra o una regla es UNA FILA acá, en el
+   momento** —⛔ un arreglo suelto en una pantalla ni una línea en el chat—. Si no se escribe acá, la próxima sesión la
+   vuelve a escribir mal (Bruno, 12-oct: *«siempre que hago código, siempre tengo que estar arreglando eso»*).
+2. Se sube la `Versión:` de arriba (fecha; si cambia dos veces el mismo día, con letra: `2026-11-23b`).
+3. **El mismo día se copia a cada sistema de la tabla A** y se corre el `diff` contra la fuente. Una copia vieja es peor que
+   ninguna: en ese momento las dos se creen la verdad.
+4. Una regla que cambia **se reescribe** (⛔ se agrega otra al lado contradiciéndola) y se dice desde cuándo y quién.
+
+---
+
+## C · La forma de trabajo (la misma en todos los repos)
+
+### C.1 · Dónde se anota cada cosa
+- **`PENDIENTES.md`** (uno por repo o por área): **sólo lo abierto, UNA línea por cosa**, con su dueño. Al cerrar algo
+  **se borra la línea** (la historia va a la bitácora). Es el ÚNICO lugar donde se pregunta «¿qué falta?».
+  Leyenda: ▶️ hay que hacerlo · ⏳ espera a otro · ❓ decisión sin tomar · ✅ hecho (se borra pronto).
+- **`bitacora.md`**: el relato largo (una medición, un oráculo, una decisión con contexto), al final, con fecha.
+- **`reglas-vigentes.md`**: lo que Bruno (o Darío) decidió y **sigue valiendo**. Se lee al entrar.
+- **Lo DICTADO por Bruno se anota en el momento**, con sus palabras entre comillas.
+
+### C.2 · Cómo se le contesta a Bruno
+- **En castellano**, corto (dos líneas cuando alcanza), sin jerga técnica.
+- **Medir, no estimar**: cuánto tarda, cuántas son, dónde se va el tiempo. Un número dice qué se contó.
+- ⛔ **Deducir una decisión**: si hay que elegir, se pregunta **con opciones** y una recomendada.
+- ⛔ **Rondas de aprobación**: lo pedido se hace; se pregunta sólo lo que de verdad es de Bruno.
+- Si hay que correr algo a mano: **el próximo comando completo, uno por vez**.
+
+### C.3 · Antes de decir «anduvo», «está» o «no se puede»
+- **Nombrar el oráculo antes**: qué se va a mirar para saber que anduvo, y que venga **por otro camino** que el cambio.
+- **Medir el EFECTO en producción después de publicar** (⛔ el mensaje de «publicado»: el deploy viejo puede seguir
+  sirviendo minutos después).
+- **El cero afirma**: «0 errores» también lo contesta una pantalla vacía. Se mira que haya algo.
+
+### C.4 · El código compartido (varias personas y sesiones en el mismo repo)
+- **Puede haber otra sesión en el MISMO repo al mismo tiempo.** Cada trabajo va en **su propia copia (worktree) desde
+  `origin/main`**; ⛔ se trabaja sobre el `main` local de otro.
+- ⛔ **Push forzado, ⛔ pisar lo de otro.** Si `main` avanzó: rama nueva desde `main` con el commit encima.
+- **Lint y tests antes de subir.** El CI corre typecheck, lint, tests y build: ⛔ se publica en rojo.
+- **Publicar** el monitor/ERP: rama con CI verde ⇒ **Actions › Publicar** (`areben-motor`, `repo=monitor`), **primero
+  seco, después «escribir»**. En Maketa, **pushear a `main` YA es publicar**.
+
+### C.5 · Las pantallas
+- La palabra la elige **el negocio** (Parte 2, §5), ⛔ quien lo programa. Botones en **infinitivo**; voseo sólo en ayudas.
+- **Sin siglas** (Tiendanube, ⛔ TN; Nota de crédito, ⛔ NC) y **sin jerga de la construcción** (motor, espejo,
+  homologación, sesión A…).
+- Un nombre de pantalla que **no está** en la Parte 2 **se le pregunta a Bruno antes de publicar**.
+- **Las novedades** cuentan **qué se incorporó y cómo se usa**, ⛔ cómo está hecho por detrás. Lo que es sólo para Admin
+  ⛔ lleva novedad.
+
+### C.6 · Datos: el ERP es la fuente
+- **Ventas, stock, clientes y cobros viven en Areben Gestión.** Los demás sistemas **leen del ERP** (por su API), ⛔ de
+  tablas espejo (Bruno 15-nov: *«hay que pasar todo al ERP… no podemos depender de los espejos»*).
+- **El stock lo escribe el ERP y el ERP se lo manda a Tienda Nube** (9-nov: *«ese es el flujo»*).
+- **Gestión Nube ya no se usa** (BDI cortada el 14-nov, Zattia el 22-nov; suscripciones canceladas el 23-nov). Lo viejo, si hace falta nombrarlo, es «Sistema anterior».
+- Lo que **escribe** en un sistema vivo (stock, tienda, plata, facturas con CAE) se prueba sobre UNA cosa y se mide antes
+  de hacerlo con todas.
+
+### C.7 · Secretos, mails y plata
+- **Contraseñas, tokens y llaves van a Bitwarden** (⛔ en el chat, ⛔ en el repo, ⛔ en un .md).
+- **Los mails salen SIEMPRE por Amazon SES**, ⛔ Resend.
+- Lo que **gasta plata** o pide un acceso nuevo se le pregunta a Bruno antes, con el costo.
+
+---
+
+## D · Lo que falta para que esté completo
+
+- ✅ **Lo de Darío llegó: es la §E** (23-nov). Vivía en las notas de sus sesiones de Claude en su Mac y en los PDFs de
+  textos del ERP (`~/Bruno/erp-textos/`). Bruno aprobó toda la §E el 23-nov.
+- ❓ Si Logística (Ger) y Producción/dashboard se suman a la tabla A.
+- 🔴 **Las copias de hoy ya no coinciden** (medido 23-nov):
+  - `areben-marketing` está atrás: le falta lo que el ERP sumó después del 15-nov (`SKU`/`Código de barras` de Darío y
+    4 filas: `Vista previa`, `Envío`, `Factura A/B`, `Eliminar ajuste`; además la fila de `Rutas` cambió) y **todavía dice «`código` ⛔ `SKU`»**, que
+    Darío reemplazó el 20-nov.
+  - El ERP sumó filas hasta el 23-nov **sin subir su `Versión: 2026-11-15`**.
+  - En la Mac de Bruno, `areben-marketing` tiene cambios **sin guardar** de otra sesión (versión `2026-10-12c`), más
+    viejos que los dos.
+- ✅ 23-nov: este archivo entró al repo del ERP y reemplazó a `VOCABULARIO.md` (los tests de vocabulario y de términos
+  lo leen igual: la Parte 2 conserva su forma). Lo editan Bruno y Darío ACÁ; ⛔ se pasa por mensaje. Bruno lo copia a MAKETA.
+
+---
+
+## E · Lo de Darío (23-nov-2026)
+
+### E.1 · Palabras que Bruno ya aprobó (23-nov, con Darío al lado)
+
+✅ **Tanda 1 (23-nov, Areben Gestión)**: Ubicación · Origen/Destino · Transferir · «Opcional» adentro · Sistema anterior
+(⛔ Gestión Nube) · «Visitas y compromisos ↗» ya están en la Parte 2 §5, junto con las pantallas. ⏭️ Faltan: **Posición**
+(tanda 2) y **Tiendanube** junto (tanda 3). Regla: la fila entra a la Parte 2 en la MISMA tanda que cambia las pantallas.
+
+| se dice | ⛔ no se dice | qué es | quién |
+|---|---|---|---|
+| ✅ **Ubicación** | `Depósito` (como nombre del lugar) | Local · Depósito · Evento. Evita «Depósito: Depósito», y Local y Evento ⛔ son depósitos | Darío propone · Bruno ✅ |
+| ✅ **Posición** | `Ubicación` (en la estantería) | el lugar exacto en la estantería del depósito (hoy «Ubicaciones depósito»). ⚠️ El chequeo de exhibición ⛔ cambia: habla de exhibidores | Darío propone · Bruno ✅ |
+| ✅ **Origen** · **Destino** (dos columnas) | `De → A` · `Recorrido` | Transferencias (Destino ya se usa en Ingresos de mercadería). Reemplaza la nota «"Ruta" sigue siendo "De → A"» de la fila de Rutas | Bruno ✅ («recorrido no es claro») |
+| ✅ **Transferir** | `Mover` | siempre | Darío 18-nov · Bruno ✅ |
+| ✅ **«Opcional» adentro del campo** | `(opcional)` en el rótulo | reemplaza la fila de Bruno del 15-nov | Darío · Bruno ✅ |
+| ✅ **Tiendanube** (junto, el nombre comercial) | `Tienda Nube` · `TN` | también en C.5 | Bruno: «definí vos» |
+| ✅ (nada; o **Sistema anterior** si hace falta nombrarlo) | `Gestión Nube` · `GN` | pase hecho y **suscripciones canceladas** (23-nov). Reemplaza las filas que hoy lo dan por válido (`Tienda Nube · Gestión Nube · Mercado Libre`, y «el nombre de cada lado» en Diferencias) | Bruno ✅ |
+
+🏁 **Pantallas por Gestión Nube** (Darío, 23-nov): **Stock › Diferencias se saca entera** (sólo compara contra Gestión
+Nube; ⚠️ apagar también su cálculo diario, que lee Gestión Nube). **Comparación y Conciliación quedan** (comparan contra
+Tiendanube y Mercado Libre: avisan de pedidos pagados sin venta y SKU que no existen) **sin la columna ni el cuadro de
+Gestión Nube**. Lo que queda con Gestión Nube en Cajas, Facturación, ficha de venta, Transferencias viejas y Cambio: se saca.
+
+### E.2 · La regla madre de Darío: **decir el dato, ⛔ explicarlo**
+
+Darío, 16-nov: *«busca explicar todo muy profundo y no siento que se necesite; hay cosas que con una palabra se entiende»*.
+Ya lo había pedido el 11/12-oct (*«usamos pocas palabras formales y muchas informales»*, *«mucho texto, muy repetitivo»*).
+- Sin párrafos de ayuda; etiquetas de 1–3 palabras; ⛔ repetir lo que ya dice el botón, el título o una columna.
+- ⛔ Ayuda debajo del campo ⇒ lo que va **adentro** del campo.
+- ⛔ Cuadros de resumen que repiten las pestañas.
+- ⛔ Un aviso fijo para lo normal: el cartel fijo es **sólo para lo raro**; lo normal se dice al confirmar.
+- ⛔ Primera persona en avisos («No encontré» ⇒ «Ningún producto coincide con…»).
+- ⛔ Ofrecer lo imposible: el sistema no deja hacer lo que no se puede (transferir sin stock en el origen).
+
+### E.3 · Patrones que Darío ya eligió en las 6 pantallas del ERP (20 al 23-nov) — ✅ Bruno los aprobó (23-nov) · ✅ en la Parte 2 §5 desde el 23-nov
+
+Salen de los PDFs aprobados de Inicio, Ventas, Productos, Stock, Clientes y Configuración (~500 textos), y ya están
+publicados en esas pantallas. Escribirlos acá es para que **la sección nueva nazca así** y ⛔ vuelva a escribirse larga.
+
+| se dice | ⛔ no se dice |
+|---|---|
+| «Ningún producto coincide con «X».» | «No hay productos con ese nombre…» · «Nada con esa búsqueda» |
+| «Leyendo…» | «Leyendo el stock…» · «Cargando transferencias…» |
+| «No se pudo: volvé a intentar.» · «Todavía no disponible.» (el detalle, sólo para Bruno) | texto técnico · «falta actualizar la base (026)» · «… inválido» |
+| «Sin permiso para editar.» | «Tu rol no edita ventas» |
+| «120 de 2.300» | «120 de 2.300 · el stock llega hasta… · leída…» |
+| botones cortos: «Exportar» · «Actualizar» · «Ver venta» · «Imprimir ticket» · «Guardar» | «Exportar los elegidos» · «Volver a leer» · «Abrir la ficha» · «Guardar el WhatsApp» |
+| enlace a otra sección: «Reposición ↗» · «Ingresos ↗» | «Abrir Reposición en el monitor ↗» |
+| «Nueva regla» · «Nuevo ajuste» (el botón que crea) | «Agregar regla» |
+| «Activa / Inactiva» · «Activar / Desactivar» | «Prendida / Apagada» · «Prender / Apagar» |
+| columnas «Fecha» · «Ubicación» · «Saldo» · «Responsable» · «Estado» · «Unidades» | «Cuándo» · «Dónde» · «Queda» · «Quién» |
+| «En camino» | «En tránsito» |
+| «Descartado» (ajuste) | «Rechazado» |
+| «A favor» · «Debe» · «Antigüedad» · «Movimientos» | «Con saldo a favor» · «Pendiente» (para plata) · «La más vieja» · «Mayor» |
+| «—» en una celda vacía | «Ninguno» · «Sin historial» · «Sin cargar» |
+| confirmación = una pregunta + el cambio: «¿Guardar el precio Local?» «$ 8.800 → $ 9.680» | «¿Seguro que querés…?» + explicación |
+| éxito corto: «Cobro de $ X registrado.» · «No se deshace.» | la explicación de lo que pasó por detrás |
+| «Visitas y compromisos ↗» | «Ver visitas y compromisos ↗» (cambia la fila de Bruno del 30-oct) |
+
+### E.4 · La forma de las pantallas del ERP (Darío, desde 18-nov; molde: Transferencias)
+
+- **Botones**: principal índigo sólido; secundarios blancos; eliminar/anular rojo de borde y separado. ⛔ Verde para
+  confirmar (verde = completo). El botón dice **qué hace** («Recibir», ⛔ «Confirmar»).
+- **Acciones de una ficha arriba a la derecha** (Editar índigo + Eliminar rojo de borde; el resto en ⋯).
+- **El detalle en VENTANA** de dos columnas, ⛔ barra lateral.
+- **Editar en la misma fila** (lápiz); formularios repetidos ⇒ **una tabla con un solo «Guardar N cambios»**.
+- **Pestañas** subrayadas con número (rojo sólo si es problema); muchas ⇒ agrupar en «Para revisar».
+- **Tablas mínimas**: la diferencia en rojo **sólo si no coincide**; ⛔ número grande que priorice una lista.
+- **Ícono solo** cuando se repite por fila; si es uno, ícono + palabra (ya en Parte 2 §3.3).
+- El ERP se piensa para **computadora**.
+- Estética: la del Monitor (índigo, DM Sans; `app/tokens.css`).
+
+---
+
+# PARTE 2 · EL VOCABULARIO (completo, tal como está hoy en Areben Gestión)
+
 # VOCABULARIO — el glosario compartido de MAKETA y el monitor
 
-Versión: 2026-11-23
+Versión: 2026-11-23b
 
 🔑 **Este archivo es el MISMO en los dos repos** (`areben-marketing` y `monitor-areben`), byte a
 byte. Si cambia acá, se copia allá en el mismo día y sube la `Versión:` de arriba. Cada repo tiene
@@ -392,6 +578,24 @@ para lo que no es del producto (cupón, seguimiento, caja) y para lo que se esca
 | `Factura A` · `Factura B` (el tipo dicho así, y la condición al lado: «Factura B · consumidor final», «Factura A a nombre de …») | `sale factura` · `Sale factura` · `sale la factura` | monitor | `components` · `lib/erp` · `lib/caja` · `api/_erp*` · `api/_caja.js` | Bruno, 22-nov-2026: «sale factura A, no es término nuestro» |
 | (nada: el estado se dice en palabras: «todavía no disponible», «modo de prueba de ARCA») | `motor` · `sesión A` · `espejo` · `homologación` · `ambiente de prueba` · `este ambiente` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Bruno, 26-oct: jerga de la construcción, ⛔ en pantalla |
 | `Eliminar ajuste` · `Eliminado` (el ajuste APLICADO que Admin vuelve atrás: queda en la lista y el stock vuelve a como estaba; excepción a §1.1, donde «Eliminar» = deja de existir) | `Deshecho` · `Deshacer ajuste` | monitor | `components/erp` | Bruno, 18-nov-2026: «estaría bueno otro nombre» que «Deshecho» ⇒ «Eliminar / Eliminado» (PR «Eliminar un ajuste aplicado») |
+| «Ningún producto coincide con «X».» · «Ningún movimiento coincide con el filtro.» | `No hay productos con` · `No hay movimientos con` · `No hay transferencias con` · `Nada con esa búsqueda` · `No encontré` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Darío (los PDFs de textos, 20 al 23-nov) · Bruno ✅ 23-nov-2026 (AREBEN-COMUN §E.3) |
+| `Leyendo…` (sin decir qué: ya lo dice la pantalla) | `Leyendo el` · `Leyendo la` · `Leyendo los` · `Leyendo las` · `Cargando…` · `Cargando el` | monitor | `components/erp` · `lib/erp` | Darío (los PDFs de textos, 20 al 23-nov) · Bruno ✅ 23-nov-2026 (AREBEN-COMUN §E.3) |
+| `No se pudo: volvé a intentar.` · `Todavía no disponible.` (el detalle técnico, sólo para Bruno: en el log o en el error del servidor) | `falta actualizar la base` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Darío (los PDFs de textos, 20 al 23-nov) · Bruno ✅ 23-nov-2026 (AREBEN-COMUN §E.3) |
+| `Falta el monto.` (lo que falta, dicho) | `inválid*` | monitor | `components/erp` | Darío (los PDFs de textos, 20 al 23-nov) · Bruno ✅ 23-nov-2026 (AREBEN-COMUN §E.3). ⚠️ Sólo la pantalla: los errores del servidor («Marca inválida») son para Bruno y ⛔ los ve una persona si la pantalla anda |
+| `Sin permiso.` · `Sin permiso para editar.` | `Tu rol` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Darío (los PDFs de textos, 20 al 23-nov) · Bruno ✅ 23-nov-2026 (AREBEN-COMUN §E.3) |
+| botones cortos: `Exportar` · `Actualizar` · `Ver venta` · `Ver producto` · `Imprimir ticket` · `Guardar` | `Exportar los elegidos` · `Volver a leer` · `Abrir la ficha` · `Guardar el WhatsApp` | monitor | `components/erp` · `lib/erp` | Darío (los PDFs de textos, 20 al 23-nov) · Bruno ✅ 23-nov-2026 (AREBEN-COMUN §E.3) |
+| enlace a otra sección: `Reposición ↗` · `Ingresos ↗` · `Caja ↗` · `Dashboard ↗` | `en el monitor ↗` · `Abrir Reposición` · `Abrir la Caja` · `Abrir en el dashboard` | monitor | `components/erp` · `lib/erp` | Darío (los PDFs de textos, 20 al 23-nov) · Bruno ✅ 23-nov-2026 (AREBEN-COMUN §E.3) |
+| `Nueva regla` · `Nuevo ajuste` (el botón que crea) | `Agregar regla` · `Agregar ajuste` | monitor | `components/erp` · `lib/erp` | Darío (los PDFs de textos, 20 al 23-nov) · Bruno ✅ 23-nov-2026 (AREBEN-COMUN §E.3) |
+| `Activa` · `Inactiva` · `Activar` · `Desactivar` | `Prendid*` · `Apagad*` · `Prender` · `Apagar` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Darío (los PDFs de textos, 20 al 23-nov) · Bruno ✅ 23-nov-2026 (AREBEN-COMUN §E.3) |
+| `En camino` | `En tránsito` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Darío (los PDFs de textos, 20 al 23-nov) · Bruno ✅ 23-nov-2026 (AREBEN-COMUN §E.3) |
+| `Descartado` (el ajuste que no se aplicó) | `Rechazado` · `Rechazada` | monitor | `components/erp/AjustesStock.tsx` · `lib/erp/ajuste.core.js` | Darío (los PDFs de textos, 20 al 23-nov) · Bruno ✅ 23-nov-2026 (AREBEN-COMUN §E.3). El cheque sigue diciendo «Rechazado» (fila del 10-nov) |
+| `A favor` · `Debe` · `Antigüedad` · `Movimientos` | `Con saldo a favor` · `La más vieja` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Darío (los PDFs de textos, 20 al 23-nov) · Bruno ✅ 23-nov-2026 (AREBEN-COMUN §E.3) |
+| `—` en una celda vacía | `Sin historial` · `Sin cargar` | monitor | `components/erp` · `lib/erp` | Darío (los PDFs de textos, 20 al 23-nov) · Bruno ✅ 23-nov-2026 (AREBEN-COMUN §E.3). «Ninguna» sigue valiendo como opción de un desplegable |
+| confirmación = una pregunta + el cambio: «¿Guardar el precio Local?» «$ 8.800 → $ 9.680» | `¿Seguro` | monitor | `components/erp` · `lib/erp` | Darío (los PDFs de textos, 20 al 23-nov) · Bruno ✅ 23-nov-2026 (AREBEN-COMUN §E.3) |
+
+🔑 **23-nov-2026 · lo de §E.3 que ⛔ se puede buscar en el código** (va igual, se cuida al escribir): los TÍTULOS de
+columna `Fecha` · `Ubicación` · `Saldo` · `Responsable` · `Estado` · `Unidades` (⛔ `Cuándo` · `Dónde` · `Queda` · `Quién`:
+en una frase esas palabras sí van); «120 de 2.300» sin agregados; el éxito corto («Cobro de $ X registrado.» · «No se deshace.»), ⛔ la explicación de lo que pasó por detrás.
 
 🔑 **15-nov-2026 · raíces y prefijos** (Bruno: *«lo creo y no lo cuido»*). La frase exacta dejaba pasar las
 flexiones («Armándose», «fallados», «el medio») y las carpetas angostas dejaban vivos los errores de `api/`, el

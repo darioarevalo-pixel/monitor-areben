@@ -268,7 +268,7 @@ export function FacturaCaja({ ventaInicial = null, cajaInicial = null, store: st
           {!ventas.length ? <EmptyState title="No hay ventas para facturar con esa búsqueda." /> : (
             <TableWrap>
               <table>
-                <THead><Tr><Th>Nº</Th><Th>Cuándo</Th><Th>Cliente</Th><Th style={{ textAlign: 'right' }}>Total</Th></Tr></THead>
+                <THead><Tr><Th>Nº</Th><Th>Fecha</Th><Th>Cliente</Th><Th style={{ textAlign: 'right' }}>Total</Th></Tr></THead>
                 <TBody>
                   {ventas.map((v) => (
                     <Tr key={v.id} onClick={() => void abrir(v.id)} style={{ cursor: 'pointer' }}>

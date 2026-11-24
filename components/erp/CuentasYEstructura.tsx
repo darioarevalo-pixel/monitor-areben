@@ -77,7 +77,7 @@ export function CuentasErp({ alContar }: { alContar?: AlContar }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
-        <a href={DASHBOARD} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}><Button variant="outline">Abrir en el dashboard ↗</Button></a>
+        <a href={DASHBOARD} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}><Button variant="outline">Dashboard ↗</Button></a>
       </div>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>

@@ -337,7 +337,7 @@ export const ACCIONES_PEDIDO = ['pedido-entrar', 'pedido-cambiar', 'pedido-a-pre
  */
 export async function accionDePedido({ accion, body, usuario, quien = usuario }, deps) {
   if (!ACCIONES_PEDIDO.includes(accion)) return { status: 400, error: 'Acción desconocida' }
-  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está inactiva.' }
   if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Todavía no disponible.' }
   if (!UUID.test(String(body?.pedidoId || ''))) return { status: 400, error: 'Falta el pedido' }
   if (!usuario) return { status: 400, error: 'Falta quién lo hace' }

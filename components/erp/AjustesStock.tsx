@@ -391,7 +391,7 @@ export function AjustesStock({ pedida = null, alContar, enErp: _enErp = false }:
                   <Th>Producto ({borrador.renglones.length})</Th>
                   <Th style={{ textAlign: 'right' }}>Stock en {deposito(borrador.deposito)}</Th>
                   <Th style={{ textAlign: 'right' }}>Cantidad</Th>
-                  <Th style={{ textAlign: 'right' }}>Queda</Th><Th />
+                  <Th style={{ textAlign: 'right' }}>Saldo</Th><Th />
                 </Tr>
               </THead>
               <TBody>

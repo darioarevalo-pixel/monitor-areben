@@ -340,13 +340,14 @@ Acento **índigo**; el kit vive en CSS real (`app/tokens.css`) y en `components/
 `components/ui/Icono.tsx`. Reusar los componentes del kit antes de escribir uno nuevo.
 
 🔴 **El estilo también son las PALABRAS: ⛔ antes de escribir un botón, un título o un cartel de
-vacío, leer `VOCABULARIO.md`** — el glosario compartido con MAKETA (`areben-marketing`), **el mismo
-archivo en los dos repos**, clavado por `tests/vocabulario.test.ts`. **Eliminar / Sacar / Archivar /
+vacío, leer `AREBEN-COMUN.md`** (23-nov: reemplazó a `VOCABULARIO.md`, que quedó entero adentro como Parte 2) —
+las palabras y la forma de trabajo de todos los sistemas; Bruno lo copia a MAKETA (`areben-marketing`). Clavado por
+`tests/vocabulario.test.ts`. La §E son las decisiones de Darío (regla madre: decir el dato, ⛔ explicarlo). **Eliminar / Sacar / Archivar /
 Descartar** según *¿sigue existiendo después?* (⛔ nunca «borrar» ni «quitar»), **Pendientes** (⛔ no
 «lo que falta»), botones en **infinitivo** y voseo sólo en las ayudas.
-🔴 **Las palabras del NEGOCIO van en la §5 de `VOCABULARIO.md`** (`caja` ⛔ `turno`, `oferta` ⛔ `feria`…):
+🔴 **Las palabras del NEGOCIO van en la Parte 2 §5 de `AREBEN-COMUN.md`** (`caja` ⛔ `turno`, `oferta` ⛔ `feria`…):
 cada corrección de Bruno sobre una palabra es UNA FILA ahí, en el momento, y `tests/terminos.test.ts`
-la hace cumplir en todas las pantallas. Tocar `VOCABULARIO.md` = copiarlo a `areben-marketing` en el mismo trabajo.
+la hace cumplir en todas las pantallas. Tocar `AREBEN-COMUN.md` = subir su `Versión:` y avisarle a Bruno para que lo copie a `areben-marketing`.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

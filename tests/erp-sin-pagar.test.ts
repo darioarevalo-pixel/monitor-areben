@@ -69,6 +69,6 @@ describe('la puerta de la configuración', () => {
   it('sin la migración 040 dice cuál falta (⛔ lanza)', async () => {
     const conMotor = async () => { throw Object.assign(new Error('violates check constraint'), { code: '23514' }) }
     const r = await ponerInterruptorErp({ body: { marca: 'bdi', clave: 'sin_pagar_a_preparar', valor: true }, usuario: 'ana' }, { conMotor }) as { status: number; error: string }
-    expect([r.status, /040/.test(r.error)]).toEqual([409, true])
+    expect([r.status, r.error]).toEqual([409, 'Todavía no disponible.'])
   })
 })

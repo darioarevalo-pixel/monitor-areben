@@ -13,7 +13,7 @@
  */
 const importar = () => import('../motor/stock/pin.mjs')
 const MARCAS = ['bdi', 'zattia']
-const sinTabla = { status: 409, error: 'Los PIN todavía no están disponibles: falta actualizar la base (051).' }
+const sinTabla = { status: 409, error: 'Todavía no disponible.' } // sin la migración (E.3: el detalle, sólo para Bruno)
 
 function entrada(body, { conPin }) {
   const marca = String(body?.marca || '')

@@ -46,8 +46,8 @@ const COLUMNAS: ColumnaLista[] = [
   { key: 'desde', titulo: 'Desde', ancho: 'minmax(150px, 1fr)', movil: 'oculta' },
 ]
 const COLUMNAS_CAMBIOS: ColumnaLista[] = [
-  { key: 'puesta', titulo: 'Cuándo', ancho: '104px', movil: 'chico' },
-  { key: 'por', titulo: 'Quién', ancho: '130px', movil: 'oculta' },
+  { key: 'puesta', titulo: 'Fecha', ancho: '104px', movil: 'chico' },
+  { key: 'por', titulo: 'Responsable', ancho: '130px', movil: 'oculta' },
   { key: 'canal', titulo: 'Canal', ancho: '120px', movil: 'chico' },
   { key: 'medio', titulo: 'Forma de pago', ancho: '130px', movil: 'titulo' },
   { key: 'cuenta', titulo: 'Cuenta', ancho: 'minmax(230px, 1.6fr)', movil: 'chico' },

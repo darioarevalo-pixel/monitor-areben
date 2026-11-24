@@ -1883,7 +1883,7 @@ export default async function handler(req, res) {
   // Con `every`, quien tiene el ERP en una sola (el local de Stunned) recibía 403, el menú se quedaba sin mapa y lo mostraba TODO (30-oct).
   const alcanza = req.query.vista === 'permisos' && !base ? 'some' : 'every'
   if (!marcasDelPedido[alcanza]((m) => puedeErp(perfil, m, permiso, aprobaciones, guardados))) {
-    return res.status(403).json({ error: permiso === 'ver' ? 'No tenés acceso a Areben Gestión.' : 'Tu rol no puede hacer esto en Areben Gestión.', permiso })
+    return res.status(403).json({ error: permiso === 'ver' ? 'No tenés acceso a Areben Gestión.' : 'Sin permiso.', permiso })
   }
   const invalida = entradaInvalida({ method: req.method, query: req.query, body })
   if (invalida) return res.status(invalida.status).json({ error: invalida.error, campo: invalida.campo })

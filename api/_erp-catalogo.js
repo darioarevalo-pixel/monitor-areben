@@ -15,7 +15,7 @@
  */
 import { ACCIONES, baseDe, errorDe, leerAccion, MARCAS, textoDeAviso } from '../lib/erp/catalogo-edicion.core.js'
 
-const SIN_TABLA = 'La edición del producto todavía no está disponible: falta actualizar la base (037).'
+const SIN_TABLA = 'Todavía no disponible.' // sin la migración: ver el historial (E.3: el detalle, sólo para Bruno)
 const motor = () => import('../motor/catalogo-edicion.mjs')
 const hayTabla = async (pg) => (await pg.query(`select to_regclass('public.catalogo_edicion') is not null as hay`)).rows[0].hay
 

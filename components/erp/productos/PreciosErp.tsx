@@ -55,7 +55,7 @@ function textoOferta(f: FilaProducto): string {
 
 function bajarCsv(filas: FilaProducto[], marca: MarcaErp, conCosto: boolean) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Producto', ...(conCosto ? ['Costo'] : []), 'Local', 'Online', 'Mayorista', 'Tienda Nube con oferta', 'Oferta', 'Último cambio', 'Quién', 'Categoría', 'Marca'].map(c).join(';')]
+  const renglones = [['Producto', ...(conCosto ? ['Costo'] : []), 'Local', 'Online', 'Mayorista', 'Tienda Nube con oferta', 'Oferta', 'Último cambio', 'Responsable', 'Categoría', 'Marca'].map(c).join(';')]
   for (const f of filas) {
     renglones.push([f.nombre, ...(conCosto ? [f.costo ?? ''] : []), ...LISTAS_PRECIO.map((l) => f.precios[l] ?? ''), f.precios.oferta ?? '', textoOferta(f),
       f.ultimoCambio ? diaArgentino(Date.parse(f.ultimoCambio.cuando)) : '', f.ultimoCambio?.quien ?? '', f.categoria, LINEA[f.linea] ?? f.linea].map(c).join(';'))
@@ -195,7 +195,7 @@ export function PreciosErp() {
           </div>
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo los precios…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
+          {cargando && !datos ? 'Leyendo…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
         </div>
       </div>
 

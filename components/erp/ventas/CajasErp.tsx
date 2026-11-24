@@ -240,7 +240,7 @@ export function CajasErp() {
           vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={VACIO[vista] ?? 'No hubo cajas en el período.'} /></div> : null}
         />
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo las cajas…' : `${filas.length.toLocaleString('es-AR')} ${filas.length === 1 ? 'caja' : 'cajas'}`} · + sobró, − faltó
+          {cargando && !datos ? 'Leyendo…' : `${filas.length.toLocaleString('es-AR')} ${filas.length === 1 ? 'caja' : 'cajas'}`} · + sobró, − faltó
         </div>
       </div>
 

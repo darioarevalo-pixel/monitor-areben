@@ -301,7 +301,7 @@ function VentanaContacto({ marca, fila, actual, onCerrar, onHecho }: {
       const r = await ponerContactoCliente(marca, { clienteId: fila.clienteId, whatsapp: texto })
       onHecho(r.contacto.whatsapp ?? texto)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo guardar el WhatsApp.')
+      setError(e instanceof Error ? e.message : 'No se pudo: volvé a intentar.')
     } finally {
       setTrabajando(false)
     }

@@ -62,7 +62,7 @@ async function completarFicha(pg, ficha, datos) {
  * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, arca?: any, repo?: any, sb?: any, env?: any }} deps
  */
 export async function facturaLibrePanel({ body, usuario, quien = usuario }, deps) {
-  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está inactiva.' }
   if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Todavía no disponible.' }
   if (!usuario) return { status: 400, error: 'Falta quién lo hace' }
   const p = leerFacturaLibre(body)
@@ -177,7 +177,7 @@ export async function conFacturacion(r, deps = {}) {
  * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, arca?: any, repo?: any, sb?: any, b?: any, leerPedido?: Function, buscarFactura?: Function, tienePartes?: Function }} deps
  */
 export async function facturarPedidoPanel({ body, usuario, quien = usuario }, deps) {
-  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está inactiva.' }
   if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Todavía no disponible.' }
   if (!usuario) return { status: 400, error: 'Falta quién lo hace' }
   const pedidoId = String(body?.pedidoId ?? '')
@@ -273,7 +273,7 @@ function motivoDeLaBase(e) {
  * @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean, arca?: any, repo?: any, sb?: any, env?: any, leerPedido?: Function, facturasDeVenta?: Function, nombres?: Function }} deps
  */
 export async function partePedidoPanel({ body, usuario, quien = usuario }, deps) {
-  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está inactiva.' }
   if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Todavía no disponible.' }
   if (!usuario) return { status: 400, error: 'Falta quién lo hace' }
   const x = leerParte(body)
@@ -378,7 +378,7 @@ export const CASILLA_INTERNA = '@arebensrl.com'
  * @param {{ conMotor: Function, prendido?: boolean, sb?: any, mailer?: any, ambiente?: string }} deps
  */
 export async function enviarFacturaPanel({ body, quien = null }, deps) {
-  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está inactiva.' }
   const clienteId = String(body?.clienteId ?? ''), facturaId = String(body?.facturaId ?? '')
   if (!UUID.test(clienteId) || !UUID.test(facturaId)) return { status: 400, error: 'Falta la factura o el cliente' }
   const para = String(body?.para ?? '').trim().toLowerCase()

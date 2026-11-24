@@ -267,8 +267,8 @@ export function HistorialPrenda({ marca, producto, talle, datos, onCerrar }: {
       <div style={{ minHeight: angosta ? undefined : 'calc(100vh - 250px)' }}>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
-      {!h ? (!error && <div style={{ padding: space[6], color: color.mut }}>Leyendo los movimientos…</div>)
-        : !filas.length ? <div style={{ padding: space[6], color: color.mut }}>No hay movimientos con ese filtro.</div>
+      {!h ? (!error && <div style={{ padding: space[6], color: color.mut }}>Leyendo…</div>)
+        : !filas.length ? <div style={{ padding: space[6], color: color.mut }}>Ningún movimiento coincide con el filtro.</div>
         : angosta ? (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {filas.map((f) => (

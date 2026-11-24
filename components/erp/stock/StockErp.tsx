@@ -144,7 +144,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
 
   const acciones = (f: FilaStock) => {
     const menu: AccionMenu[] = [
-      { key: 'ficha', label: 'Abrir la ficha', icono: 'abrir', onClick: () => abrir(f) },
+      { key: 'ficha', label: 'Ver producto', icono: 'abrir', onClick: () => abrir(f) },
       ...(ajusta ? [{ key: 'ajustar', label: 'Ajustar', icono: 'conteo' as const, onClick: () => ajustar(aAjustar(f)) }] : []),
       { key: 'repo', label: 'Reposición ↗', icono: 'abrir', onClick: () => window.open('/reposicion', '_blank', 'noopener') },
       { key: 'etiq', label: 'Etiquetas ↗', icono: 'abrir', onClick: () => window.open('/etiquetas', '_blank', 'noopener') },

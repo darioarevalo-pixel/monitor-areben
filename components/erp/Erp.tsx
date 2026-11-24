@@ -402,7 +402,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
                     )
                   })}
                   {/* La Caja (el POS) ⛔ es una pantalla del ERP: se abre aparte, como siempre. */}
-                  {s.key === 'ventas' && <Link href="/pos" className="erp-menu-sub erp-menu-sub--afuera"><span>Abrir la Caja</span><span aria-hidden>↗</span></Link>}
+                  {s.key === 'ventas' && <Link href="/pos" className="erp-menu-sub erp-menu-sub--afuera"><span>Caja</span><span aria-hidden>↗</span></Link>}
                 </div>
               )}
             </div>

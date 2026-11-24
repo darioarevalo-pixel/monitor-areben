@@ -129,7 +129,7 @@ export function Facturacion() {
   const prueba = datos?.ambiente !== 'produccion'
   const pv = datos?.puntosDeVenta[tienda] ?? null
   // Por qué ⛔ se puede facturar lo elegido (null = se puede). Lo vuelve a frenar el servidor: esto es para decirlo antes.
-  const freno = !datos ? 'Leyendo el mes…'
+  const freno = !datos ? 'Leyendo…'
     : !datos.ambiente ? 'Facturación no disponible.'
       : sumaElegidas > datos.pendiente + 0.005 ? `Pasa lo pendiente del mes (${pesosCortos(datos.pendiente)}).`
         : elegidasDeMarca.length > datos.porPedido ? `Hasta ${datos.porPedido} ventas por vez.`
@@ -210,7 +210,7 @@ export function Facturacion() {
     const texto = await pedirTexto('Importe con IVA', '', { titulo: 'Nota de débito', placeholder: 'Ej.: 1500', ok: 'Seguir' })
     if (texto === null) return
     const monto = Math.round(Number(texto.replace(/\./g, '').replace(',', '.')) * 100) / 100
-    if (!(monto > 0)) { setError('Importe inválido.'); return }
+    if (!(monto > 0)) { setError('Falta el importe.'); return }
     const deVerdad = f.ambiente === 'produccion'
     const ok = await confirmar({
       titulo: deVerdad ? 'Nota de débito con ARCA' : 'Nota de débito en el modo de prueba de ARCA',
@@ -345,7 +345,7 @@ export function Facturacion() {
         </Notice>
       )}
 
-      {!datos && !error && <EmptyState title="Leyendo el mes…" />}
+      {!datos && !error && <EmptyState title="Leyendo…" />}
       {datos && (
         <>
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
@@ -387,7 +387,7 @@ export function Facturacion() {
               </div>
             )}
             <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-              Punto de venta {pv ?? 'sin cargar'}
+              Punto de venta {pv ?? '—'}
             </div>
           </div>
 

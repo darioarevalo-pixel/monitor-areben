@@ -23,7 +23,7 @@ import { marcaDeCaja } from '../lib/caja/marcas.core.js'
 import { compararConCaja, copiaParaCaja, leerReglaDePantalla, leerSimulacion, marcasDe, queNoCobraLaCaja } from '../lib/erp/reglas.core.js'
 
 const MARCAS = ['bdi', 'zattia']
-const SIN_TABLA = 'Las reglas todavía no están disponibles: falta actualizar la base (016).'
+const SIN_TABLA = 'Todavía no disponible.' // sin la migración: ver el historial (E.3: el detalle, sólo para Bruno)
 
 const motor = () => Promise.all([import('../motor/venta/reglas.mjs'), import('../motor/venta/reglas-db.mjs')])
 

@@ -61,7 +61,7 @@ const COLUMNAS_REGLAS: ColumnaLista[] = [
   { key: 'prendas', titulo: 'En qué productos', ancho: 'minmax(150px, 1fr)', movil: 'oculta' },
   { key: 'campania', titulo: 'Campaña', ancho: '130px', movil: 'oculta' },
   { key: 'canal', titulo: 'Canal', ancho: '76px', movil: 'chico' },
-  { key: 'cuando', titulo: 'Cuándo', ancho: '140px', movil: 'chico' },
+  { key: 'cuando', titulo: 'Fecha', ancho: '140px', movil: 'chico' },
   { key: 'estado', titulo: 'Estado', ancho: '124px', movil: 'chico' },
 ]
 
@@ -408,7 +408,7 @@ function FormRegla({ inicial, datos, categorias, marca, trabajando, onCancelar, 
           </Select>
         </Field>
         {r.alcance === 'categorias' && (
-          <Field label="Categorías" hint={categorias.length ? 'Ctrl o ⌘ para elegir varias' : 'Cargando el catálogo de Tienda Nube…'}>
+          <Field label="Categorías" hint={categorias.length ? 'Ctrl o ⌘ para elegir varias' : 'Leyendo…'}>
             <select multiple value={r.alcance_ids} onChange={(e) => cambiar({ alcance_ids: [...e.target.selectedOptions].map((o) => o.value) })} style={{ minHeight: 120, width: '100%' }}>
               {[...new Set([...r.alcance_ids, ...categorias])].map((c) => <option key={c} value={c}>{c}</option>)}
             </select>

@@ -13,7 +13,7 @@ import { avisoDeRuta, filasDeRutas, leerRutaDePantalla } from '../lib/erp/rutas.
 import { marcasDe } from '../lib/erp/reglas.core.js'
 
 const MARCAS = ['bdi', 'zattia']
-const SIN_TABLA = 'Las cuentas todavía no están disponibles: falta actualizar la base (019 y 020).'
+const SIN_TABLA = 'Todavía no disponible.' // sin la migración: ver el historial (E.3: el detalle, sólo para Bruno)
 const STATUS = { DESDE_PASADO: 400, ENTRADA_INVALIDA: 400, CANAL_DESCONOCIDO: 400, MARCA_DESCONOCIDA: 400, CUENTA_REAL_DESCONOCIDA: 400, RUTA_REPETIDA: 409 }
 const motor = () => Promise.all([import('../motor/cuentas/rutas.mjs'), import('../motor/venta/reglas-db.mjs')])
 const hayRutas = async (pg) => (await pg.query(`select to_regclass('public.ruta_cobro') is not null as hay`)).rows[0].hay

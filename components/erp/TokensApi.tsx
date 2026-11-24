@@ -185,7 +185,7 @@ function Actividad({ t, onCerrar }: { t: TokenApi; onCerrar: () => void }) {
       {filas && !filas.length && <EmptyState title="Este token todavía no consultó nada." />}
       {filas && filas.length > 0 && (
         <table style={{ width: '100%', fontSize: font.sm }}>
-          <thead><tr><th align="left">Cuándo</th><th align="left">Qué pidió</th><th align="right">Respuesta</th><th align="right">Filas</th><th align="left">Desde</th></tr></thead>
+          <thead><tr><th align="left">Fecha</th><th align="left">Qué pidió</th><th align="right">Respuesta</th><th align="right">Filas</th><th align="left">Desde</th></tr></thead>
           <tbody>{filas.map((f, i) => (
             <tr key={i}><td>{fechaHora(f.en)}</td><td>{f.metodo} {f.molde}</td><td align="right">{f.status}{f.code ? ` ${f.code}` : ''}</td><td align="right">{f.cantidad ?? '—'}</td><td>{f.ip ?? '—'}</td></tr>
           ))}</tbody>

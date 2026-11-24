@@ -225,7 +225,7 @@ export function PorProductoErp() {
           </div>
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo las ventas…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
+          {cargando && !datos ? 'Leyendo…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
           {datos?.gnHasta && diaArgentino(Date.parse(datos.gnHasta)) < ayer && <> · Ventas cargadas hasta el {diaCorto(datos.gnHasta)}</>}
         </div>
       </div>

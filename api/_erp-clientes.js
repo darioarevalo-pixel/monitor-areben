@@ -373,7 +373,7 @@ export async function cuentaDelPanel({ gnId = '', tel = '', prueba: pedida = fal
  * @param {{ body: any, usuario: string|null, quien?: any }} p @param {{ conMotor: Function, prendido?: boolean }} deps
  */
 export async function anotarWhatsappPanel({ body, usuario, quien = usuario }, deps) {
-  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está inactiva.' }
   if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'No se pudo: volvé a intentar.' }
   if (!usuario) return { status: 400, error: 'Falta quién lo anota' }
   return deps.conMotor('bdi', 'Anotar el número', async (pg) => {
@@ -437,7 +437,7 @@ export async function clientesDelPanel({ q = '', usuario = null }, deps) {
  * @param {{ body: any, usuario: string|null, quien?: any }} p @param {{ conMotor: Function, prendido?: boolean, escribir?: boolean }} deps
  */
 export async function clienteNuevoPanel({ body, usuario, quien = usuario }, deps) {
-  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está inactiva.' }
   const escribir = deps.escribir ?? (await import('./_erp-pedido.js').then((m) => m.escribirPrendido()))
   if (!escribir) return { status: 409, error: 'Todavía no disponible.' }
   if (!usuario) return { status: 400, error: 'No se pudo: volvé a intentar.' }
@@ -481,7 +481,7 @@ export async function clienteNuevoPanel({ body, usuario, quien = usuario }, deps
  * @param {{ body: any, usuario: string|null, quien?: any }} p @param {{ conMotor: Function, prendido?: boolean }} deps
  */
 export async function sacarWhatsappPanel({ body, usuario, quien = usuario }, deps) {
-  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está inactiva.' }
   if (!UUID.test(String(body?.id || ''))) return { status: 400, error: 'Falta el número' }
   if (!usuario) return { status: 400, error: 'Falta quién lo saca' }
   return deps.conMotor('bdi', 'Sacar el número', async (pg) => {
