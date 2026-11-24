@@ -41,10 +41,10 @@ const u = (n: number) => `${n.toLocaleString('es-AR')} u`
 
 function bajarCsv(filas: FilaProducto[], marca: MarcaErp, conCosto: boolean) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Producto', 'Variantes', 'SKU', 'Disponible', ...(conCosto ? ['Costo'] : []), 'Local', 'Online', 'Mayorista', 'Tienda Nube', 'Categoría', 'Proveedor', 'Marca'].map(c).join(';')]
+  const renglones = [['Producto', 'Variantes', 'SKU', 'Disponible', ...(conCosto ? ['Costo'] : []), 'Local', 'Online', 'Mayorista', 'Tienda Nube', 'Categoría', 'Proveedor', 'Código del proveedor', 'Marca'].map(c).join(';')]
   for (const f of filas) {
     renglones.push([f.nombre, f.variantes.length, f.variantes.map((v) => v.sku).filter(Boolean).join(' '), f.disponible, ...(conCosto ? [f.costo ?? ''] : []), ...LISTAS.map((l) => f.precios[l] ?? ''),
-      EN_TN[f.tn][1], f.categoria, f.proveedor, LINEA[f.linea] ?? f.linea].map(c).join(';'))
+      EN_TN[f.tn][1], f.categoria, f.proveedor, f.codigoProveedor, LINEA[f.linea] ?? f.linea].map(c).join(';'))
   }
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -154,7 +154,7 @@ export function ProductosErp() {
               {queRevisar.map(([k, n]) => <option key={k} value={k} disabled={!conteo[k]}>{n} · {conteo[k] ?? 0}</option>)}
             </Select>
           )}
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un producto" placeholder="Nombre, SKU o código de barras" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un producto" placeholder="Nombre, SKU, código de barras o del proveedor" />
           <PanelColumnas
             columnas={sinCol(prefs.orden).map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}

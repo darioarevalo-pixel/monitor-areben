@@ -107,7 +107,7 @@ export function diaSiguiente(fecha, n = 1) {
  * barcode ⇒ variante y sku ⇒ variante, para las fuentes que no traen la variante de GN.
  * @param {Array<{product_id:number,size_id:number,sku?:string,barcode?:string}>} filas
  */
-export function indiceDeVariantes(filas, vinculos = []) {
+export function indiceDeVariantes(filas, vinculos = [], kits = []) {
   const porVariante = new Map()
   const porBarcode = new Map()
   const porSku = new Map()
@@ -124,9 +124,35 @@ export function indiceDeVariantes(filas, vinculos = []) {
     const v = porVariante.get(`${f.product_id}:${f.size_id}`)
     if (v) porVarianteTN.set(String(f.variant_id), v)
   }
+  // 🔑 Los CONJUNTOS de TN (sql/093): una variante de TN = varias prendas. Un conjunto con una pieza que ⛔ está queda ROTO (null en
+  // `piezasTN` no: `{ rota: true }`), para que nadie lo trate como prenda suelta ni mande stock con una pieza de menos.
+  const conjuntos = new Map()
+  for (const f of kits) {
+    const id = String(f.variant_id)
+    if (!conjuntos.has(id)) conjuntos.set(id, [])
+    conjuntos.get(id).push(f)
+  }
+  const piezasTN = new Map()
+  for (const [id, fs] of conjuntos) {
+    const piezas = fs.sort((a, b) => Number(a.n) - Number(b.n)).map((f) => {
+      const v = porVariante.get(`${f.product_id}:${f.size_id}`)
+      return v ? { ...v, cantidad: Number(f.cantidad || 1), n: Number(f.n) } : null
+    })
+    piezasTN.set(id, piezas.every(Boolean) ? piezas : { rota: true })
+  }
+  const enConjuntos = new Map()
+  for (const [id, ps] of piezasTN) if (Array.isArray(ps)) for (const p of ps) {
+    const k = `${p.product_id}:${p.size_id}`
+    if (!enConjuntos.has(k)) enConjuntos.set(k, [])
+    enConjuntos.get(k).push(Number(id))
+  }
   return {
     variante: (pid, sid) => porVariante.get(`${pid}:${sid}`) ?? null,
     porVarianteTN: (id) => (id != null ? porVarianteTN.get(String(id)) ?? null : null),
+    /** Las piezas del conjunto (`[{ product_id, size_id, sku, barcode, cantidad, n }]`), `{ rota: true }`, o null si ⛔ es conjunto. */
+    piezasTN: (id) => (id != null ? piezasTN.get(String(id)) ?? null : null),
+    /** Los conjuntos de TN (variant_id) que usan esa prenda del ERP. */
+    conjuntosDe: (pid, sid) => enConjuntos.get(`${pid}:${sid}`) ?? [],
     porBarcode: (b) => (b ? porBarcode.get(String(b).trim().toUpperCase()) ?? null : null),
     porSku: (s) => (s ? porSku.get(String(s).trim().toUpperCase()) ?? null : null),
   }

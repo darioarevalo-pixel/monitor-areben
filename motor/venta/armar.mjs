@@ -11,6 +11,9 @@
  */
 import { randomUUID } from 'node:crypto'
 import { TIPOS_PAGO, cobroReal } from '../cuentas/cuentas.mjs'
+import { conjuntoIncompleto } from './conjuntos.mjs'
+
+export { conjuntoIncompleto }
 
 export const ORIGENES = ['caja', 'tn', 'mayorista', 'postventa', 'ml', 'manual']
 /** Los canales de la semilla (005). Manda la tabla `canal` (`conf.canales`); esto es para cuando no viene (tests). */
@@ -297,6 +300,8 @@ export function armarCambio(e, conf, original, { ahora = new Date(), yaDevueltas
       linea_origen_id: l.id, costo_unitario: l.costo_unitario ?? null, costo_fuente: l.costo_fuente ?? null,
     }))
   }
+  const incompleto = conjuntoIncompleto(o, original.lineas, devueltasPorLinea, e.nuevas || [])
+  if (incompleto) return fallo('CONJUNTO_INCOMPLETO', incompleto, 'devueltas')
   return cerrarCambio(e, conf, venta, lineas)
 }
 

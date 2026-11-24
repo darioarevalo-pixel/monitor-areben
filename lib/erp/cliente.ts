@@ -657,7 +657,7 @@ export type VarianteProducto = {
   deps: Record<string, number>; estanteria: number; enPedidos: number; disponible: number
 }
 export type FilaProducto = {
-  id: string; producto: string; nombre: string; linea: string; categoria: string | null; proveedor: string | null
+  id: string; producto: string; nombre: string; linea: string; categoria: string | null; proveedor: string | null; codigoProveedor: string | null
   variantes: VarianteProducto[]; disponible: number; enPedidos: number; negativas: number
   /** El precio vigente de cada lista en el ERP (`precio_lista`): local · online · mayorista · oferta. */
   precios: Record<string, number | null>

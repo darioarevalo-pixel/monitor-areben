@@ -12,8 +12,11 @@ import { diaSiguiente, fechaAR, indiceDeVariantes, medianocheAR } from './deposi
 export async function cargarIndice(db) {
   const filas = await db.q('select product_id, size_id, sku, barcode from variante order by product_id, size_id')
   // 🔴 Entre migrar y `rol-motor crear` el usuario `motor` ⛔ puede leer `tn_vinculo`: sin esto se frenaría todo lo que usa el índice.
-  const [{ puede }] = await db.q(`select to_regclass('public.tn_vinculo') is not null and has_table_privilege('public.tn_vinculo', 'select') as puede`)
-  return indiceDeVariantes(filas, puede ? await db.q('select variant_id, product_id, size_id from tn_vinculo') : [])
+  // Lo mismo con los conjuntos (`tn_kit_pieza`, sql/093): sin la tabla o sin permiso, ninguno (todo sigue como antes).
+  const [{ puede, kits }] = await db.q(`select to_regclass('public.tn_vinculo') is not null and has_table_privilege('public.tn_vinculo', 'select') as puede,
+    to_regclass('public.tn_kit_pieza') is not null and has_table_privilege('public.tn_kit_pieza', 'select') as kits`)
+  return indiceDeVariantes(filas, puede ? await db.q('select variant_id, product_id, size_id from tn_vinculo') : [],
+    kits ? await db.q('select variant_id, n, product_id, size_id, cantidad from tn_kit_pieza order by variant_id, n') : [])
 }
 
 /**

@@ -14,6 +14,7 @@
  * límite»: ⛔ se toca. Una variante de TN sin SKU/código o sin variante en GN ⛔ se puede empujar: se cuenta.
  */
 import { varianteDeLineaTN } from './cruce.mjs'
+import { stockDeConjunto } from './kit.mjs'
 import { grupoComparte } from './vinculo.mjs'
 
 export const DEPOSITOS_TN = { bdi: ['deposito_minorista'], zattia: ['deposito', 'local'], stunned: ['deposito', 'local'] }
@@ -48,6 +49,20 @@ export function planStockTN({ tienda, productos, indice, libro, gn, reservado = 
     for (const tv of p.variants || []) {
       cuenta.variantes++
       if (tv.stock == null) { cuenta.sin_limite++; continue }
+      // Un CONJUNTO (la bikini): el mínimo de lo disponible de sus piezas (`lib/tn/kit.mjs`). ⛔ entra en `vistas`: que el corpiño S
+      // esté en 3 bikinis es lo normal, ⛔ un SKU repetido.
+      const kit = indice.piezasTN?.(tv.id)
+      if (kit) {
+        if (!Array.isArray(kit)) { cuenta.sin_variante++; cuenta.conjuntos_rotos = (cuenta.conjuntos_rotos || 0) + 1; continue }
+        cuenta.conjuntos = (cuenta.conjuntos || 0) + 1
+        const disp = (pz) => deLibro(pz.product_id, pz.size_id) + (enBolsas.get(`${pz.product_id}:${pz.size_id}`) || 0) - (reservado.get(`${pz.product_id}:${pz.size_id}`) || 0)
+        const l = stockDeConjunto(kit, disp)
+        const tn = Number(tv.stock)
+        if (l === tn) cuenta.libro_igual_tn++
+        if (l !== tn) cambios.push({ tn_product_id: Number(p.id), variant_id: Number(tv.id), sku: tv.sku ?? null, product_id: null, size_id: null, tn, libro: l, gn: null,
+          conjunto: kit.map((pz) => ({ product_id: pz.product_id, size_id: pz.size_id, disponible: disp(pz) })) })
+        continue
+      }
       const v = variante({ variant_id: tv.id, sku: tv.sku, barcode: tv.barcode })
       if (!v) { cuenta.sin_variante++; continue }
       const k = `${v.product_id}:${v.size_id}`

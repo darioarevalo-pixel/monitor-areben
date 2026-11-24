@@ -1,4 +1,4 @@
 # ⛔ No editar acá
 
-Copia de `areben-motor` 0.1.0 (commit `ae82da12`). Se edita en el motor y se trae con
+Copia de `areben-motor` 0.1.0 (commit `e6a2d59e`). Se edita en el motor y se trae con
 `node scripts/traer-motor.mjs`. `tests/motor-copia.test.ts` falla si un archivo de acá no es el que se trajo.

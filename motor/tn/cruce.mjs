@@ -64,8 +64,30 @@ function sumarPorVariante(lineas, varianteDe) {
   return { m, sinVariante }
 }
 
-/** La variante de GN de una línea de TN: por código de barras y, si no, por SKU. */
-export const varianteDeLineaTN = (indice) => (l) => indice.porVarianteTN?.(l.variant_id) ?? indice.porBarcode?.(l.barcode) ?? indice.porSku?.(norm(l.sku)) ?? null
+/**
+ * La variante de GN de una línea de TN: por vínculo, código de barras y, si no, por SKU.
+ * 🔴 Un CONJUNTO (sql/093, la bikini) ⇒ null: ⛔ es UNA prenda. Quien lo entiende usa `piezasDeLineaTN`; el resto lo cuenta como
+ * «sin variante» y ⛔ hace nada con él (ej. el precio de la bikini ⛔ es el de una pieza).
+ */
+export const varianteDeLineaTN = (indice) => (l) => (indice.piezasTN?.(l.variant_id) ? null
+  : indice.porVarianteTN?.(l.variant_id) ?? indice.porBarcode?.(l.barcode) ?? indice.porSku?.(norm(l.sku)) ?? null)
+
+/**
+ * Las PRENDAS del ERP de una línea de TN, con cuántas de cada una: `[{ product_id, size_id, sku, barcode, cantidad }]`.
+ * Una prenda suelta ⇒ una; un conjunto ⇒ sus piezas, `cantidad` = las de la línea × las de la pieza. Sin variante o con un
+ * conjunto roto (una pieza que ⛔ está) ⇒ null: el que llama lo trata como «sin variante».
+ * @param {object} indice @returns {(l: { variant_id?, sku?, barcode?, cantidad? }) => Array | null}
+ */
+export const piezasDeLineaTN = (indice) => {
+  const variante = varianteDeLineaTN(indice)
+  return (l) => {
+    const n = Number(l.cantidad ?? 1)
+    const kit = indice.piezasTN?.(l.variant_id)
+    if (kit) return Array.isArray(kit) ? kit.map((p) => ({ product_id: p.product_id, size_id: p.size_id, sku: p.sku, barcode: p.barcode, cantidad: n * p.cantidad, pieza: p.n })) : null
+    const v = variante(l)
+    return v ? [{ ...v, cantidad: n }] : null
+  }
+}
 
 const igual = (a, b) => a.size === b.size && [...a].every(([k, v]) => b.get(k) === v)
 
