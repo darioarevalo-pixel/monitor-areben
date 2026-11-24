@@ -21,15 +21,27 @@ const TIEMPO_MS = 2500;
 
 const plata = (n) => `$${Math.round(Number(n) || 0).toLocaleString('es-AR')}`;
 
-/** «FUNDAS (menos TEMPLADO 9D)», «todo el local», o los productos. Gemela de `queAlcance()` de `components/caja/PromosCaja.tsx`. */
+/** «FUNDAS», «todo el local», o los productos — SIN lo excluido, que va aparte en `excluye`. */
 function queAlcance(a) {
   const al = a || { tipo: 'todo' };
   const nombreProd = (x) => x.nombre || `producto ${x.id}`;
-  const sin = al.tipo !== 'productos' && Array.isArray(al.excluidos) && al.excluidos.length ? ` (menos ${al.excluidos.map(nombreProd).join(', ')})` : '';
-  return (al.tipo === 'todo' ? 'todo el local' : al.tipo === 'categorias' ? (al.categorias || []).join(', ') : (al.productos || []).map(nombreProd).join(', ')) + sin;
+  return al.tipo === 'todo' ? 'todo el local' : al.tipo === 'categorias' ? (al.categorias || []).join(', ') : (al.productos || []).map(nombreProd).join(', ');
 }
 
-/** Una promo de la Caja en palabras. Gemela de `resumen()` de `components/caja/PromosCaja.tsx` (sin las fechas). */
+/** Lo que queda afuera del alcance (y de lo que habilita, en «llevando»), por nombre y sin repetir. */
+function excluidosCaja(p) {
+  const nombres = [];
+  for (const al of [p.alcance, p.requiere]) {
+    if (al && al.tipo !== 'productos' && Array.isArray(al.excluidos)) for (const x of al.excluidos) nombres.push(x.nombre || `producto ${x.id}`);
+  }
+  return [...new Set(nombres)];
+}
+
+/**
+ * Una promo de la Caja en palabras, para las CONDICIONES (Bruno, 23-nov: la tarjeta lleva sólo el
+ * título; con la lista de excluidos adentro, la regla ocupaba media pantalla). Misma lectura que
+ * `resumen()` de `components/caja/PromosCaja.tsx`, sin las fechas y sin lo excluido.
+ */
 function detalleCaja(p) {
   const que =
     p.tipo === 'nxm' ? `${p.lleva}x${p.paga}`
@@ -38,7 +50,7 @@ function detalleCaja(p) {
     : p.tipo === 'llevando' ? `${p.pct}% llevando ${p.requiere ? queAlcance(p.requiere) : '—'}`
     : p.tipo === 'cantidad' ? (p.escalones || []).map((e, i, l) => `${e.desde}${i === l.length - 1 ? ' o más' : ''}: ${e.pct}%`).join(' · ')
     : `${plata(p.pesos)} de descuento desde ${plata(p.minimo)}`;
-  const donde = p.tipo === 'monto_minimo' ? null : (p.tipo === 'llevando' ? 'en ' : '') + queAlcance(p.alcance);
+  const donde = p.tipo === 'monto_minimo' ? null : `en ${queAlcance(p.alcance)}`;
   return [que, donde].filter(Boolean).join(' · ');
 }
 
@@ -76,7 +88,7 @@ async function deCaja(marca) {
     canal: 'mostrador',
     titulo: String(p.nombre || ''),
     detalle: detalleCaja(p),
-    excluye: [],
+    excluye: excluidosCaja(p),
     nota: 'No aplica a productos en oferta ni a productos con descuento a mano.',
     desde: p.desde || null,
     hasta: p.hasta || null,
