@@ -37,6 +37,35 @@ function excluidosCaja(p) {
   return [...new Set(nombres)];
 }
 
+/** «FUNDAS» → «Fundas». Lo que no está todo en mayúsculas queda igual. */
+const lindo = (t) => (t && t === t.toUpperCase() ? t.charAt(0) + t.slice(1).toLowerCase() : t);
+const yLista = (xs) => (xs.length <= 1 ? xs[0] || '' : `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}`);
+
+/** El sujeto de un título: «Fundas», «Vidrios templados», «Todo el local», o los productos. */
+function sujeto(a) {
+  const al = a || { tipo: 'todo' };
+  if (al.tipo === 'categorias' && (al.categorias || []).length) return yLista(al.categorias.map(lindo));
+  if (al.tipo === 'productos' && (al.productos || []).length) {
+    const ns = al.productos.map((x) => x.nombre || `producto ${x.id}`);
+    return ns.length <= 2 ? yLista(ns) : `${ns.length} productos`;
+  }
+  return 'Todo el local';
+}
+
+/**
+ * El TÍTULO dice la regla, ⛔ el nombre que se cargó en la Caja (Bruno, 23-nov: «poco claros y
+ * polémicos»): «Fundas: 15% llevando 2 · 25% llevando 3 · 30% llevando 4 o más».
+ */
+function tituloCaja(p) {
+  const quien = sujeto(p.alcance);
+  if (p.tipo === 'cantidad') return `${quien}: ${(p.escalones || []).map((e, i, l) => `${e.pct}% llevando ${e.desde}${i === l.length - 1 ? ' o más' : ''}`).join(' · ')}`;
+  if (p.tipo === 'llevando') return `${quien}: ${p.pct}% si también lleva ${p.requiere ? sujeto(p.requiere) : 'otro producto'}`;
+  if (p.tipo === 'nxm') return `${quien}: ${p.lleva}x${p.paga}`;
+  if (p.tipo === 'segunda_unidad') return `${quien}: 2ª unidad al ${p.pct}%`;
+  if (p.tipo === 'pct') return `${quien}: ${p.pct}% de descuento`;
+  return `${plata(p.pesos)} de descuento comprando desde ${plata(p.minimo)}`;
+}
+
 /**
  * Una promo de la Caja en palabras, para las CONDICIONES (Bruno, 23-nov: la tarjeta lleva sólo el
  * título; con la lista de excluidos adentro, la regla ocupaba media pantalla). Misma lectura que
@@ -86,7 +115,7 @@ async function deCaja(marca) {
     marca,
     tienda: 'Local',
     canal: 'mostrador',
-    titulo: String(p.nombre || ''),
+    titulo: tituloCaja(p),
     detalle: detalleCaja(p),
     excluye: excluidosCaja(p),
     nota: 'No aplica a productos en oferta ni a productos con descuento a mano.',
