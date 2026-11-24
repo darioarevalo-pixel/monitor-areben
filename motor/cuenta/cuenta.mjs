@@ -331,3 +331,49 @@ export async function registrarApertura(db, e) {
     return { ok: true, apertura: { ref, monto, fecha: e.fecha }, ya_existia: false, reemplazo: viva?.ref ?? null, cuenta: await saldoDe(db, c.id, e.marca, e.prueba) }
   })
 }
+
+/**
+ * CORREGIR el saldo de apertura de UN cliente desde su cuenta (Darío 24-nov: anuló la venta 33280 de antes del corte y la
+ * deuda ⛔ bajó, porque vino en la apertura y ⛔ en la venta). Sólo admin (lo mira el que llama) y SIEMPRE con motivo.
+ * `monto` con signo, como la apertura: 0 = la anula y no deja otra; distinto = la reemplaza CON LA MISMA FECHA (la de la
+ * deuda más vieja ⛔ cambia por corregir el monto). Sin apertura viva FRENA (`SIN_APERTURA`): la carga inicial es otra cosa.
+ * @param {{ cliente_id: string, marca: string, monto: number, motivo: string, usuario: string, prueba: boolean }} e
+ */
+export async function corregirApertura(db, e) {
+  if (!UUID.test(String(e?.cliente_id ?? ''))) return fallo('ENTRADA_INVALIDA', 'Falta el cliente', 'cliente_id')
+  const monto = pesos(e.monto)
+  if (e.monto == null || e.monto === '' || !Number.isFinite(monto)) return fallo('ENTRADA_INVALIDA', 'El saldo nuevo es un monto (+ debe, − a favor, 0 = sin saldo inicial)', 'monto')
+  const motivo = typeof e.motivo === 'string' ? e.motivo.trim() : ''
+  if (motivo.length < 5) return fallo('ENTRADA_INVALIDA', 'Falta el motivo de la corrección', 'motivo')
+  const usuario = typeof e.usuario === 'string' ? e.usuario.trim() : ''
+  if (!usuario) return fallo('ENTRADA_INVALIDA', 'Falta quién lo corrige', 'usuario')
+  if (typeof e.prueba !== 'boolean') return fallo('ENTRADA_INVALIDA', 'Falta decir si es de prueba', 'prueba')
+  if (typeof e.marca !== 'string' || !e.marca) return fallo('ENTRADA_INVALIDA', 'Falta la marca', 'marca')
+  return enTransaccion(db, async () => {
+    const [c] = await q(db, 'select id::text, empresa_id from cliente where id = $1', [e.cliente_id])
+    if (!c) return fallo('NO_ENCONTRADO', 'No está ese cliente', 'cliente_id')
+    await cuentaBloqueada(db, { cliente_id: c.id, marca: e.marca, prueba: e.prueba })
+    const todas = await q(db, `select m.ref, m.monto::float as monto, to_char(m.ocurrida_en ${AR_SQL}, 'YYYY-MM-DD') as fecha, m.detalle,
+        exists (select 1 from cuenta_movimiento a where a.empresa_id = m.empresa_id and a.ref = m.ref || ':anulacion') as anulada
+      from cuenta_movimiento m where m.empresa_id = $1 and m.cliente_id = $2 and m.marca = $3 and m.prueba = $4 and m.tipo = 'apertura'`,
+    [c.empresa_id, c.id, e.marca, e.prueba])
+    const viva = todas.find((x) => !x.anulada)
+    if (!viva) return fallo('SIN_APERTURA', 'Este cliente no tiene saldo inicial para corregir', 'cliente_id')
+    if (viva.monto === monto) return fallo('SIN_CAMBIO', `El saldo inicial ya es ${monto}`, 'monto')
+    const ahora = new Date().toISOString()
+    await insertarFila(db, {
+      empresa_id: c.empresa_id, marca: e.marca, cliente_id: c.id, tipo: 'anulacion', ref: `${viva.ref}:anulacion`, monto: -viva.monto,
+      detalle: { motivo: `Saldo inicial corregido: ${viva.monto} ⇒ ${monto}. ${motivo}`, correccion: true }, prueba: e.prueba, usuario, ocurrida_en: ahora,
+    })
+    let nueva = null
+    if (monto !== 0) {
+      nueva = `apertura:${e.marca}:${e.prueba ? 'prueba:' : ''}${c.id}:${todas.length + 1}`
+      await insertarFila(db, {
+        empresa_id: c.empresa_id, marca: e.marca, cliente_id: c.id, tipo: 'apertura', ref: nueva, monto,
+        detalle: { ...(viva.detalle && typeof viva.detalle === 'object' ? viva.detalle : {}), correccion: { de: viva.ref, motivo, usuario, en: ahora } },
+        prueba: e.prueba, usuario, ocurrida_en: `${viva.fecha}T03:00:00.000Z`,
+      })
+    }
+    return { ok: true, anulada: viva.ref, apertura: nueva ? { ref: nueva, monto, fecha: viva.fecha } : null, cuenta: await saldoDe(db, c.id, e.marca, e.prueba) }
+  })
+}

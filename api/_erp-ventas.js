@@ -514,6 +514,27 @@ export async function anularPagoCuentaErp({ marca, body, usuario }, deps = {}) {
 }
 
 /**
+ * «Corregir saldo inicial» (Darío 24-nov; sólo Admin: `configurar`): el saldo de apertura del corte, con motivo. 0 = lo anula;
+ * otro monto (+ debe, − a favor) = lo reemplaza con la misma fecha. El motor frena si el cliente ⛔ tiene saldo inicial.
+ * Caso que lo trajo: anular una venta de ANTES del corte ⛔ baja la deuda, porque la deuda vino en la apertura.
+ */
+export async function corregirSaldoInicialErp({ marca, body, usuario }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'Elegí el cliente.' }
+  const monto = Number(body?.monto)
+  if (body?.monto == null || body.monto === '' || !Number.isFinite(monto)) return { status: 400, error: 'Escribí el saldo inicial nuevo (0 si no debe nada).' }
+  const motivo = String(body?.motivo || '').trim()
+  if (motivo.length < 5) return { status: 400, error: 'Escribí el motivo.' }
+  const m = deps.cuenta || await moduloDelMotor('cuenta')
+  if (typeof m?.corregirApertura !== 'function') return { status: 409, error: ESPERA_AL_MOTOR }
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
+  return correr(async (db) => {
+    const r = await m.corregirApertura(db, { cliente_id: body.clienteId, marca: body.linea || marca, monto, motivo, usuario, prueba: body.prueba === true })
+    return r.ok ? { ok: true, cuenta: r.cuenta, apertura: r.apertura } : errorDe(r.error)
+  })
+}
+
+/**
  * Lo de AFUERA del motor para la ficha de UNA venta: cliente y número de GN, pedido de TN (con su link), facturas con
  * número y fecha (del ERP y de GN) para el historial. Las ediciones y notas, cuando el motor las tenga (§16).
  */

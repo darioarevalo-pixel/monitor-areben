@@ -799,6 +799,9 @@ export const cobrarCuentaErp = (marca: MarcaErp, c: {
 /** Anular un pago a cuenta cargado mal, con el motivo (sólo Admin): la deuda vuelve. */
 export const anularPagoCuentaErp = (marca: MarcaErp, a: { clienteId: string; linea: string; ref: string; motivo: string }) =>
   pedir<{ ok: true; cuenta: unknown }>(post({ accion: 'anular-pago-cuenta', marca, ...a }), '', 'No se pudo anular el pago.')
+/** «Corregir saldo inicial» (sólo Admin), con motivo: 0 = lo anula; otro monto (+ debe, − a favor) = lo reemplaza. */
+export const corregirSaldoInicialErp = (marca: MarcaErp, a: { clienteId: string; linea: string; prueba: boolean; monto: number; motivo: string }) =>
+  pedir<{ ok: true; cuenta: number; apertura: { ref: string; monto: number; fecha: string } | null }>(post({ accion: 'corregir-saldo-inicial', marca, ...a }), '', 'No se pudo corregir el saldo inicial.')
 /**
  * La cuenta del cliente del chat en el panel de WhatsApp (BDI). `prendido: false` = el interruptor `PANEL_CUENTA_CORRIENTE`
  * está apagado para este usuario ⇒ el panel ⛔ dibuja nada. Sin `gnId` ni `tel` sólo dice si está prendido.

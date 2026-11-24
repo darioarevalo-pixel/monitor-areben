@@ -15,7 +15,7 @@ import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
 import { CampoCuentaReal } from '@/components/erp/ventas/CampoCuentaReal'
 import { pideCuentaReal } from '@/lib/erp/cobro-destino.core.js'
 import { useChequeDelCobro } from '@/components/erp/ventas/CamposCheque'
-import { anularPagoCuentaErp, cobrarCuentaErp, leerCuentaDeCliente, ponerContactoCliente, ponerCreditoCliente, type CreditoCliente, type CuentaDeCliente, type MarcaErp } from '@/lib/erp/cliente'
+import { anularPagoCuentaErp, corregirSaldoInicialErp, cobrarCuentaErp, leerCuentaDeCliente, ponerContactoCliente, ponerCreditoCliente, type CreditoCliente, type CuentaDeCliente, type MarcaErp } from '@/lib/erp/cliente'
 import { TRAMOS, nombresDeVentas, textoCredito } from '@/lib/erp/cuenta-corriente.core.js'
 import { paraEditar, parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { fechaCorta } from './FichaCliente'
@@ -58,6 +58,7 @@ export function FichaCuenta({ marca, fila, prueba, admin, cobrarAlAbrir = false,
   const [s, setS] = useState<(CuentaDeCliente & { clave: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [credito, setCredito] = useState(false)
+  const [corrigiendo, setCorrigiendo] = useState(false)
   const [contactando, setContactando] = useState(false)
   // El WhatsApp recién guardado: la lista de arriba se refresca con `onCambio`, pero la ficha ya lo usa.
   const [whatsappNuevo, setWhatsappNuevo] = useState<string | null>(null)
@@ -96,6 +97,8 @@ export function FichaCuenta({ marca, fila, prueba, admin, cobrarAlAbrir = false,
     ...(admin ? [
       { key: 'wa', label: 'Editar WhatsApp', icono: 'lapiz', onClick: () => { setHecho(null); setContactando(true) } } as AccionMenu,
       { key: 'credito', label: 'Editar crédito', icono: 'lapiz', onClick: () => setCredito(true) } as AccionMenu,
+      // Darío 24-nov: anular una venta de ANTES del corte ⛔ baja la deuda (vino en el saldo inicial) ⇒ se corrige acá.
+      { key: 'saldo-inicial', label: 'Corregir saldo inicial', icono: 'lapiz', onClick: () => { setHecho(null); setCorrigiendo(true) }, disabled: !s } as AccionMenu,
     ] : []),
   ]
 
@@ -229,6 +232,15 @@ export function FichaCuenta({ marca, fila, prueba, admin, cobrarAlAbrir = false,
         />
       )}
 
+      {corrigiendo && s && (
+        <VentanaSaldoInicial
+          marca={marca} fila={fila} prueba={prueba} saldo={saldo}
+          actual={s.mayor.renglones.find((r) => r.ref.startsWith('apertura:')) ?? null}
+          onCerrar={() => setCorrigiendo(false)}
+          onHecho={(aviso) => { setCorrigiendo(false); setHecho(aviso); setVuelta((x) => x + 1); onCambio() }}
+        />
+      )}
+
       {credito && (
         <VentanaCredito
           marca={marca} fila={fila} credito={cred} onCerrar={() => setCredito(false)}
@@ -276,6 +288,61 @@ function VentanaAnularPago({ marca, fila, renglon, saldo, onCerrar, onHecho }: {
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Saldo de la cuenta</span><b>{formatMoney(saldo)} → {formatMoney(saldo + monto)}</b></div>
           <div style={{ color: color.mut }}>No se deshace.</div>
         </div>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * «Corregir saldo inicial» (sólo Admin; Darío 24-nov): el saldo que vino del corte con GN. Motivo obligatorio. 0 = sin saldo
+ * inicial; otro monto lo reemplaza con la misma fecha. Si el cliente ⛔ tiene saldo inicial, el motor lo dice.
+ * `actual` = el renglón del saldo inicial si está en el período que se ve (si se filtró por fecha puede ⛔ estar).
+ */
+function VentanaSaldoInicial({ marca, fila, prueba, saldo, actual, onCerrar, onHecho }: {
+  marca: MarcaErp; fila: FilaCuenta; prueba: boolean; saldo: number; actual: RenglonMayor | null; onCerrar: () => void; onHecho: (aviso: string) => void
+}) {
+  const [texto, setTexto] = useState('0')
+  const [motivo, setMotivo] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [trabajando, setTrabajando] = useState(false)
+  const monto = parsearMonto(texto)
+  const valido = Number.isFinite(monto) && motivo.trim().length >= 5
+  const antes = actual ? actual.debe - actual.haber : null
+
+  async function corregir() {
+    setTrabajando(true)
+    try {
+      const r = await corregirSaldoInicialErp(marca, { clienteId: fila.clienteId, linea: fila.linea, prueba, monto, motivo: motivo.trim() })
+      onHecho(`Saldo inicial corregido. Saldo de la cuenta: ${formatMoney(r.cuenta)}.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo corregir el saldo inicial.')
+    } finally {
+      setTrabajando(false)
+    }
+  }
+
+  return (
+    <Modal
+      abierto onCerrar={onCerrar} titulo="Corregir saldo inicial"
+      pie={<>
+        <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
+        <Button variant="solid" tone="brand" disabled={trabajando || !valido} onClick={() => void corregir()}>Corregir</Button>
+      </>}
+    >
+      <p style={{ marginTop: 0, color: color.mut }}>
+        {fila.nombre} · {actual ? `saldo inicial ${formatMoney(antes ?? 0)} (${fechaCorta(actual.fecha)})` : 'el saldo que vino del sistema anterior'}
+      </p>
+      {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+        <Field label="Saldo inicial nuevo" hint="0 si no debía nada. En negativo, si tenía a favor.">
+          <Input inputMode="decimal" value={texto} onChange={(ev) => setTexto(ev.target.value)} autoFocus />
+        </Field>
+        <Field label="Motivo"><Input value={motivo} onChange={(ev) => setMotivo(ev.target.value)} placeholder="Ej: anulé la venta 33280, que era de antes del corte" /></Field>
+        {antes != null && Number.isFinite(monto) && (
+          <div style={{ padding: '10px 12px', borderRadius: 9, background: color.bg, border: `1px solid ${color.line}`, display: 'flex', flexDirection: 'column', gap: 4, fontSize: font.base }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Saldo de la cuenta</span><b>{formatMoney(saldo)} → {formatMoney(saldo - antes + monto)}</b></div>
+          </div>
+        )}
       </div>
     </Modal>
   )
