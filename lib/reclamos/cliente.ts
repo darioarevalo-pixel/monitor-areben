@@ -615,11 +615,27 @@ export async function descontarReemplazo(
   const j = await r.json().catch(() => ({}))
   if (!j?.ok) throw new Error(`No se pudo descontar el stock del reemplazo en GN — ${j?.error || r.status}`)
   const venta = j.venta || {}
+  // 🔴 Desde el corte la baja es un ajuste del ERP y ⛔ hay venta de GN: sin anotar el ajuste, el reclamo
+  // quedaba como «sin descontar» y el botón seguía invitando a apretar otra vez (24-nov).
+  const ajuste = j.erp?.ajuste ? `A-${j.erp.ajuste}` : null
   await editarReclamo(marca, d.id, {
-    gn_venta_reemplazo_id: venta.id ? String(venta.id) : null,
-    gn_venta_reemplazo_number: venta.number ? String(venta.number) : null,
+    gn_venta_reemplazo_id: venta.id ? String(venta.id) : ajuste,
+    gn_venta_reemplazo_number: venta.number ? String(venta.number) : ajuste,
   })
-  return { id: venta.id, number: venta.number }
+  return { id: venta.id ?? ajuste ?? undefined, number: venta.number ?? ajuste ?? undefined }
+}
+
+/**
+ * 🚚 **Redespacho por falla, en un gesto** (Bruno 24-nov): crea el reclamo ya resuelto como «otra unidad»
+ * y descuenta del depósito en el mismo pedido. El ERP se lo pasa a Logística como orden de reemplazo.
+ * Los `items` tienen que traer el `product_id`/`size_id` de la variante (`enriquecerConGN`).
+ */
+export async function redespachar(
+  marca: Marca,
+  p: { orden_tn: string; cliente?: string | null; nota?: string | null; items: ItemReclamo[] },
+): Promise<{ id: number; ajuste: number }> {
+  const d = await postear({ action: 'redespacho', store: marca, ...p })
+  return { id: Number(d.id), ajuste: Number(d.ajuste) }
 }
 
 /**

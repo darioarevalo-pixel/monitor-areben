@@ -85,7 +85,7 @@ Bruno: «hay que desconectar todo de gn». Hasta acá, «Descontar lo que se que
   la «venta» que vuelve es `Areben Gestión A-n`. Igual que la falla y el canje.
 - **Cambio** ⇒ FRENA con 409 y manda a hacerlo en la Caja (⇄ Cambios): la venta del cambio cobra plata y todavía ⛔ tiene camino
   al ERP desde acá (`cambioErpDe`). ▶️ Pendiente: decidir con Bruno cómo entra al ERP (`registrarCambio` del motor).
-- «Reemplazo» ya iba al ERP (`proposito:'falla'`).
+- «Reemplazo» ya iba al ERP (`proposito:'falla'`). Desde el 24-nov anota el ajuste (`A-n`) en `gn_venta_reemplazo_*`, que antes quedaba en null. **El «Redespacho por falla» de Fallas crea un reclamo de éstos en un toque** (`action: 'redespacho'`, ver `docs/secciones/fallas.md`).
 - ⚠️ El reingreso de lo devuelto y la anulación siguen siendo pasos a mano: desde el corte se hacen en Areben Gestión, ⛔ en GN.
 
 ## 🔴 Escribir en GN acepta las DOS credenciales (7-sep-2026)
