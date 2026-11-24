@@ -17,10 +17,12 @@
 
 import { create } from 'zustand'
 import { desmarcarHecho, leerAgenda, marcarHecho } from '@/lib/agenda/cliente'
-import type { FechaIso, Hecho, ItemAgenda, Promo } from '@/lib/agenda/tipos'
+import type { FechaIso, Hecho, ItemAgenda, Promo, PromoProducto } from '@/lib/agenda/tipos'
 
 type AgendaState = {
   promos: Promo[]
+  /** Las de producto (Resorty y la Caja), para la misma banda. */
+  promosProducto: PromoProducto[]
   items: ItemAgenda[]
   /** Sólo los últimos 30 días: es la ventana que mira Cumplimiento. */
   hechos: Hecho[]
@@ -36,6 +38,7 @@ type AgendaState = {
 
 const vacio = {
   promos: [] as Promo[],
+  promosProducto: [] as PromoProducto[],
   items: [] as ItemAgenda[],
   hechos: [] as Hecho[],
   puede: { cargar: false },
@@ -51,7 +54,7 @@ export const useAgenda = create<AgendaState>((set, get) => ({
     set({ cargando: true })
     try {
       const d = await leerAgenda()
-      set({ promos: d.promos, items: d.items, hechos: d.hechos, puede: d.puede, cargado: true, cargando: false })
+      set({ promos: d.promos, promosProducto: d.promosProducto, items: d.items, hechos: d.hechos, puede: d.puede, cargado: true, cargando: false })
     } catch {
       // Un fallo deja la banda del mostrador sin dibujar y la sección con su propio error. Que no se
       // pueda leer la agenda no puede romper el shell entero — ni la pantalla de cobro.
