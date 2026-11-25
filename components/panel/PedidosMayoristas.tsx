@@ -349,6 +349,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
   const [packs, setPacks] = useState<Record<string, number>>({})
   const [packInfo, setPackInfo] = useState<Record<string, InfoPack>>({})
   const [buscando, setBuscando] = useState(false)
+  const [verProductos, setVerProductos] = useState(false)
   const [motivo, setMotivo] = useState('')
   const [anulando, setAnulando] = useState(false)
   const [ocupado, setOcupado] = useState(false)
@@ -458,6 +459,9 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
   }
 
   const p = ficha?.pedido
+  /** Los productos plegados (Darío 25-nov: arriba los montos); las unidades, con lo cambiado sin guardar. */
+  const unidadesAhora = !ficha ? 0 : [...ficha.lineas.filter((l) => !enPackOriginal.has(String(l.product_id))).map((l) => cantidades[`${l.product_id}:${l.size_id}`] ?? l.cantidad),
+    ...agregados.map((x) => cantidades[x.k] ?? 0)].reduce((x, n) => x + n, 0) + Object.entries(packs).reduce((x, [id, n]) => x + n * (packInfo[id]?.pack.fundas ?? 0), 0)
   const puede = !!ficha?.escribir && !!p?.editable
   /** Anular: sólo Darío y Bruno, al final de la hoja y con motivo (Darío 15-nov). El servidor frena igual. */
   const perfil = usePerfilOpcional()
@@ -466,13 +470,11 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
     <Modal abierto onCerrar={onCerrar} titulo={p ? `Pedido ${codigoPedido(p.numero)}` : 'Pedido'}
       pie={ficha && (<>
         <Button variant="outline" onClick={onCerrar}>Cerrar</Button>
-        {cambiado
-          ? <Button variant="solid" tone="brand" disabled={!puede || ocupado}
+        {puede && <Button variant="solid" tone="brand" disabled={!cambiado || ocupado}
               onClick={() => void hacer(() => cambiarPedidoPanel(pedidoId, [
                 ...ficha.lineas.filter((l) => l.size_id != null && !enPackOriginal.has(String(l.product_id))).map((l) => { const k = `${l.product_id}:${l.size_id}`; return { productId: l.product_id, sizeId: l.size_id as number, cantidad: cantidades[k] ?? l.cantidad, ...(aManoYa[k] != null ? { precio: aManoYa[k] } : {}) } }),
                 ...agregados.map((a) => ({ productId: a.product_id, sizeId: a.size_id, cantidad: cantidades[a.k] ?? 0, ...(a.aMano ? { precio: a.precio } : {}) })).filter((a) => a.cantidad > 0),
-              ], Object.entries({ ...Object.fromEntries([...enPackOriginal].map((id) => [id, 0])), ...packs }).map(([id, n]) => ({ productId: Number(id), packs: n }))), 'Cambio guardado.')}>Guardar</Button>
-          : p?.etapa === 'pedido' && <Button variant="solid" tone="brand" disabled={!ficha.escribir || ocupado || !!p.falta_cliente} title={p.falta_cliente ? 'Sin cliente' : undefined} onClick={() => void hacer(() => mandarAPrepararPanel(pedidoId), 'Enviado a preparación.')}>Enviar a preparación</Button>}
+              ], Object.entries({ ...Object.fromEntries([...enPackOriginal].map((id) => [id, 0])), ...packs }).map(([id, n]) => ({ productId: Number(id), packs: n }))), 'Cambio guardado.')}>Guardar</Button>}
       </>)}>
       {error && <Notice tone="danger">{error}</Notice>}
       {!ficha && !error && <div style={{ fontSize: font.sm, color: color.mut2 }}>Cargando…</div>}
@@ -490,18 +492,6 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
           {p.falta_cliente && p.etapa !== 'anulado' && <Notice tone="danger"><b>Sin cliente.</b> Elegí el cliente en Hoy › «Sin cliente» o desde el chat de su número{p.contacto?.telefono ? ` (${p.contacto.telefono})` : ''}.</Notice>}
           {!ficha.escribir && <Notice tone="info">{APAGADO}</Notice>}
           {ficha.escribir && !p.editable && p.etapa !== 'anulado' && <Notice tone="info">El depósito ya empezó a prepararlo: no se cambia.</Notice>}
-          <RenglonesPorDiseno
-            renglones={[...ficha.lineas.filter((l) => !enPackOriginal.has(String(l.product_id))).map((l) => { const m = aManoYa[`${l.product_id}:${l.size_id}`]; return m != null ? { ...l, precio: m, tipo: 'fijo' as const, nuevo: false } : { ...l, nuevo: false } }),
-              ...agregados.map((a) => ({ ...a, cantidad: 0, nuevo: true }))]}
-            cantidades={cantidades} puede={puede}
-            poner={(k, n) => setCantidades((c) => ({ ...c, [k]: Math.max(0, n) }))}
-            packs={packs} packInfo={packInfo}
-            ponerPacks={(id, n) => setPacks((m) => ({ ...m, [id]: Math.max(0, n) }))} />
-          {puede && (buscando
-            ? <BuscarProducto pedidoId={pedidoId} onElegir={agregar} onCerrar={() => setBuscando(false)} precioManual={!!ficha.precioManual}
-                sueltos={new Set([...ficha.lineas.filter((l) => !enPackOriginal.has(String(l.product_id))).map((l) => String(l.product_id)), ...agregados.map((a) => String(a.product_id))])}
-                enPack={new Set(Object.entries(packs).filter(([, n]) => n > 0).map(([id]) => id))} />
-            : <div><Button size="sm" variant="outline" onClick={() => setBuscando(true)}>+ Agregar</Button></div>)}
           {p.etapa !== 'anulado' && (
             <EnvioDelPedido envio={p.envio ?? null} transporte={p.transporte ?? null}
               sinFactura={!!ficha.facturacion?.entera && ficha.facturacion.entera.total < p.total}
@@ -553,6 +543,22 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
               )}
             </div>
           ))}
+          <Pliegue titulo="Productos" cantidad={`${unidadesAhora} u`} abierto={verProductos} onTocar={() => setVerProductos((v) => !v)}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
+              <RenglonesPorDiseno
+                renglones={[...ficha.lineas.filter((l) => !enPackOriginal.has(String(l.product_id))).map((l) => { const m = aManoYa[`${l.product_id}:${l.size_id}`]; return m != null ? { ...l, precio: m, tipo: 'fijo' as const, nuevo: false } : { ...l, nuevo: false } }),
+                  ...agregados.map((a) => ({ ...a, cantidad: 0, nuevo: true }))]}
+                cantidades={cantidades} puede={puede}
+                poner={(k, n) => setCantidades((c) => ({ ...c, [k]: Math.max(0, n) }))}
+                packs={packs} packInfo={packInfo}
+                ponerPacks={(id, n) => setPacks((m) => ({ ...m, [id]: Math.max(0, n) }))} />
+              {puede && (buscando
+                ? <BuscarProducto pedidoId={pedidoId} onElegir={agregar} onCerrar={() => setBuscando(false)} precioManual={!!ficha.precioManual}
+                    sueltos={new Set([...ficha.lineas.filter((l) => !enPackOriginal.has(String(l.product_id))).map((l) => String(l.product_id)), ...agregados.map((a) => String(a.product_id))])}
+                    enPack={new Set(Object.entries(packs).filter(([, n]) => n > 0).map(([id]) => id))} />
+                : <div><Button size="sm" variant="outline" onClick={() => setBuscando(true)}>+ Agregar</Button></div>)}
+            </div>
+          </Pliegue>
           {ficha.cambios.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <div style={ROTULO}>Cambios</div>
