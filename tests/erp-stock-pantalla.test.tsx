@@ -12,16 +12,17 @@ import type { FilaStock, StockDePrenda } from '@/lib/erp/cliente'
  * Las filas pasan por el núcleo real (`armarFilasStock`).
  */
 const FILAS = armarFilasStock({
-  marca: 'zattia',
+  marca: 'zattia', depositos: ['local', 'deposito'],
   inventario: [
+    { product_id: 3, size_id: 1, store_name: 'Local', available_quantity: 0, product_name: 'CINTO CALYPSO', size_name: 'U', sku: 'CIN-0003-U', barcode: '773' },
     { product_id: 1, size_id: 1, store_name: 'Local', available_quantity: 2, product_name: 'TOP SAHARA', size_name: 'S - CHOCOLATE', sku: 'TOP-0110-CH-S', barcode: '771' },
     { product_id: 2, size_id: 1, store_name: 'Deposito ', available_quantity: 3, product_name: 'BUZO ROMA', size_name: 'L - GRIS', sku: 'BUZ-0042-GR-L', barcode: '772' },
   ],
-  niveles: [{ product_id: 1, size_id: 1, deposito: 'local', nivel: 2, linea: 'zattia' }, { product_id: 1, size_id: 1, deposito: 'deposito', nivel: 5, linea: 'zattia' }, { product_id: 2, size_id: 1, deposito: 'deposito', nivel: 3, linea: 'zattia' }],
+  niveles: [{ product_id: 1, size_id: 1, deposito: 'local', nivel: 2, linea: 'zattia' }, { product_id: 1, size_id: 1, deposito: 'deposito', nivel: 5, linea: 'zattia' }, { product_id: 2, size_id: 1, deposito: 'deposito', nivel: 3, linea: 'zattia' }, { product_id: 3, size_id: 1, deposito: 'local', nivel: 0, linea: 'zattia' }],
   ultimos: [{ product_id: 1, size_id: 1, tipo: 'venta', origen: 'caja', origen_ref: 'venta:296', ocurrido_en: '2026-10-19T13:25:00Z' }],
   reservado: new Map([['1/1', 1]]),
 }) as FilaStock[]
-const leerListaDeStock = vi.fn(async () => ({ filas: FILAS, libroHasta: '2026-10-19T16:00:00Z', pedidosLeidosEn: '2026-10-19T15:00:00Z', pedidos: 1, sinVariante: 0 }))
+const leerListaDeStock = vi.fn(async () => ({ filas: FILAS, depositos: ['local', 'deposito'], libroHasta: '2026-10-19T16:00:00Z', pedidosLeidosEn: '2026-10-19T15:00:00Z', pedidos: 1, sinVariante: 0 }))
 const ficha: StockDePrenda = {
   prenda: { producto: '1', talle: '1', nombre: 'TOP SAHARA', talleNombre: 'S - CHOCOLATE', sku: 'TOP-0110-CH-S', barcode: '771' },
   depositos: [{ deposito: 'deposito', libro: 5, gn: 5, diferencia: 0 }, { deposito: 'local', libro: 2, gn: 3, diferencia: 1 }],
@@ -69,6 +70,20 @@ const fichaAbierta = () => document.querySelector('aside[aria-label^="Ficha del 
 const ventana = () => document.querySelector('.mo-modal')
 
 describe('la lista de stock', () => {
+  it('Bruno 25-nov: abre con TODO (también lo que está en 0); «Con stock» y «Sin stock» filtran', async () => {
+    await montar()
+    const tabla = () => host.querySelector('[role="table"]')!.textContent
+    expect(boton(/^Todo/).getAttribute('aria-pressed') ?? boton(/^Todo/).getAttribute('aria-selected')).toBe('true')
+    expect(tabla()).toContain('CINTO CALYPSO')
+    expect(tabla()).toContain('TOP SAHARA')
+    expect(boton(/^Sin stock\d/).textContent).toContain('1')
+    await clic(boton(/^Con stock/))
+    expect(tabla()).not.toContain('CINTO CALYPSO')
+    await clic(boton(/^Sin stock\d/))
+    expect(tabla()).toContain('CINTO CALYPSO')
+    expect(tabla()).not.toContain('TOP SAHARA')
+  })
+
   it('vistas con su número, el disponible arriba y lo apartado por pedidos', async () => {
     await montar()
     expect(boton(/^Con stock/).textContent).toContain('2')
@@ -117,14 +132,15 @@ describe('la lista de stock', () => {
     expect(ventana()!.textContent).toContain('TOP SAHARA')
   })
 
+  // 11 columnas: el Evento desactivado ⛔ se ofrece (Bruno 25-nov).
   it('ocultar una columna queda guardado para ese usuario', async () => {
     await montar()
-    await clic(boton(/^Columnas · 9 de 12/))
+    await clic(boton(/^Columnas · 9 de 11/))
     await clic(document.getElementById('col-est')!)
     expect(host.querySelector('[role="row"]')!.textContent).not.toContain('Físico')
     act(() => root?.unmount()); root = null; host.remove()
     await montar()
     expect(host.querySelector('[role="row"]')!.textContent).not.toContain('Físico')
-    expect(boton(/^Columnas · 8 de 12/)).toBeTruthy()
+    expect(boton(/^Columnas · 8 de 11/)).toBeTruthy()
   })
 })

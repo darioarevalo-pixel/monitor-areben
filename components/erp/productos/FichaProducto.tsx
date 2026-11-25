@@ -128,7 +128,9 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
     }
   }
   const linea = fila?.linea ?? (marca === 'bdi' ? 'bdi' : null)
-  const deps = DEPOSITOS[marca]
+  // Las columnas son las ubicaciones que trae cada variante: el servidor sólo arma las ACTIVAS (`depositosALaVista`, Bruno 25-nov:
+  // «si se desactiva deja de aparecer»), en el orden de la base.
+  const deps = DEPOSITOS[marca].filter((d) => fila?.variantes.some((v) => d in v.deps))
   const nombreLista = (k: string | null) => f?.listas.find((l) => l.lista === k)?.nombre ?? k ?? ''
 
   const hechos: HechoHistorial[] = (f?.historial ?? []).map((h) => ({
