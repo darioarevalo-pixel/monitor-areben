@@ -429,7 +429,7 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
 /**
  * Los PRECIOS de un cambio del pedido, como en la tienda (Darío 18-nov). Puro (la puerta le pasa reglas y datos).
  *   - Lo que ya estaba: su precio guardado (`renglonGuardado`); si es regular, se recalcula el descuento por monto.
- *   - Lo nuevo: el precio de la tienda; con `precio`, el precio a mano (sólo Darío, sólo en lo nuevo).
+ *   - Lo nuevo: el precio de la tienda; con `precio`, el precio a mano (sólo Darío). También sobre lo que ya estaba (25-nov).
  *   - `packs`: [{ productId, packs }] = cuántos packs en total de ese diseño; se arman con su cantidad por modelo.
  *   - El descuento por monto, sobre TODO el pedido (lo regular), aparece o se va según el subtotal.
  * @param {{ actuales: Array<{ product_id: number|string, size_id: number|string|null, cantidad: number, precio: number }>, lineas: any[], packs?: Array<{ productId: number|string, packs: number }>, reglas: any, datos: Map<string, any>, precioManual?: boolean }} p
@@ -475,8 +475,16 @@ export function preciosDelCambio({ actuales, lineas, packs = [], reglas: R, dato
     if (cantidad === 0) continue
     const g = guardados.get(clave)
     const aMano = l?.precio == null || l.precio === '' ? null : Number(l.precio)
+    if (aMano != null) {
+      if (!precioManual) return { status: 403, error: 'El precio a mano es sólo de Darío.' }
+      if (!(Number.isFinite(aMano) && aMano > 0)) return { status: 400, error: 'El precio es un monto mayor a 0' }
+    }
+    // Precio a mano sobre lo que YA estaba (Darío 25-nov, M-124): también vale; antes se rechazaba y la pantalla lo perdía.
+    if (g && aMano != null && aMano !== g.base) {
+      renglones.push({ product_id: pid, size_id: sid, cantidad, base: aMano, tipo: 'fijo' })
+      continue
+    }
     if (g) {
-      if (aMano != null) return { status: 400, error: 'El precio a mano va sólo en lo que se agrega.' }
       renglones.push({ product_id: pid, size_id: sid, cantidad, base: g.base, tipo: g.tipo, promo: promo(pid) })
       continue
     }

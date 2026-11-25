@@ -577,6 +577,8 @@ export type ExtraDeVenta = {
       /** De productos (motor sql/088): los renglones que agregó (negativo = lo que se sacó). */
       renglones?: Array<{ linea_id: string; n: number; product_id: string; size_id: string; sku: string | null; cantidad: number; precio: number; importe: number; linea_origen_id: string | null }> }>
     total: number | null; cobrado: number | null; diferencia: number
+    /** Venta a cuenta: la diferencia la tiene la cuenta corriente (25-nov). */
+    aCuenta?: boolean
   }
   /** null = el motor contestó; si no, por qué el historial ⛔ trae ediciones ni notas. */
   motor: string | null
@@ -591,7 +593,7 @@ export type CambiosDeVenta = {
 }
 export const editarVentaErp = (marca: MarcaErp, ventaId: string, cambios: CambiosDeVenta, clienteDoc?: string | null) =>
   pedir<{ ok: true; ediciones: unknown[] }>(post({ accion: 'editar-venta', marca, ventaId, cambios, clienteDoc: clienteDoc ?? null }), '', 'No se pudo guardar.')
-export type CorreccionHecha = { total_antes: number; total_despues: number; cobrado: number; diferencia: number }
+export type CorreccionHecha = { total_antes: number; total_despues: number; cobrado: number; diferencia: number; /** Lo que se cargó en la cuenta corriente (venta a cuenta). */ cuenta?: Array<{ correccion: string; monto: number }> }
 export const corregirPrecioDeVenta = (marca: MarcaErp, ventaId: string, motivo: string, lineas: Array<{ n: number; precio: number }>) =>
   pedir<{ ok: true; correccion: CorreccionHecha }>(post({ accion: 'corregir-precio', marca, ventaId, motivo, lineas }), '', 'No se pudo corregir el precio.')
 /** Corregir los PRODUCTOS (motor sql/088): `ref` es el del guardado (el reintento devuelve lo mismo). */

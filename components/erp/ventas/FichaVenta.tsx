@@ -128,6 +128,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     const r = await corregirPrecioDeVenta(marca, fila.id, motivoPrecio, cambian.map((x) => ({ n: x.n, precio: x.precio })))
     setCorrigiendo(false)
     const d = r.correccion.diferencia
+    if (r.correccion.cuenta?.length) { onCambio('Precio corregido y cargado en la cuenta.'); return }
     onCambio(d === 0 ? 'Precio corregido.' : d > 0 ? `Precio corregido: faltan cobrar ${plata(d)}.` : `Precio corregido: sobran ${plata(-d)}.`)
   }, 'No se pudo corregir el precio.')
 
@@ -286,8 +287,8 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
 
           {!!corr?.correcciones.length && (
             <Notice tone={corr.diferencia === 0 ? 'neutral' : 'warning'}>
-              <b>Venta corregida</b>: total {plata(corr.total ?? v!.total)}{v?.totalOriginal != null && v.totalOriginal !== (corr.total ?? v.total) ? ` (era ${plata(v.totalOriginal)})` : ''} · cobrado {plata(corr.cobrado ?? 0)}.{' '}
-              {corr.diferencia > 0 ? `Faltan cobrar ${plata(corr.diferencia)}.` : corr.diferencia < 0 ? `Sobran ${plata(-corr.diferencia)}: hay que devolverlos.` : 'Lo cobrado coincide.'}
+              <b>Venta corregida</b>: total {plata(corr.total ?? v!.total)}{v?.totalOriginal != null && v.totalOriginal !== (corr.total ?? v.total) ? ` (era ${plata(v.totalOriginal)})` : ''}{corr.aCuenta ? ' · cargado en la cuenta.' : <> · cobrado {plata(corr.cobrado ?? 0)}.{' '}
+              {corr.diferencia > 0 ? `Faltan cobrar ${plata(corr.diferencia)}.` : corr.diferencia < 0 ? `Sobran ${plata(-corr.diferencia)}: hay que devolverlos.` : 'Lo cobrado coincide.'}</>}
             </Notice>
           )}
 
