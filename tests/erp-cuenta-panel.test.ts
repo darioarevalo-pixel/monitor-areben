@@ -67,6 +67,17 @@ describe('La cuenta corriente en el panel de WhatsApp (plan «BDI directo al ERP
     expect(cuentaDe.mock.calls[1][1].prueba).toBe(false)
   })
 
+  it('cliente nacido en el ERP (sin número de GN): se lo encuentra por su id_espejo aunque el chat sea de otro número (Darío 25-nov)', async () => {
+    cuentaDe.mockResolvedValue(CUENTA)
+    const sqls: string[] = []
+    const db = base({ 'id_espejo = $1': [{ id: 'c704' }] }, sqls)
+    await cuentaDelPanel({ gnId: '704700', tel: '5493874409999' }, { conMotor: conMotor(db), prendido: true })
+    expect(cuentaDe.mock.calls[0][1].cliente_id).toBe('c704')
+    expect(porWhatsapp).not.toHaveBeenCalled()
+    // El de GN manda: el id_espejo sólo cuenta para los que ⛔ tienen número de GN.
+    expect(sqls[0]).toContain('gn_client_id is null and id_espejo = $1')
+  })
+
   it('sin ficha de GN: va por el WhatsApp del chat; con DOS fichas para ese número ⛔ elige', async () => {
     cuentaDe.mockResolvedValue(CUENTA)
     const db = base({ 'distinct empresa_id': [{ empresa_id: 'areben' }] })

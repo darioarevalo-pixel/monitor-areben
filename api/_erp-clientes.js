@@ -329,7 +329,10 @@ export async function cuentaDelPanel({ gnId = '', tel = '', prueba: pedida = fal
   const wa = String(tel || '').replace(/\D/g, '').slice(0, 20)
   if (!gn && !wa) return { prendido: true, prueba, cliente: null }
   return deps.conMotor('bdi', 'La cuenta corriente', async (pg) => {
-    let clienteId = gn ? (await pg.query('select id::text from cliente where gn_client_id = $1::bigint limit 1', [gn])).rows[0]?.id ?? null : null
+    // 🔴 Darío 25-nov: el cliente que nace en el ERP (creado al elegir cliente de un pedido) ⛔ tiene número de GN: el panel lo
+    // conoce por su `id_espejo` (704.xxx, el mismo `coalesce` de `motor/crm/lectura.mjs`). Sin esto, desde otro número del chat
+    // ⛔ aparecían ni el saldo ni el pedido, y tampoco se anotaba en «Quién compra».
+    let clienteId = gn ? (await pg.query('select id::text from cliente where gn_client_id = $1::bigint or (gn_client_id is null and id_espejo = $1::bigint) order by (gn_client_id is null) limit 1', [gn])).rows[0]?.id ?? null : null
     const motorCliente = await import('../motor/venta/cliente.mjs')
     if (!clienteId && wa) {
       const { clientePorWhatsapp } = motorCliente

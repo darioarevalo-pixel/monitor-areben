@@ -1241,6 +1241,9 @@ function PanelInterno({
    * número entran solos a ese cliente. Va ANTES de releer la ficha, para que la cuenta ya lo muestre como «este chat».
    */
   const alVincular = async (cliente: FilaCliente, tel: string, nombre: string) => {
+    // 🔴 Darío 25-nov: el enganche quedaba guardado pero el panel seguía con el mapa de antes ⇒ al salir del chat y volver,
+    // «Número nuevo» otra vez (hasta recargar). Lo recién guardado entra ya al mapa con que se cruzan los chats.
+    if (tel) kv.current = { ...kv.current, tel: { ...kv.current.tel, [String(cliente.id)]: tel } }
     setEstado({ t: 'cargando' })
     const enErp = await anotarEnQuienCompra(cliente.id, tel, nombre)
     const r = await buscarFicha({ clienteId: cliente.id }, kv.current.seg, today)
