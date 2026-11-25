@@ -44,3 +44,19 @@ describe('corregirSaldoInicialErp', () => {
     expect(ACCIONES).toContain('corregir-saldo-inicial')
   })
 })
+
+describe('precio-a-cuenta (Darío 25-nov, M-124)', () => {
+  it('es de admin y llega al motor', async () => {
+    const { permisoErpDe } = await import('../lib/permisos.core.js')
+    const { ACCIONES } = await import('../lib/erp/entrada.core.js')
+    expect(permisoErpDe({ method: 'POST', accion: 'precio-a-cuenta' })).toBe('configurar')
+    expect(ACCIONES).toContain('precio-a-cuenta')
+    const { precioACuentaErp } = await import('../api/_erp-ventas.js')
+    const V = '92f4f76d-35e2-47d3-ab56-9fffc5976fc4'
+    let pedido: unknown
+    const correccion = { precioPendienteACuenta: async (_db: unknown, e: unknown) => { pedido = e; return { ok: true, cargado: [{ correccion: 'k', monto: 1 }] } } }
+    expect(await precioACuentaErp({ marca: 'bdi', body: { ventaId: V }, usuario: 'dario' }, { correccion, db: {} })).toEqual({ ok: true, cargado: [{ correccion: 'k', monto: 1 }] })
+    expect(pedido).toEqual({ venta_id: V, usuario: 'dario' })
+    expect(await precioACuentaErp({ marca: 'bdi', body: { ventaId: 'x' }, usuario: 'dario' }, { correccion, db: {} })).toMatchObject({ status: 400 })
+  })
+})

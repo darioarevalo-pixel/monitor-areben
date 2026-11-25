@@ -535,6 +535,22 @@ export async function corregirSaldoInicialErp({ marca, body, usuario }, deps = {
 }
 
 /**
+ * «Poner al día la cuenta» de UNA venta a cuenta (Darío 25-nov, M-124; sólo Admin: `configurar`): las correcciones de precio de
+ * antes del arreglo ⛔ movieron la cuenta ni el pedido. El motor las carga una vez (⛔ duplica). Sin botón: se llama a mano.
+ */
+export async function precioACuentaErp({ marca, body, usuario }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!UUID.test(String(body?.ventaId || ''))) return { status: 400, error: 'Venta inválida' }
+  const m = deps.correccion || await moduloDelMotor('correccion')
+  if (typeof m?.precioPendienteACuenta !== 'function') return { status: 409, error: ESPERA_AL_MOTOR }
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
+  return correr(async (db) => {
+    const r = await m.precioPendienteACuenta(db, { venta_id: body.ventaId, usuario })
+    return r.ok ? { ok: true, cargado: r.cargado } : errorDe(r.error)
+  })
+}
+
+/**
  * Lo de AFUERA del motor para la ficha de UNA venta: cliente y número de GN, pedido de TN (con su link), facturas con
  * número y fecha (del ERP y de GN) para el historial. Las ediciones y notas, cuando el motor las tenga (§16).
  */
