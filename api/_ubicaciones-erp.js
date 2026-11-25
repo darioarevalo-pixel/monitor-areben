@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   const marca = String(req.query?.marca || '').toLowerCase()
   if (!['bdi', 'zattia'].includes(marca)) return res.status(400).json({ error: 'marca inválida (bdi o zattia)' })
   if (!puedeVerAlguna(perfil, marca, ['ubicaciones', 'reposicion'])) {
-    return res.status(403).json({ error: 'Pide la sección Ubicaciones o Reposición en esta marca.' })
+    return res.status(403).json({ error: 'Pide la sección Posiciones o Reposición en esta marca.' })
   }
   try {
     const r = await conBase(marca, async (db) => {
@@ -33,6 +33,6 @@ export default async function handler(req, res) {
     })
     return res.status(200).json(r)
   } catch (e) {
-    return res.status(503).json({ error: `No se pudo leer la ubicación de Areben Gestión: ${e instanceof Error ? e.message : String(e)}` })
+    return res.status(503).json({ error: `No se pudo leer la posición de Areben Gestión: ${e instanceof Error ? e.message : String(e)}` })
   }
 }

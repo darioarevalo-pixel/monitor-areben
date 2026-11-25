@@ -88,7 +88,7 @@ export function UbicacionesLocal() {
     return indexarLocal(construirItems(crudos.inv, prodMap, {}))
   }, [datos, crudos])
 
-  if (marca !== 'zattia') return <Notice tone="warning">Las ubicaciones del depósito son sólo del local de Zattia.</Notice>
+  if (marca !== 'zattia') return <Notice tone="warning">Las posiciones del depósito son sólo del local de Zattia.</Notice>
 
   const puedeEscanear = !!foto?.puede.escanear
   const items = [

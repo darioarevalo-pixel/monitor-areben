@@ -116,7 +116,7 @@ async function hojaA4(filas: FilaA4[], marca: string, sincronizado?: Date | null
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(7.5)
     pdf.setTextColor(120)
-    if (conUbic) pdf.text('Ubic.', X.ubic, y)
+    if (conUbic) pdf.text('Pos.', X.ubic, y)
     pdf.text('Producto · Variante', X.prod, y)
     if (conStock) {
       pdf.text('Local', X.loc, y)

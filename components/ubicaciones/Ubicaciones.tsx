@@ -193,21 +193,21 @@ export function Ubicaciones() {
         titulo: 'No hay nada para guardar',
         mensaje: invalidos.length
           ? `Los ${invalidos.length} cambios que hay tienen el formato mal. Tiene que ser número-guión-número, como 11-1.`
-          : 'No tocaste ninguna ubicación todavía.',
+          : 'No tocaste ninguna posición todavía.',
         ok: 'Entendido',
       })
       return
     }
     const ok = await confirmar({
-      titulo: enErp ? 'Guardar ubicaciones en Areben Gestión' : 'Guardar ubicaciones en Gestión Nube',
+      titulo: enErp ? 'Guardar posiciones en Areben Gestión' : 'Guardar posiciones en Gestión Nube',
       tono: 'brand',
       ok: `Guardar ${validos.length}`,
       mensaje: (
         <>
           <p>
             {enErp
-              ? <>Se guarda en Areben Gestión la ubicación de <b>todas las variantes</b> de cada producto.</>
-              : <>Se escribe la ubicación en la observación de <b>todas las variantes</b> de cada producto, en el depósito{marca === 'bdi' ? ' Minorista' : ''}.</>}
+              ? <>Se guarda en Areben Gestión la posición de <b>todas las variantes</b> de cada producto.</>
+              : <>Se escribe la posición en la observación de <b>todas las variantes</b> de cada producto, en el depósito{marca === 'bdi' ? ' Minorista' : ''}.</>}
           </p>
           <div style={{ marginTop: space[3] }}>
             <ConfirmDetalle label="Productos a escribir" valor={validos.length} />
@@ -272,7 +272,7 @@ export function Ubicaciones() {
         `Se guardaron ${hechos} y ${err} ${err === 1 ? 'quedó' : 'quedaron'} sin guardar después de ${RONDAS} intentos (${primerError}). ${err === 1 ? 'Sigue cargado' : 'Siguen cargados'} acá: podés tocar Guardar de nuevo, que retoma donde quedó.`,
       )
     } else {
-      toast.ok(`${hechos} ${hechos === 1 ? 'ubicación guardada' : 'ubicaciones guardadas'}`)
+      toast.ok(`${hechos} ${hechos === 1 ? 'posición guardada' : 'posiciones guardadas'}`)
     }
   }
 
@@ -281,7 +281,7 @@ export function Ubicaciones() {
       titulo: 'Descartar lo tipeado',
       tono: 'danger',
       ok: `Descartar ${nPend}`,
-      mensaje: `Se eliminan ${nPend} ${nPend === 1 ? 'ubicación cargada' : 'ubicaciones cargadas'} que todavía no se ${nPend === 1 ? 'guardó' : 'guardaron'}${enErp ? '' : ' en GN'}. Lo ya guardado no se toca.`,
+      mensaje: `Se eliminan ${nPend} ${nPend === 1 ? 'posición cargada' : 'posiciones cargadas'} que todavía no se ${nPend === 1 ? 'guardó' : 'guardaron'}${enErp ? '' : ' en GN'}. Lo ya guardado no se toca.`,
     })
     if (!ok) return
     setCambios({})
@@ -310,7 +310,7 @@ export function Ubicaciones() {
       mensaje: (
         <>
           <p>
-            Se pisa la observación de <b>todas las variantes</b> con la ubicación dominante de cada producto. No se puede deshacer.
+            Se pisa la observación de <b>todas las variantes</b> con la posición dominante de cada producto. No se puede deshacer.
           </p>
           <div style={{ marginTop: space[3] }}>
             <ConfirmDetalle label="Productos a reparar" valor={aReparar.length} />
@@ -371,7 +371,7 @@ export function Ubicaciones() {
           onClick={() => void reparar()}
  loading={reparando}
  disabled={ocupado || !cuentas.reparar}
- title="Pisa TODAS las variantes con la ubicación dominante, en los productos con variantes desparejas"
+ title="Pisa TODAS las variantes con la posición dominante, en los productos con variantes desparejas"
  >
  Reparar{cuentas.reparar ? ` (${cuentas.reparar})` : ''}</Button>
         <Button variant="solid" tone="brand" onClick={() => void guardar()} loading={guardando} disabled={ocupado || !pendientes.validos.length}>
@@ -392,7 +392,7 @@ export function Ubicaciones() {
           onChange={setFiltro}
           opciones={[
             { key: 'todos', label: 'Todos', n: cuentas.todos },
-            { key: 'sin', label: 'Sin ubicación', n: cuentas.sin, title: 'Sin un NN-N válido: casillero vacío o formato viejo. Hay que cargarlos a mano.' },
+            { key: 'sin', label: 'Sin posición', n: cuentas.sin, title: 'Sin un NN-N válido: casillero vacío o formato viejo. Hay que cargarlos a mano.' },
             { key: 'reparar', label: 'A reparar', n: cuentas.reparar, title: 'Variantes desparejas que se arreglan solas con Reparar' },
           ]}
         />
@@ -407,7 +407,7 @@ export function Ubicaciones() {
       ) : lista.length === 0 ? (
         <EmptyState
           icon={filtro === 'sin' ? '✅' : '🔍'}
-          title={filtro === 'sin' ? 'No queda ningún producto sin ubicación' : filtro === 'reparar' ? 'No hay variantes desparejas' : 'Sin productos'}
+          title={filtro === 'sin' ? 'No queda ningún producto sin posición' : filtro === 'reparar' ? 'No hay variantes desparejas' : 'Sin productos'}
           hint={q ? `Nada coincide con "${q}".` : undefined}
           dashed
         />
@@ -467,7 +467,7 @@ function Tabla({ items, cambios, setUbi, bloqueado }: { items: UbiProducto[]; ca
         <Tr>
           <Th>Producto</Th>
           <Th>SKU</Th>
-          <Th width={170}>Ubicación</Th>
+          <Th width={170}>Posición</Th>
         </Tr>
       </THead>
       <TBody>
@@ -486,7 +486,7 @@ function Tabla({ items, cambios, setUbi, bloqueado }: { items: UbiProducto[]; ca
                   </div>
                 ) : p.malFormato ? (
                   <div style={{ fontSize: font.xs, color: color.warningInk, marginTop: 2 }}>
-                    Formato viejo ({p.valores.join(', ')}) · cargá la ubicación nueva
+                    Formato viejo ({p.valores.join(', ')}) · cargá la posición nueva
                   </div>
                 ) : null}
               </Td>
@@ -501,7 +501,7 @@ function Tabla({ items, cambios, setUbi, bloqueado }: { items: UbiProducto[]; ca
                     onChange={(e) => setUbi(p.product_id, e.target.value)}
                     disabled={bloqueado}
                     placeholder="11-1"
-                    aria-label={`Ubicación de ${p.name}`}
+                    aria-label={`Posición de ${p.name}`}
                     title={bloqueado ? 'Esperá a que termine de guardar' : undefined}
                     style={{ width: 110, ...(editado && !invalido ? { borderColor: color.success, background: color.successBg } : null) }}
                   />

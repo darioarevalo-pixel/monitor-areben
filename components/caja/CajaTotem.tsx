@@ -332,7 +332,7 @@ function Espera({ no: noEsta, falla, buscando, encargada }: { no: boolean; falla
         <Trazo d={no ? 'alerta' : 'lector'} />
       </div>
       <h1 style={{ margin: 0, fontSize: 'clamp(30px, 4.6vw, 60px)', letterSpacing: '-0.03em', maxWidth: '18ch', textWrap: 'balance' }}>
-        {encargada ? 'Escaneá el producto para ver su ubicación' : falla ? 'No pudimos consultar el precio' : no ? 'No encontramos este producto' : buscando ? 'Buscando…' : 'Escaneá un producto para ver su precio'}
+        {encargada ? 'Escaneá el producto para ver su posición' : falla ? 'No pudimos consultar el precio' : no ? 'No encontramos este producto' : buscando ? 'Buscando…' : 'Escaneá un producto para ver su precio'}
       </h1>
       <p style={{ margin: 0, fontSize: 'clamp(16px, 1.8vw, 24px)', color: color.mut }}>{falla ? 'Probá de nuevo en un momento o consultá en caja.' : no ? 'Consultá en caja y te ayudamos.' : 'Acercá la etiqueta al lector.'}</p>
     </div>
@@ -395,11 +395,11 @@ function Galeria({ fotos, i, setI, tocar }: { fotos: string[]; i: number; setI: 
 /** Sólo con la tarjeta de la encargada: dónde está la prenda y cuánto hay. */
 function PanelUbicacion({ u }: { u: Ubicacion }) {
   const caja: React.CSSProperties = { background: color.ink, color: color.surface, borderRadius: radius.xl, padding: space[4], display: 'grid', gap: space[1], fontSize: font.lg }
-  if (u.que === 'buscando') return <div style={caja}>Buscando la ubicación…</div>
-  if (u.que === 'falla') return <div style={caja}>No se pudo consultar la ubicación.</div>
+  if (u.que === 'buscando') return <div style={caja}>Buscando la posición…</div>
+  if (u.que === 'falla') return <div style={caja}>No se pudo consultar la posición.</div>
   return (
     <div style={caja}>
-      <span>Ubicación en depósito</span>
+      <span>Posición en depósito</span>
       <strong style={{ fontSize: font['2xl'] + 4 }}>{u.atras.length ? u.atras.join(' · ') : 'Sin estante cargado'}</strong>
       <span>Stock: {u.deposito} en depósito · {u.local} en el local</span>
     </div>

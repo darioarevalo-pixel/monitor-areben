@@ -24,7 +24,7 @@ const MAX_LECTURAS = 500
 
 /** PostgREST contesta 42P01 / PGRST205 cuando la tabla ⛔ existe. */
 const faltaLaTabla = (e) => e && (e.code === '42P01' || e.code === 'PGRST205' || e.code === 'PGRST202' || /does not exist|Could not find the (table|function)/i.test(e.message || ''))
-const SIN_TABLA = 'Falta crear las tablas de ubicaciones en la base (sql/migrate-ubicaciones-local.sql).'
+const SIN_TABLA = 'Falta crear las tablas de posiciones en la base (sql/migrate-ubicaciones-local.sql).'
 
 /** Todas las filas, de a 1000 (PostgREST corta ahí). */
 async function todas(q) {
@@ -66,11 +66,11 @@ export default async function handler(req, res) {
   if (!perfil) return
 
   const store = String(req.query.store || (req.body && req.body.store) || '').toLowerCase()
-  if (store !== 'zattia') return res.status(400).json({ error: 'Las ubicaciones del depósito son sólo de Zattia (store=zattia).' })
+  if (store !== 'zattia') return res.status(400).json({ error: 'Las posiciones del depósito son sólo de Zattia (store=zattia).' })
 
   // 🔴 `puedeVerAlguna` y ⛔ nunca `puedeVer` pelado: la `store` la elige el request.
   // 🔑 La Caja también LEE (dice «atrás: A1 · A2» al escanear): ⛔ lleva plata ni datos de nadie.
-  if (!puedeVerAlguna(perfil, store, [SECCION, 'caja'])) return res.status(403).json({ error: 'No tenés acceso a las ubicaciones del depósito.' })
+  if (!puedeVerAlguna(perfil, store, [SECCION, 'caja'])) return res.status(403).json({ error: 'No tenés acceso a las posiciones del depósito.' })
   const marca = marcaDePermisos(store)
   const escanear = !!marca && puedeVerAlguna(perfil, store, [SECCION]) && puedeSub(perfil, marca, SECCION, 'escanear')
 

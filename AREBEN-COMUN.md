@@ -1,6 +1,6 @@
 # AREBEN — LO COMÚN: las palabras y la forma de trabajo de todos los sistemas
 
-Versión: 2026-11-25 (en el repo `monitor-areben` desde el 23-nov; reemplaza a `VOCABULARIO.md`)
+Versión: 2026-11-25b (en el repo `monitor-areben` desde el 23-nov; reemplaza a `VOCABULARIO.md`)
 Dueño: **Areben Gestión** (el ERP; repo `monitor-areben`). Decidido por Bruno el 23-nov-2026: *«ordenar todo desde ERP para
 el resto de los sistemas, y que sea uniforme la forma de trabajo»*.
 
@@ -70,7 +70,7 @@ Si una palabra o una regla cambia, cambia ACÁ primero y después se copia.
 
 ### C.5 · Las pantallas
 - La palabra la elige **el negocio** (Parte 2, §5), ⛔ quien lo programa. Botones en **infinitivo**; voseo sólo en ayudas.
-- **Sin siglas** (Tiendanube, ⛔ TN; Nota de crédito, ⛔ NC) y **sin jerga de la construcción** (motor, espejo,
+- **Sin siglas** (en Areben Gestión: Tienda Nube, ⛔ TN — fila de la Parte 2 §5; en el resto «TN» vale, tanda 3 descartada 25-nov; Nota de crédito, ⛔ NC) y **sin jerga de la construcción** (motor, espejo,
   homologación, sesión A…).
 - Un nombre de pantalla que **no está** en la Parte 2 **se le pregunta a Bruno antes de publicar**.
 - **Las novedades** cuentan **qué se incorporó y cómo se usa**, ⛔ cómo está hecho por detrás. Lo que es sólo para Admin
@@ -113,8 +113,12 @@ Si una palabra o una regla cambia, cambia ACÁ primero y después se copia.
 ### E.1 · Palabras que Bruno ya aprobó (23-nov, con Darío al lado)
 
 ✅ **Tanda 1 (23-nov, Areben Gestión)**: Ubicación · Origen/Destino · Transferir · «Opcional» adentro · Sistema anterior
-(⛔ Gestión Nube) · «Visitas y compromisos ↗» ya están en la Parte 2 §5, junto con las pantallas. ⏭️ Faltan: **Posición**
-(tanda 2) y **Tiendanube** junto (tanda 3). Regla: la fila entra a la Parte 2 en la MISMA tanda que cambia las pantallas.
+(⛔ Gestión Nube) · «Visitas y compromisos ↗» ya están en la Parte 2 §5, junto con las pantallas.
+✅ **Tanda 2 (25-nov)**: **Posición** en la Parte 2 §5, junto con las pantallas (Posiciones · Posiciones depósito, la Caja,
+el tótem, las etiquetas de estante y la columna «Pos.» del PDF de reposición).
+⛔ **Tanda 3 (Tiendanube junto) DESCARTADA** (Darío, 25-nov): el equipo ya entiende «TN». Queda la fila de la Parte 2
+§5 como está (`Tienda Nube`, ⛔ `TN`, sólo en Areben Gestión: Bruno, 26-oct); en el resto de los sistemas «TN» vale.
+Regla: la fila entra a la Parte 2 en la MISMA tanda que cambia las pantallas.
 
 | se dice | ⛔ no se dice | qué es | quién |
 |---|---|---|---|
@@ -123,7 +127,7 @@ Si una palabra o una regla cambia, cambia ACÁ primero y después se copia.
 | ✅ **Origen** · **Destino** (dos columnas) | `De → A` · `Recorrido` | Transferencias (Destino ya se usa en Ingresos de mercadería). Reemplaza la nota «"Ruta" sigue siendo "De → A"» de la fila de Rutas | Bruno ✅ («recorrido no es claro») |
 | ✅ **Transferir** | `Mover` | siempre | Darío 18-nov · Bruno ✅ |
 | ✅ **«Opcional» adentro del campo** | `(opcional)` en el rótulo | reemplaza la fila de Bruno del 15-nov | Darío · Bruno ✅ |
-| ✅ **Tiendanube** (junto, el nombre comercial) | `Tienda Nube` · `TN` | también en C.5 | Bruno: «definí vos» |
+| ~~**Tiendanube** (junto, el nombre comercial)~~ ⛔ descartada | ~~`Tienda Nube` · `TN`~~ | queda como está: el equipo ya entiende «TN» | Bruno: «definí vos» · Darío ⛔ 25-nov |
 | ✅ (nada; o **Sistema anterior** si hace falta nombrarlo) | `Gestión Nube` · `GN` | pase hecho y **suscripciones canceladas** (23-nov). Reemplaza las filas que hoy lo dan por válido (`Tienda Nube · Gestión Nube · Mercado Libre`, y «el nombre de cada lado» en Diferencias) | Bruno ✅ |
 
 🏁 **Pantallas por Gestión Nube** (Darío, 23-nov): **Stock › Diferencias se saca entera** (sólo compara contra Gestión
@@ -186,7 +190,7 @@ publicados en esas pantallas. Escribirlos acá es para que **la sección nueva n
 
 # VOCABULARIO — el glosario compartido de MAKETA y el monitor
 
-Versión: 2026-11-23b
+Versión: 2026-11-25
 
 🔑 **Este archivo es el MISMO en los dos repos** (`areben-marketing` y `monitor-areben`), byte a
 byte. Si cambia acá, se copia allá en el mismo día y sube la `Versión:` de arriba. Cada repo tiene
@@ -574,6 +578,7 @@ para lo que no es del producto (cupón, seguimiento, caja) y para lo que se esca
 | `Opcional` adentro del campo que se puede dejar vacío (el `placeholder`: «Opcional», «Opcional · ej.: …»); el rótulo dice sólo el nombre | `(si lo tenés)` · `(si la tenés)` | monitor | `components` | Bruno, 15-nov-2026: «campo opcional». 23-nov (Darío · Bruno ✅): «Opcional» va adentro, ⛔ «(opcional)» en el rótulo (fila de abajo) |
 | `Opcional` adentro del campo | `(opcional)` · `(obligatorio)` | monitor | `components/erp` · `lib/erp` | Darío · Bruno ✅, 23-nov-2026 (tanda 1: Areben Gestión; el resto del monitor, cuando se toque cada pantalla, y la carpeta de la fila se agranda) |
 | `Ubicación` (el lugar: Local · Depósito · Evento; «Por ubicación», «Todas las ubicaciones», «Marcas y ubicaciones») | `depósitos` · `por depósito` · `ese depósito` · `Elegí el depósito` · `Depósito desconocido` · `Depósito Evento` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Darío propone · Bruno ✅, 23-nov-2026: evita «Depósito: Depósito», y Local y Evento ⛔ son depósitos. «Depósito» sigue siendo el NOMBRE de un lugar (y el rol de Inicio); el rótulo «Depósito» solo ⛔ se puede buscar (es también el nombre): se cuida al escribir |
+| `Posición` · `posiciones` (el lugar exacto en la estantería del depósito: «A1 · A2», «12-3»; las secciones «Posiciones» y «Posiciones depósito») | `ubicaci*` · `Ubic.` | monitor | `components/ubicaciones*` · `lib/ubicaciones*` · `api/_ubicaciones*` · `components/caja/CajaTotem.tsx` · `components/caja/partes.tsx` · `components/etiquetas/Etiquetas.tsx` · `lib/reposicion/pdf.ts` | Darío propone · Bruno ✅, 23-nov-2026 (tanda 2, 25-nov): «Ubicación» quedó para el lugar (Local · Depósito · Evento, fila de arriba). ⚠️ El chequeo de exhibición ⛔ cambia: habla de exhibidores. Las direcciones (`/ubicaciones`, `/ubicaciones-local`) y los nombres del código siguen igual |
 | `Origen` · `Destino` (dos columnas; en el celular, «Origen y destino») | `De → A` · `Recorrido` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Bruno ✅, 23-nov-2026: «recorrido no es claro». Lo que antes era la columna «Origen» (Reposición · Devolución · A mano) es **Tipo** |
 | `Transferir` · `Transferencia` | `Mover stock` · `Mover el stock` · `Mover y recibir` · `Movés` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Darío 18-nov · Bruno ✅ 23-nov-2026: siempre «Transferir». ⚠️ «Mover … arriba / abajo» (el orden de las columnas, §1) sigue valiendo |
 | `Nota de crédito` · `Notas de crédito` (A o B) | `NC` | monitor | `components/erp` · `lib/erp` · `api/_erp*` | Bruno, 26-oct-2026: sin siglas en pantalla (fila del 15-nov: «NC» seguía en Facturación) |

@@ -508,7 +508,7 @@ export function FilaRenglon({
         {!!r.stock.atras?.length && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: weight.semibold, color: color.brand, background: color.brandBg, border: `1px solid ${color.brandBorder}`, padding: '0 6px', borderRadius: radius.pill }}>
             <Icono nombre="ubicaciones" size={12} />
-            Ubicación: {r.stock.atras.join(' · ')}
+            Posición: {r.stock.atras.join(' · ')}
           </span>
         )}
         {r.stock.fuente === 'espejo' && <span title={r.stock.motivo}>· Stock de anoche (Gestión Nube sin respuesta)</span>}

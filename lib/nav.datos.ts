@@ -507,7 +507,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "ubicaciones-local",
     "area": "local",
-    "label": "Ubicaciones depósito",
+    "label": "Posiciones depósito",
     "info": "En qué estante del depósito de atrás del local está guardado cada producto. Se escanea la etiqueta del estante y después todas sus bolsas: guardar reemplaza lo que tenía ese estante. Se busca un producto y dice «A1 · A2». Controles contra el stock de anoche del Local: bolsa sin stock y stock sin bolsa. No toca el stock ni Gestión Nube.",
     "brands": [
       "zattia"
@@ -803,8 +803,8 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "ubicaciones",
     "area": "deposito",
-    "label": "Ubicaciones",
-    "info": "Cargá la ubicación física (observación de GN) por producto, masivo. Para que el orden de armado de pedidos coincida con el recorrido del depósito.",
+    "label": "Posiciones",
+    "info": "Cargá la posición en la estantería (observación de GN) por producto, masivo. Para que el orden de armado de pedidos coincida con el recorrido del depósito.",
     "brands": [
       "bdi",
       "zattia"

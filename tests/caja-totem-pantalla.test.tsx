@@ -200,16 +200,16 @@ describe('CajaTotem', () => {
   }
 
   it('la tarjeta con una prenda en pantalla muestra su ubicación; sin tarjeta, la clienta ⛔ la ve', async () => {
-    expect(await escanear('7790001')).not.toContain('Ubicación en depósito')
+    expect(await escanear('7790001')).not.toContain('Posición en depósito')
     const t = await pasar('encargada')
     expect(t).toContain('BLAZER NEREA')
-    expect(t).toContain('Ubicación en depósito')
+    expect(t).toContain('Posición en depósito')
     expect(t).toContain('A1 · A2')
     expect(t).toContain('5 en depósito')
   })
 
   it('la tarjeta sin prenda espera la próxima, y a la siguiente ya ⛔ vale', async () => {
-    expect(await escanear('ENCARGADA')).toContain('Escaneá el producto para ver su ubicación')
+    expect(await escanear('ENCARGADA')).toContain('Escaneá el producto para ver su posición')
     expect(await pasar('7790001')).toContain('A1 · A2')
     expect(await pasar('7790001')).not.toContain('A1 · A2')
   })

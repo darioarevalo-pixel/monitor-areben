@@ -1739,7 +1739,7 @@ function EstantesEditor() {
           <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 2 }}>🗄️ Etiquetas de estante</div>
           <div style={{ fontSize: 12, color: color.mut2, marginBottom: 14 }}>
             Para el depósito de atrás del local. Cada estante lleva una etiqueta de 10 × 15 con su nombre grande y un código de barras: en{' '}
-            <b>Ubicaciones depósito</b> se escanea primero el estante y después sus bolsas.
+            <b>Posiciones depósito</b> se escanea primero el estante y después sus bolsas.
           </div>
           <label style={{ fontSize: 12, color: color.mut, display: 'block' }}>
             Estantes
