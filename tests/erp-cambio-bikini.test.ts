@@ -43,7 +43,7 @@ vi.mock('pg', () => ({
         if (/select prueba, marca from venta where id/.test(sql)) return { rows: [{ prueba: false, marca: 'zattia' }] }
         if (/select detalle from venta where id/.test(sql)) return { rows: [{ detalle: DETALLE }] }
         if (/select id, product_id, size_id from venta_linea/.test(sql)) return { rows: LINEAS }
-        if (/select id, cantidad, importe from venta_linea/.test(sql)) return { rows: LINEAS }
+        if (/select id, (product_id, size_id, )?cantidad, importe from venta_linea/.test(sql)) return { rows: LINEAS }
         return { rows: [] }
       }
     },
