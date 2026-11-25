@@ -284,6 +284,11 @@ Desde el Cyber, el Depósito de Zattia suma en Tienda Nube. La venta online sigu
 en el depósito, el Local queda en negativo. La lista sigue siendo **una sola, con la suma de todo**, y al escanear la pantalla
 dice cuáles van a la **bolsa de pedidos** (una sola, sin separar por pedido; el local las reparte).
 
+- 🔴 **Después del corte el pedido RESERVA y el libro baja recién al ARMAR** (Bruno 16-nov, `esReservaTN`): el Local de una
+  prenda pedida que está sólo en el depósito queda en 0, ⛔ en negativo, y la alerta ⛔ salía (25-nov: 0 renglones de pedido
+  desde el corte de Zattia, 4 pedidos de retiro esperando hasta 61 h). Desde el 25-nov el Local que cuenta es **el físico MENOS
+  lo reservado** (`descontarReservas`, sólo las prendas `reserva` de `pedidos-web`: lo pagado antes del corte ya bajó el libro)
+  y los pedidos se leen **siempre** (antes, sólo con algún negativo).
 - 🔑 **Cuántas = la menor entre el negativo del Local y lo que hay en pedidos sin armar** (`lib/reposicion/paraPedido.ts`).
   Pedido con stock en el Local: se saca de ahí.
 - 🔴 **Negativo sin pedido = «A revisar», ⛔ se repone** (Darío, 12-nov-2026; reemplaza «va al perchero» del 1-nov): la prenda

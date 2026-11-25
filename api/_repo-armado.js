@@ -126,7 +126,7 @@ export default async function handler(req, res) {
         const tienda = store === 'zattia' && req.query.linea === 'stunned' ? 'stunned' : store
         try {
           const d = await leerPedidosWeb(req.headers && req.headers['x-monitor-auth'], Date.now(), tienda)
-          const prendas = d.pedidos.flatMap((p) => p.prendas.map((x) => ({ sku: x.sku, nombre: x.nombre, cantidad: x.cantidad })))
+          const prendas = d.pedidos.flatMap((p) => p.prendas.map((x) => ({ sku: x.sku, nombre: x.nombre, cantidad: x.cantidad, reserva: !!p.reserva })))
           return res.status(200).json({ ok: true, prendas, noLeidas: d.noLeidas })
         } catch {
           return res.status(502).json({ error: 'No se pudieron leer los pedidos de Tienda Nube.' })

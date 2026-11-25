@@ -16,7 +16,7 @@ import type { FilaVentas } from './porVentas'
 import type { RepoItem } from './tipos'
 
 /** Una prenda de un pedido sin armar, como la manda `action=pedidos-web` de `repo-armado`. */
-export type PrendaPedido = { sku: string; nombre: string; cantidad: number }
+export type PrendaPedido = { sku: string; nombre: string; cantidad: number; reserva?: boolean }
 
 type Variante = Pick<RepoItem, 'vid' | 'sku' | 'name' | 'size' | 'local'>
 
@@ -57,6 +57,24 @@ export function unidadesEnPedidos(todas: Variante[], prendas: PrendaPedido[]): R
   }
   return out
 }
+
+/**
+ * 🔴 **Después del corte el pedido RESERVA y el libro baja recién al ARMAR** (Bruno 16-nov, `esReservaTN` del motor). La
+ * Reposición lee el libro físico: una prenda pedida que está sólo en el depósito deja el Local en 0, ⛔ en negativo, y la
+ * alerta «Pedido» nunca se disparaba (medido 25-nov: 0 renglones de pedido desde el corte de Zattia, contra 1 a 12 por día
+ * antes; 4 pedidos de retiro esperando hasta 61 h). Lo que el Local tiene para exhibir es lo físico MENOS lo reservado:
+ * con eso el negativo vuelve a ser «lo que el depósito le debe al Local por pedidos». Sólo las prendas `reserva`: un pedido
+ * de antes del corte ya pagado bajó el libro al pagar y restarlo de nuevo lo contaría dos veces. Puro.
+ */
+export function descontarReservas<T extends Pick<RepoItem, 'vid' | 'local'>>(inv: T[], reservadas: Record<string, number>): T[] {
+  return inv.map((it) => {
+    const r = Math.max(0, reservadas[it.vid] || 0)
+    return r ? { ...it, local: it.local - r } : it
+  })
+}
+
+/** Las unidades RESERVADAS (pedidos sin armar de después del corte) por variante. */
+export const reservadasEnPedidos = (todas: Variante[], prendas: PrendaPedido[]) => unidadesEnPedidos(todas, prendas.filter((p) => p.reserva))
 
 /** Una variante con el Local en negativo que ningún pedido sin armar explica: cuántas faltan explicar. */
 export type NegativoSinPedido<T> = { it: T; sinPedido: number }

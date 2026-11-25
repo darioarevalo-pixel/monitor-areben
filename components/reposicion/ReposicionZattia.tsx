@@ -42,7 +42,7 @@ import { ArmadoLector } from './ArmadoLector'
 import { OpcionesBdi } from './OpcionesBdi'
 import { HistorialArmados } from './HistorialArmados'
 import { SolicitudDevolucion, type DatoTn } from './SolicitudDevolucion'
-import { agruparLista, paraPedidoDe, separarNegativos, soloEnDeposito, unidadesEnPedidos, type NegativoSinPedido, type PrendaPedido } from '@/lib/reposicion/paraPedido'
+import { agruparLista, descontarReservas, paraPedidoDe, reservadasEnPedidos, separarNegativos, soloEnDeposito, unidadesEnPedidos, type NegativoSinPedido, type PrendaPedido } from '@/lib/reposicion/paraPedido'
 import { abrirArmado, articuloDe, cambiarCantidadesArmado, codigoArmado, leerArmadoHoy, leerPedidosSinArmar, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type LineaPedido, type Sentido } from '@/lib/reposicion/armado'
 import { cambiarCantidades, transferidoDe } from '@/lib/reposicion/armado.core.js'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
@@ -83,8 +83,8 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   // al abrir y con cada stock nuevo, de la Tienda Nube DE LA LÍNEA. `undefined` = leyendo · `null` = no se pudieron leer.
   // La lectura queda con la clave de lo que se leyó (línea + stock): con otra clave es «leyendo», ⛔ la de la otra línea.
   const [lectura, setLectura] = useState<{ clave: string; datos: { prendas: PrendaPedido[]; noLeidas: number } | null } | null>(null)
-  const hayNegativo = useMemo(() => inv.some((it) => it.local < 0), [inv])
-  const leePedidos = !bdi && hayNegativo
+  // 🔴 Siempre (⛔ sólo con un negativo): desde el corte el pedido reserva sin bajar el libro, y el Local ⛔ queda en negativo.
+  const leePedidos = !bdi
   const claveLectura = `${linea}|${rep.lastUpdate?.getTime() ?? ''}`
   const prendasLeidas = lectura && lectura.clave === claveLectura ? lectura.datos : undefined
   useEffect(() => {
@@ -105,9 +105,11 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   const enPedidos = useMemo(() => unidadesEnPedidos(inv, prendasWeb?.prendas ?? []), [inv, prendasWeb])
   // 🔑 Negativo sin pedido = error de stock, ⛔ se repone (Darío, 12-nov-2026): va a «A revisar» y el cálculo lo toma como 0.
   // Mientras se leen o si no se pudieron leer, el negativo cuenta como antes: ⛔ se sabe si es de un pedido.
+  // 🔴 El Local que cuenta es el físico MENOS lo reservado por pedidos sin armar (después del corte el libro baja al armar).
+  const reservadas = useMemo(() => reservadasEnPedidos(inv, prendasWeb?.prendas ?? []), [inv, prendasWeb])
   const { inv: invCalculo, revisar } = useMemo(
-    () => (prendasWeb ? separarNegativos(inv, enPedidos) : { inv, revisar: [] as NegativoSinPedido<(typeof inv)[number]>[] }),
-    [inv, enPedidos, prendasWeb],
+    () => (prendasWeb ? separarNegativos(descontarReservas(inv, reservadas), enPedidos) : { inv, revisar: [] as NegativoSinPedido<(typeof inv)[number]>[] }),
+    [inv, reservadas, enPedidos, prendasWeb],
   )
   const filas = useMemo(() => decidirTodo(invCalculo, cfg, hoy, linea), [invCalculo, cfg, hoy, linea])
   // La Propuesta de devolución muestra el alta en Tienda Nube y si tiene precio promocional (Darío,
