@@ -38,7 +38,6 @@ const PUERTAS = {
     'lib/exhib/correo.ts',
     'lib/exhib/datos.ts',
     'lib/reclamos/cliente.ts',
-    'lib/reposicion/cliente.ts',
     'lib/ubicaciones/cliente.ts'
   ]
 }
