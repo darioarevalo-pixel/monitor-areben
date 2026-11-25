@@ -16,6 +16,7 @@
  * - 🔴 ⛔ crea stock: la unidad entra por la OC (`lib/fuentes/recepciones.mjs`), que cruza por el mismo SKU y entra cuando aparece la variante, con su hora.
  */
 import { lineaDe } from './depositos.mjs'
+import { fichaDeIngresos } from './ficha-ingresos.mjs'
 
 const norm = (x) => String(x ?? '').trim().toUpperCase()
 
@@ -170,16 +171,27 @@ export async function importarElegidos(db, { marca, productos, corte, skusDeOc, 
         await anotar('variante', product_id, size_id, `${v.talle} · Ingresos ${v.ingresos_id ?? '?'}`)
       }
     }
+    const tocados = []
     for (const p of crear) {
       const [{ id }] = (await db.query(`select nextval('catalogo_id')::bigint as id`)).rows
+      tocados.push(id)
       await db.query(`insert into producto (empresa_id, id, marca, nombre, categoria, activo, fuente, usuario) values ($1, $2, $3, $4, $5, true, 'carga', $6)`,
         [empresa, id, marca, p.nombre, p.categoria, usuario])
       await anotar('producto', id, null, `${p.nombre} · Ingresos ${p.ingresos_id}`)
       await ponerVariantes(id, p.variantes)
     }
-    for (const p of agregar) await ponerVariantes(p.product_id, p.variantes)
+    for (const p of agregar) { tocados.push(p.product_id); await ponerVariantes(p.product_id, p.variantes) }
     await db.query('commit')
+    // El proveedor y el código del proveedor (Darío 23-nov), en cuanto entra. Si falla, el alta ya quedó: lo completa la vuelta de cada hora.
+    let ficha = null
+    if (tocados.length) {
+      try {
+        const { muestra, ...f } = await fichaDeIngresos(db, { marca, productos, soloIds: tocados, escribir: true })
+        ficha = f
+      } catch (e) { ficha = { error: String(e?.message ?? e).slice(0, 200) } }
+    }
     return {
+      ficha,
       productos_nuevos: crear.length, productos_con_agregadas: agregar.length,
       variantes_nuevas: [...crear, ...agregar].reduce((a, p) => a + p.variantes.length, 0),
       no_disponibles: [...pedidos].filter((id) => !hechos.has(id)),

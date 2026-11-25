@@ -15,8 +15,9 @@ describe('gnSeSaltea — los syncs dejan de leer el GN de una base', () => {
   it('pasado el día de gracia ⇒ se saltea (antes de la baja del 24)', () => {
     expect(gnSeSaltea({ stunned: STUNNED, zattia: ZATTIA }, 'zattia', new Date('2026-11-23T06:00:00Z'))).toBe(true)
   })
-  it('BDI cortó pero su mayorista sigue en GN ⇒ ⛔ se saltea', () => {
-    expect(gnSeSaltea({ bdi: '2026-11-14T16:12:00Z' }, 'bdi', new Date('2026-12-01T06:00:00Z'))).toBe(false)
+  it('BDI cortó y todo está en el ERP (Bruno 22-nov) ⇒ se saltea pasado el día de gracia', () => {
+    expect(gnSeSaltea({ bdi: '2026-11-14T16:12:00Z' }, 'bdi', new Date('2026-11-15T06:00:00Z'))).toBe(false)
+    expect(gnSeSaltea({ bdi: '2026-11-14T16:12:00Z' }, 'bdi', new Date('2026-11-23T06:00:00Z'))).toBe(true)
   })
   it('sin los cortes TIRA (⛔ un default que olvide el corte)', () => {
     // @ts-expect-error a propósito

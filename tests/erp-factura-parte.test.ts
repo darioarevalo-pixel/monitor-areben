@@ -178,7 +178,7 @@ describe('partePedidoPanel · emitir', () => {
     process.env.ARCA_PRODUCCION_HABILITADA = 'si'
     try {
       const { r, pedidas } = correr({ paso: 'emitir', renglones }, { venta: { ...venta, prueba: true } })
-      expect(await r).toMatchObject({ status: 409, error: expect.stringMatching(/Venta de prueba: se factura en Gestión Nube/) })
+      expect(await r).toMatchObject({ status: 409, error: expect.stringMatching(/Venta de prueba: no se factura/) })
       expect(pedidas).toEqual([])
     } finally { delete process.env.ARCA_PRODUCCION_HABILITADA }
   })

@@ -168,7 +168,7 @@ describe('Mover y recibir', () => {
     m.crearTransferenciaDoc.mockResolvedValue(res(t)); m.armarTransferenciaDoc.mockResolvedValue(res(t)); m.enviarTransferenciaDoc.mockResolvedValue(res(doc({})))
     await montar()
     await escanear('779001')
-    await escribir(document.querySelector('input[placeholder^="Motivo"]') as HTMLInputElement, 'Para el local de Rosario')
+    await escribir(document.querySelector('input[placeholder^="Opcional"]') as HTMLInputElement, 'Para el local de Rosario')
     await act(async () => { boton('Transferir 1 unidad').click() })
     await esperar()
     expect(m.crearTransferenciaDoc).toHaveBeenCalledWith('stunned', 'deposito', 'local', [{ product_id: '10', size_id: '1', sku: 'STU-REM-0019-M', barcode: '779001', cantidad: 1 }], 'Para el local de Rosario')

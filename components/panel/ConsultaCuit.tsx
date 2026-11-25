@@ -9,7 +9,7 @@ import { color, font } from '@/components/ui/tokens'
 import { leerBcraCuit, leerPadronPanel, type BcraDelPanel, type PadronDelPanel } from '@/lib/erp/cliente'
 import { ResumenBcra } from './Bcra'
 
-const CONDICION: Record<string, string> = { ri: 'Responsable inscripto (sale factura A)', monotributo: 'Monotributo (sale factura A)', exento: 'Exento (sale factura B)', consumidor: 'Consumidor final (sale factura B)' }
+const CONDICION: Record<string, string> = { ri: 'Responsable inscripto · factura A', monotributo: 'Monotributo · factura A', exento: 'Exento · factura B', consumidor: 'Consumidor final · factura B' }
 const ROTULO = { fontSize: 11, fontWeight: 700, color: color.mut2, textTransform: 'uppercase' as const, letterSpacing: 0.4 }
 const mensaje = (e: unknown, def: string) => (e instanceof Error ? e.message : def)
 

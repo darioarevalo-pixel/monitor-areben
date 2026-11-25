@@ -36,7 +36,8 @@ export function UsuarioCard({
   onCopiar,
   onFuncion,
   onEliminar,
-  pin,
+  tienePin,
+  pinNuevo,
   pinCargando,
   onPinAlAzar,
   onPinSacar,
@@ -56,8 +57,10 @@ export function UsuarioCard({
   onCopiar: (origen: Marca, destino: Marca) => void
   onFuncion: (f: Funcion, val: boolean) => void
   onEliminar: () => void
-  /** El PIN de encargada (sólo Admin; si la lista no lo trae, no se dibuja). */
-  pin?: string | null
+  /** Si tiene PIN de encargada (sólo Admin; si la lista no se leyó, no se dibuja). ⛔ cuál: el servidor ⛔ lo devuelve (Bruno 23-nov). */
+  tienePin?: boolean
+  /** El PIN recién puesto en esta pantalla: se ve una vez. */
+  pinNuevo?: string | null
   pinCargando?: boolean
   onPinAlAzar?: () => void
   onPinSacar?: () => void
@@ -137,7 +140,7 @@ export function UsuarioCard({
               />
             </Field>
             {onPinAlAzar && onPinSacar && u.name && (
-              <PinUsuario pin={pin} cargando={!!pinCargando} onAlAzar={onPinAlAzar} onSacar={onPinSacar} />
+              <PinUsuario tiene={tienePin} nuevo={pinNuevo} cargando={!!pinCargando} onAlAzar={onPinAlAzar} onSacar={onPinSacar} />
             )}
             <Field label="Marca">
               <Select value={u.cuenta || ''} onChange={(e) => onCuenta(e.target.value)}>

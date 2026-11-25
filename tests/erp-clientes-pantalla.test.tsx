@@ -7,7 +7,7 @@ import type { FilaCliente } from '@/lib/erp/cliente'
 
 /**
  * **Areben Gestión › Clientes, del lado de la pantalla.** El oráculo es lo que se LEE: el aviso de que los clientes salen de GN
- * (el motor ⛔ tiene), las vistas con número, «sin cuenta» en vez de un 0, y la ficha al costado con sus compras.
+ * (el motor ⛔ tiene), las vistas con número, «—» en vez de un 0, y la ficha al costado con sus compras.
  * Las filas pasan por el núcleo real.
  */
 const FILAS = armarFilasClientes({
@@ -47,13 +47,13 @@ const clic = async (el: Element) => { await act(async () => { (el as HTMLElement
 const filaDe = (t: string) => [...host.querySelectorAll('[role="row"]')].find((r) => r.textContent?.includes(t))!
 
 describe('la lista de clientes', () => {
-  it('dice que salen de GN, vistas con número y «sin cuenta» en el saldo', async () => {
+  it('⛔ nombra a Gestión Nube (Darío 22-nov), vistas con número y «—» en el saldo', async () => {
     await montar()
-    expect(todo()).toContain('Areben Gestión todavía no tiene clientes propios')
+    expect(todo()).not.toContain('Gestión Nube')
     expect(boton(/^Compraron este mes/).textContent).toContain('1')
     expect(boton(/^Mayoristas/).textContent).toContain('1')
-    expect(boton(/^Sin comprar hace \+90 días/).textContent).toContain('1')
-    expect(filaDe('Barbara Spagnoli').textContent).toContain('sin cuenta')
+    expect(boton(/^Sin compras \+90 días/).textContent).toContain('1')
+    expect(filaDe('Barbara Spagnoli').textContent).toMatch(/—$/)
     expect(filaDe('Barbara Spagnoli').textContent).toContain('Mayorista')
     await clic(boton(/^Mayoristas/))
     expect(host.querySelector('[role="table"]')!.textContent).not.toContain('Dana Pérez')
@@ -64,7 +64,8 @@ describe('la lista de clientes', () => {
     await clic(filaDe('Barbara Spagnoli').querySelector('[role="cell"]:last-child')!)
     const f = document.querySelector('aside[aria-label^="Ficha del cliente"]')!
     expect(f.textContent).toContain('Saldo de la cuenta')
-    expect(f.textContent).toContain('Areben Gestión todavía no lleva la cuenta de este cliente')
+    expect(f.textContent).toContain('Sin cuenta corriente')
+    expect(f.textContent).not.toContain('Gestión Nube')
     expect(f.textContent).toContain('barbara@x.com')
     expect(f.textContent).toContain('9123')
     expect(f.textContent).toContain('03/10/26')

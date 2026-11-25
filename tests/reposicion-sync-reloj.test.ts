@@ -32,8 +32,7 @@ const leer = (p: string) => readFileSync(join(raiz, p), 'utf8')
  * siempre; Reposición era la única que no, y fue la única que mintió.
  */
 const LLAMADORES = [
-  // Desde el 12-oct-2026 las dos marcas usan la pantalla según ventas: el botón vive ahí.
-  'components/reposicion/ReposicionZattia.tsx',
+  // Reposición salió de acá el 25-nov-2026: lee DIRECTO de Areben Gestión y ⛔ dispara ningún sync.
   'components/exhib/Exhib.tsx',
   'components/ubicaciones/Ubicaciones.tsx',
   'components/caducados/Caducados.tsx',
@@ -41,7 +40,7 @@ const LLAMADORES = [
 ]
 
 describe('el resultado de dispararSyncStock no se puede descartar', () => {
-  it('las cinco pantallas guardan lo que devuelve', () => {
+  it('las pantallas guardan lo que devuelve', () => {
     for (const archivo of LLAMADORES) {
       const src = leer(archivo)
       expect(src, `${archivo} importa dispararSyncStock`).toContain('dispararSyncStock')
@@ -52,7 +51,7 @@ describe('el resultado de dispararSyncStock no se puede descartar', () => {
     }
   })
 
-  it('las cinco avisan cuando el sync no llegó a terminar', () => {
+  it('las pantallas avisan cuando el sync no llegó a terminar', () => {
     for (const archivo of LLAMADORES) {
       const src = leer(archivo)
       // Un `done` guardado y nunca mirado sería el mismo bug con un paso más.
@@ -72,8 +71,10 @@ describe('el reloj de Reposición', () => {
   it('useReposicion no sella lastUpdate con la hora del navegador', () => {
     const src = leer('components/reposicion/useReposicion.ts')
     expect(src, 'volvió el new Date() que hacía ver fresco un espejo de ayer').not.toMatch(/setLastUpdate\(new Date\(\)\)/)
-    expect(src).toMatch(/setLastUpdate\(sincro\)/)
-    expect(src).toContain('ultimaSincronizacion')
+    // 25-nov-2026: lee DIRECTO de Areben Gestión ⇒ la hora es la de la lectura del SERVIDOR (`leidoEn`), que es la del stock.
+    expect(src).toMatch(/setLastUpdate\(d\.leidoEn\)/)
+    expect(src, 'Reposición volvió a leer el espejo de GN').not.toMatch(/ultimaSincronizacion|huellaDatos|leerInventario\(/)
+    expect(leer('components/reposicion/ReposicionZattia.tsx'), 'Reposición volvió a disparar el sync de GN').not.toContain('dispararSyncStock')
   })
 
   it('el PDF lleva la hora del sync y no la de la lectura', () => {

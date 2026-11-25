@@ -68,6 +68,12 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   qué cuenta como pago allá cambia qué confirma una venta acá.
 
 ## Reglas que el código no dice
+- 🔑 **FACTURAR DESDE LA CAJA (Bruno, 22-nov; maqueta aprobada https://claude.ai/artifact/R6Pgxdw9h62d7E6QvzYsV8)**: «Facturar» en la
+  tarjeta de la última venta y en Ventas (lista y resumen), SÓLO con la venta `en_erp` y ⛔ en un cambio, con el permiso `facturar-venta`
+  (`usePuedeErp`). Abre `components/caja/FacturarVenta.tsx` = la MISMA factura a pedido de Areben Gestión (`FacturaCaja` con
+  `cajaInicial`: la ficha se lee por `caja_venta.id`, `vista=venta&caja=1`), ⛔ una copia. 🔑 **Primero se vende, después se factura.**
+  🔑 **La clienta ANTES del CAE**: B con DNI/CUIT + nombre, o A ⇒ `guardarCliente` + `editarVenta(cliente_id)` (`fichaDeLaClienta` en
+  `api/_erp.js`); si la ficha ⛔ se guarda, la factura ⛔ sale. Tests `caja-facturar-clienta`, `caja-ultima-venta`.
 - 🔑 **El CAMBIO en el POS (modo «⇄ Cambios», Bruno, 27-oct; nació para Stunned)**: botón en la cabecera (con alguna línea en `erp_lineas`), banda con
   «1 Lo que devuelve ▸ 2 Lo que se lleva». **Todo el estado y las cuentas viven en `components/caja/useCambio.ts`**, el MISMO que usa
   erp › Caja › Cambio (`CambioCaja.tsx`): ⛔ copiar reglas ahí. Tres orígenes de lo devuelto: venta del ERP, venta de Gestión Nube
@@ -371,7 +377,7 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   de GN: a la izquierda escanear/buscar con tarjetas, a la derecha el pedido fijo, el TOTAL y
   «Continuar al cobro» (Alt+C). La pestaña Caja queda como el informativo del turno, la configuración
   y «Pendientes en GN», con «Abrir POS» arriba. 🔴 **El POS lo usa SÓLO la cuenta que abrió la caja, ⛔
-  ni un admin** (`puedeUsarPOS`, `cierre.core.js`): lo preguntan la pantalla y el servidor —`confirmar`
+  ni un admin** (`puedeUsarPOS`, `cierre.core.js`) — para COBRAR. 🔑 **Para MIRAR entra cualquiera** (Bruno 22-nov: «quiero entrar al POS, ver cómo se ven los productos, las ventas, las vistas»; se entra con «Ver POS» en la pestaña Caja; Bruno 23-nov: se llama «Vista previa», ⛔ «Sólo para mirar»): sin caja abierta o con la de otra cuenta, el POS se dibuja entero con el cartel «Vista previa», «Continuar al cobro» (venta y cambio) trabado y sin Contar billetes / Salida / Ingreso / Cerrar caja (`soloMirar` en `CajaPOS.tsx`). 🔴 El cambio ⛔ pide caja en el servidor (erp › Caja › Cambio cobra sin ella): lo frena SÓLO la pantalla. Tests `caja-pos` y `caja-pos-cambios` (mutantes rojos): lo preguntan la pantalla y el servidor —`confirmar`
   y `contar` dan 403—. Quién es la cuenta: `caja_turno.abierto_por_usuario` = el mail del padrón (el
   perfil ⛔ trae el usuario de login), si ⛔ tiene, el nombre; un turno sin esa columna se compara por
   `abierto_por`. **La caja se cierra desde los dos lados**: en el POS la cuenta dueña, en la pestaña

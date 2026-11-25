@@ -53,13 +53,14 @@ describe('WhatsApp y resumen en la ficha de la cuenta (pantalla)', () => {
     await montar(null)
     const b = boton('Escribir por WhatsApp')!
     expect(b.disabled).toBe(true)
-    expect(b.title).toBe('No tiene WhatsApp cargado.')
+    expect(b.title).toBe('Sin WhatsApp.')
   })
-  it('«Resumen de cuenta» espera a que la cuenta esté leída y abre la ventana de impresión', async () => {
+  it('«Imprimir resumen» (en ⋯) espera a que la cuenta esté leída y abre la ventana de impresión', async () => {
     const w = { document: { open: vi.fn(), write: vi.fn(), close: vi.fn() }, focus: vi.fn(), print: vi.fn(), close: vi.fn() }
     const abrir = vi.spyOn(window, 'open').mockImplementation(() => w as unknown as Window)
     await montar(null)
-    await act(async () => { boton('Resumen de cuenta')!.click() })
+    await act(async () => { (document.querySelector('button[aria-label^="Más acciones de la cuenta"]') as HTMLButtonElement).click() })
+    await act(async () => { [...document.querySelectorAll('button')].find((b) => b.textContent?.includes('Imprimir resumen'))!.click() })
     expect(abrir).toHaveBeenCalledWith('', '_blank')
     expect(w.document.write.mock.calls[0][0]).toContain('Resumen de cuenta corriente')
     abrir.mockRestore()

@@ -11,8 +11,13 @@ contra las ventas reales; la conversación entera está en la nota viva de Darí
 - `components/reposicion/Reposicion.tsx` — BDI (y el modal viejo de mínimos/topes). Para Zattia
   monta `ReposicionZattia.tsx`: dos pestañas, la config por línea y la tabla con el porqué.
 - `lib/reposicion/porVentas.ts` — el cálculo de Zattia (puro). `pdf.ts` — la hoja A4 (compartida con
-  BDI). `rollo.ts` — el rollo de 80 mm de «Devolver al depósito». `cliente.ts` — inventario, ventas
-  (`ventasLocal(marca, días)`), hora del sync, guardado.
+  BDI). `rollo.ts` — el rollo de 80 mm de «Devolver al depósito». `cliente.ts` — `leerReposicionErp` (stock y
+  ventas DIRECTO de Areben Gestión) y guardado.
+- 🔑 **Datos: DIRECTO de Areben Gestión desde el 25-nov-2026** (Darío: «¿por qué tendría en cuenta la copia si ahora es
+  100 % nuestros los datos?»). `api/_reposicion-erp.js` por `api/deposito.js?recurso=reposicion-erp&marca=…&dias=7,60`;
+  las consultas en `lib/reposicion/erp.core.js`. Stock = el LIBRO con la misma consulta que escribe el espejo; ventas =
+  `venta` con la regla «GN antes del corte ∪ ERP después» (⛔ prueba ni anuladas). ⛔ espejo de GN, ⛔ `sync_state`, ⛔ foto
+  guardada en la compu. Con una línea de la base sin cortar contesta 409 (⛔ lista corta callada).
 - Config: KV de **bdi-catalogo** (`/api/reposicion` → `api/ingresos.js?kind=reposicion`), una clave
   por marca. Zattia guarda `ventas` y `ventasStunned` adentro del mismo objeto.
 - **Armar con el lector** (Zattia, 12-oct-2026): `components/reposicion/ArmadoLector.tsx` (la
@@ -20,7 +25,7 @@ contra las ventas reales; la conversación entera está en la nota viva de Darí
   `lib/reposicion/armado.core.js` (sanear y qué se transfiere, compartido con el servidor) ·
   `api/_repo-armado.js` por `api/datos.js?recurso=repo-armado` · tabla `repo_armado` en la base de
   ZATTIA (`sql/migrate-repo-armado.sql`, se corre en el SQL Editor: no hay `DATABASE_URL` en `.env`).
-- Tests: `reposicion-ventas` (Zattia) · `reposicion-core` (BDI) · `reposicion-sync-reloj` · `repo-armado`.
+- Tests: `reposicion-ventas` (Zattia) · `reposicion-core` (BDI) · `reposicion-erp` (la lectura directa) · `reposicion-sync-reloj` · `repo-armado`.
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -34,7 +39,7 @@ contra las ventas reales; la conversación entera está en la nota viva de Darí
 
 «Se usa mucho texto y pocas palabras formales.» Pestañas **Reposición** / **Devolución**; columnas
 **Venta semanal · Stock ideal · Motivo**; botones **Iniciar armado · Finalizar · Transferir N
-prendas · Actualizar stock · Imprimir A4 / ticket**. El **Motivo** dice sólo lo que las columnas
+prendas · Actualizar · Imprimir A4 / ticket**. El **Motivo** dice sólo lo que las columnas
 no dicen (vacío en el caso normal). **Una sola tabla** con el producto como separador: antes era una
 tabla por producto con los encabezados repetidos. Antes de sumar un texto, ver si ya lo dice otra
 columna.
@@ -74,8 +79,8 @@ columna.
 - ⚠️ **Configurar y Recargar los VEN sólo Darío y Bruno** (`puedeEliminarTn`, la regla de Caducados;
   Darío 12-oct-2026: pantalla más simple para quien arma). El POST a bdi-catalogo lo acepta
   cualquiera del equipo: el freno es la pantalla.
-- Si «Actualizar stock» tarda, ⛔ no se pide tocar Recargar: la pantalla mira `sync_state` cada 30 s
-  (hasta 10 min) y se pone al día sola.
+- «Actualizar» vuelve a leer Areben Gestión (segundos). ⛔ dispara el sync de GN ni espera `sync_state` (25-nov-2026:
+  desde el corte ese reloj ⛔ se movía y la espera de 10 min terminaba siempre en aviso). «Recargar» se fue: era lo mismo.
 - ⚠️ Un día sin stock en el local cuenta como día sin venta: el sistema no guarda el stock día por día.
 
 ## BDI (Darío, 12-oct-2026)
@@ -138,8 +143,9 @@ Lorena escanea en la **COMPU** del depósito, con lector, contra la lista de «L
 - 🔴 **Nunca dos transferencias del mismo armado**: `en_curso → transfiriendo` con un update
   condicionado antes de llamar a GN, índice de «uno abierto por lista», y ⛔ **el POST a GN no se
   reintenta** salvo 429. Un 500 o un corte quedan en `revisar`: alguien mira GN y contesta.
-- 🔴 **Recién transferido, la lista sigue igual hasta el próximo sync**: «Armar» queda bloqueado
-  mientras el stock sea anterior a la transferencia (si no, se pide dos veces lo mismo).
+- 🔴 **Recién transferido, «Armar» queda bloqueado mientras el stock leído sea anterior a la transferencia** (si no, se
+  pide dos veces lo mismo). Al terminar el armado la pantalla vuelve a leer Areben Gestión sola (la transferencia del ERP
+  mueve el stock al armar: `RECIBIR_DE_LINEA`).
 - Lo que sobra o no estaba pedido **frena la pantalla** (cartel rojo, ⛔ no el `Modal`: el Enter del
   lector lo cerraba), igual que Conteo. La primera de una «para exhibir» se canta y se marca.
 - El cartel rojo se cierra con **Esc o la barra espaciadora** (Darío, 12-oct-2026). ⛔ **Enter no**: el
@@ -278,6 +284,11 @@ Desde el Cyber, el Depósito de Zattia suma en Tienda Nube. La venta online sigu
 en el depósito, el Local queda en negativo. La lista sigue siendo **una sola, con la suma de todo**, y al escanear la pantalla
 dice cuáles van a la **bolsa de pedidos** (una sola, sin separar por pedido; el local las reparte).
 
+- 🔴 **Después del corte el pedido RESERVA y el libro baja recién al ARMAR** (Bruno 16-nov, `esReservaTN`): el Local de una
+  prenda pedida que está sólo en el depósito queda en 0, ⛔ en negativo, y la alerta ⛔ salía (25-nov: 0 renglones de pedido
+  desde el corte de Zattia, 4 pedidos de retiro esperando hasta 61 h). Desde el 25-nov el Local que cuenta es **el físico MENOS
+  lo reservado** (`descontarReservas`, sólo las prendas `reserva` de `pedidos-web`: lo pagado antes del corte ya bajó el libro)
+  y los pedidos se leen **siempre** (antes, sólo con algún negativo).
 - 🔑 **Cuántas = la menor entre el negativo del Local y lo que hay en pedidos sin armar** (`lib/reposicion/paraPedido.ts`).
   Pedido con stock en el Local: se saca de ahí.
 - 🔴 **Negativo sin pedido = «A revisar», ⛔ se repone** (Darío, 12-nov-2026; reemplaza «va al perchero» del 1-nov): la prenda
@@ -339,18 +350,18 @@ completos**, con «ya faltó N veces en 14 días».
 - Para mirarlo sin mandarlo: `gh workflow run reposicion-correo.yml -f simulacro=true` (deja el HTML
   como artefacto `correo-html`). Desde la Mac ⛔ se puede: el `.env` tiene sólo la clave anon de Zattia.
 
-## La foto guardada (12-oct-2026)
+## La foto guardada (12-oct → 25-nov-2026, ya ⛔)
 
-Al abrir, la pantalla pide la config y la **huella** (`huellaDatos`: la hora de cada sync de
-`sync_state` + el día). Si coincide con la foto guardada en la compu (`reposicion_foto_<marca>`, en
-el almacén del Monitor), muestra eso **sin bajar el stock ni las ventas** (1,3 MB, 16 pedidos →
-2 pedidos chicos). Si cambió —sync de la mañana, «Actualizar stock», transferencia de un armado, o
-cambió el día—, baja todo como antes, en paralelo. «Recargar» y «Reintentar» fuerzan la bajada.
+Hasta el 25-nov la pantalla guardaba en la compu la foto del espejo y la renovaba sólo si cambiaba `sync_state`. Desde el
+corte de cada línea ese reloj ⛔ se movía: la foto quedaba del día y la hora de «Stock …» mentía. Con la lectura directa
+⛔ hace falta: se lee siempre.
 
 ## Lo que ya se rompió acá
 
-- 4-sep-2026: «Actualizado» con el stock de ayer → la hora es la del **sync**, no la de la lectura
-  (comentado en `Reposicion.tsx` y `cliente.ts:ultimaSincronizacion`).
+- 4-sep-2026: «Actualizado» con el stock de ayer → la hora es la del **sync**, no la de la lectura. Desde el 25-nov la
+  lectura ES el stock: la hora es `leidoEn`, la del servidor (⛔ la del navegador).
+- 14/22-nov → 25-nov-2026: pasado el corte, el espejo se llenaba del ERP pero `sync_state` ⛔ se movía: hora vieja, foto
+  sin renovar y «Actualizar stock» de Zattia esperando 10 min para nada. Arreglado leyendo directo.
 - `venta_detalles` ordenado sólo por `sale_id` pisaba empates entre páginas: va con desempate único.
 
 ## Pendiente

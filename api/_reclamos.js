@@ -64,6 +64,8 @@ import { costoDeLaFila, ENTRADAS_DEL_COSTO } from '../lib/reclamos/plata.core.js
 // El costo de un producto, con la clave de servicio. **Una sola implementación** (ver `_costos.js`):
 // la usan también `_fallas.js` y `_canjes.js`, que tampoco lo muestran — lo GUARDAN.
 import { leerCostos } from './_costos.js';
+// El redespacho descuenta del depósito por el mismo camino que la falla de `crear-venta` (ajuste `fallado` del ERP).
+import { fallaAlErp } from './_salida-documento.js';
 // El caso y su escenario: la lista cerrada de escenarios, si el perfil cambia con el escenario, y
 // si hay producto en juego. ⛔ No se copia acá — es la misma tabla que lee la app.
 import { camposAlContestarLaOferta, camposAlSoltarLaDecision, COLUMNAS_PARA_CERRAR, esEscenarioDe, ESTADOS_ABIERTOS, faltantesParaCerrar, ofertaEsperandoRespuesta, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
@@ -119,7 +121,8 @@ const VIAS = ['correo', 'andreani', 'cadete', 'presencial'];
 // 🔑 **Lo que lo cierra ⛔ no es esta línea: es el test que la ata a los botones de la pantalla**
 // (`tests/retornos.test.ts`). Una lista escrita a mano al lado de una pantalla que crece es
 // exactamente la forma que este módulo ya perdió tres veces.
-const ACCIONES_DE_LA_BANDEJA = ['recibir', 'reingreso', 'despachado'];
+// `redespacho` también: lo aprietan Local y Depósito (Bruno 24-nov), y Depósito entra sólo por la bandeja.
+const ACCIONES_DE_LA_BANDEJA = ['recibir', 'reingreso', 'despachado', 'redespacho'];
 
 // Lo que la bandeja necesita ver, y nada más (ver `lib/reclamos/retornos.ts`). ⛔ Sin `relato_cliente`,
 // sin montos y sin `token`: Depósito abre una caja, no revisa un caso.
@@ -480,6 +483,69 @@ export default async function handler(req, res) {
       const { data, error } = await supabase.from('devoluciones').insert(row).select('id, token').single();
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true, id: data?.id, token: data?.token });
+    }
+
+    // 🚚 **Redespacho por falla, en UN gesto** (Bruno 24-nov: «el movimiento más corto posible […] si tiene
+    // muchos pasos, no lo saben usar»). A la clienta le llegó algo fallado y se le manda otra unidad
+    // desde el depósito. Crea el reclamo YA RESUELTO (`otra_unidad`) y descuenta en el acto,
+    // por el mismo camino que «Descontar reemplazo»: el ajuste `fallado` del ERP con ref
+    // `devolucion-<id>-reemplazo`, que es lo que el ERP le publica a Logística como `replacement`
+    // (`GET /internal-orders`). Lo aprietan Local y Depósito (Bruno 24-nov), por eso entra por la
+    // puerta de la bandeja. ⛔ Sin decisión de admin, sin lo que vuelve: se suma después.
+    // 🔴 Si el ERP ⛔ descuenta, el reclamo recién creado SE BORRA: un reemplazo sin descontar es la orden
+    // fantasma que Logística nunca recibe.
+    if (action === 'redespacho') {
+      const orden = texto(b.orden_tn);
+      if (!orden) return res.status(400).json({ error: 'Falta el número de venta de Tienda Nube.' });
+      const items = (Array.isArray(b.items) ? b.items : [])
+        .filter((it) => it && Number.isSafeInteger(Number(it.cantidad)) && Number(it.cantidad) > 0);
+      if (!items.length) return res.status(400).json({ error: 'Tildá qué se le manda de nuevo.' });
+      const sinVariante = items.find((it) => !Number.isSafeInteger(Number(it.product_id)) || !Number.isSafeInteger(Number(it.size_id)));
+      if (sinVariante) return res.status(400).json({ error: `«${sinVariante.producto || sinVariante.sku || 'Un producto'}» no se encontró en el stock: no se puede descontar.` });
+      const nota = texto(b.nota);
+      const { data: fila, error: eAlta } = await supabase.from('devoluciones').insert({
+        store,
+        orden_tn: orden,
+        cliente: texto(b.cliente),
+        token: nuevoToken(),
+        token_vence: venceElLink(),
+        motivo: 'falla',
+        motivo_detalle: nota || 'Redespacho por falla',
+        destino_prenda: 'falla',
+        retorno_decidido: false,
+        compensacion: 'otra_unidad',
+        estado: 'resuelto',
+        items: (await conCosto(store, items)).lista,
+        items_correctos: [],
+        fotos: [],
+        reclamo_correo_estado: 'no_aplica',
+        tn_stock_estado: 'no_aplica',
+        ...pendientesDe({ compensacion: 'otra_unidad' }),
+        usuario,
+        historial: [{ estado: 'resuelto', at: ahora(), usuario, nota: 'redespacho por falla: se le manda otra unidad desde el depósito' }],
+      }).select('id').single();
+      if (eAlta) throw new Error(eAlta.message);
+      const id = Number(fila.id);
+      const r = await fallaAlErp({
+        store,
+        usuario,
+        b: {
+          proposito: 'falla',
+          origen: 'deposito',
+          solicitudId: `devolucion-${id}-reemplazo`,
+          comments: `Redespacho por falla · venta TN ${orden}${nota ? ` · ${nota}` : ''} (Monitor)`,
+          items: items.map((it) => ({ product_id: Number(it.product_id), size_id: Number(it.size_id), quantity: Number(it.cantidad), sku: it.sku || null })),
+        },
+      }).catch((e) => ({ error: String((e && e.message) || e).slice(0, 200) }));
+      if (!r || r.error) {
+        await supabase.from('devoluciones').delete().eq('store', store).eq('id', id);
+        return res.status(409).json({ error: r ? `No se pudo descontar del depósito: ${r.error}` : 'Esta marca todavía no descuenta por Areben Gestión: el redespacho no se puede hacer desde acá.' });
+      }
+      // Las columnas dicen «gn» por historia: desde el corte la baja es el ajuste del ERP (`A-n`), y que
+      // quede anotado es lo que esconde «Descontar reemplazo» —si no, el botón invita a un segundo intento—.
+      const ajuste = `A-${r.ajuste}`;
+      await supabase.from('devoluciones').update({ gn_venta_reemplazo_id: ajuste, gn_venta_reemplazo_number: ajuste }).eq('store', store).eq('id', id);
+      return res.status(200).json({ ok: true, id, ajuste: r.ajuste });
     }
 
     const id = parseInt(b.id, 10);

@@ -46,7 +46,7 @@ const conSigno = (n: number) => (n > 0 ? `+${n}` : String(n))
 
 function bajarCsv(filas: FilaMovimiento[], marca: MarcaErp, desde: string, hasta: string) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Fecha', 'Tipo', 'Producto', 'Variante', 'SKU', 'Depósito', 'Cantidad', 'Saldo', 'Documento', 'Responsable', 'Línea'].map(c).join(';')]
+  const renglones = [['Fecha', 'Tipo', 'Producto', 'Variante', 'SKU', 'Ubicación', 'Cantidad', 'Saldo', 'Documento', 'Responsable', 'Línea'].map(c).join(';')]
   for (const f of filas) renglones.push([cuandoCorto(f.cuando), f.tipoTexto, f.nombre, f.talleNombre, f.sku, f.depositoTexto, f.cantidad, f.queda, f.documento, f.quien, LINEA[f.linea] ?? f.linea].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -152,8 +152,8 @@ export function MovimientosStock({ ajustar }: { ajustar: (p: PrendaAAjustar) => 
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
             {PERIODOS_MOV.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
           </Select>
-          <Select aria-label="Depósito" style={ANCHO_SELECT} value={deposito} onChange={(e) => setDeposito(e.target.value)}>
-            <option value="">Todos los depósitos</option>
+          <Select aria-label="Ubicación" style={ANCHO_SELECT} value={deposito} onChange={(e) => setDeposito(e.target.value)}>
+            <option value="">Todas las ubicaciones</option>
             {DEPOSITOS[marca].map((d) => <option key={d} value={d}>{(NOMBRE_DEPOSITO as Record<string, string>)[d] ?? d}</option>)}
           </Select>
           <PanelColumnas

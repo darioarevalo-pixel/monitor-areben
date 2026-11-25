@@ -189,7 +189,9 @@ export async function listaDeVentas({ marca, desde, hasta, pedidos = [], tnLeida
   const r = rangoDeDias(desde, hasta)
   const t0 = Date.now(), tiempos = {}
   const marcar = (k) => { tiempos[k] = Date.now() - t0 }
-  const deLinea = (q) => (linea ? q.eq('marca', linea) : q)
+  // 🔑 Las de PRUEBA ⛔ entran nunca, ni con filtro (Bruno, 23-nov: «que queden ocultos y sin filtro, no tiene sentido verlos
+  // dos veces»): cada venta del paralelo ya está como la real traída de GN (Zattia 2→21-nov: 672 de prueba junto a 722 `gn`).
+  const deLinea = (q) => (linea ? q.eq('marca', linea) : q).eq('prueba', false)
   const leer = (cols) => leerTodo(sb, 'venta_ficha', (q) => deLinea(q.select(cols).gte('ocurrida_en', r.desde).lt('ocurrida_en', r.hasta)).order('ocurrida_en', { ascending: false }).order('id'))
   // Con la 027 la vista trae lo editable y las notas vigentes; sin ella (otra base, antes de aplicarla) sigue con lo de antes.
   const ventas = await leer(`${COLUMNAS_LISTA}, ${COLUMNAS_027}`).catch(() => leer(COLUMNAS_LISTA))
@@ -512,6 +514,43 @@ export async function anularPagoCuentaErp({ marca, body, usuario }, deps = {}) {
 }
 
 /**
+ * «Corregir saldo inicial» (Darío 24-nov; sólo Admin: `configurar`): el saldo de apertura del corte, con motivo. 0 = lo anula;
+ * otro monto (+ debe, − a favor) = lo reemplaza con la misma fecha. El motor frena si el cliente ⛔ tiene saldo inicial.
+ * Caso que lo trajo: anular una venta de ANTES del corte ⛔ baja la deuda, porque la deuda vino en la apertura.
+ */
+export async function corregirSaldoInicialErp({ marca, body, usuario }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!UUID.test(String(body?.clienteId || ''))) return { status: 400, error: 'Elegí el cliente.' }
+  const monto = Number(body?.monto)
+  if (body?.monto == null || body.monto === '' || !Number.isFinite(monto)) return { status: 400, error: 'Escribí el saldo inicial nuevo (0 si no debe nada).' }
+  const motivo = String(body?.motivo || '').trim()
+  if (motivo.length < 5) return { status: 400, error: 'Escribí el motivo.' }
+  const m = deps.cuenta || await moduloDelMotor('cuenta')
+  if (typeof m?.corregirApertura !== 'function') return { status: 409, error: ESPERA_AL_MOTOR }
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
+  return correr(async (db) => {
+    const r = await m.corregirApertura(db, { cliente_id: body.clienteId, marca: body.linea || marca, monto, motivo, usuario, prueba: body.prueba === true })
+    return r.ok ? { ok: true, cuenta: r.cuenta, apertura: r.apertura } : errorDe(r.error)
+  })
+}
+
+/**
+ * «Poner al día la cuenta» de UNA venta a cuenta (Darío 25-nov, M-124; sólo Admin: `configurar`): las correcciones de precio de
+ * antes del arreglo ⛔ movieron la cuenta ni el pedido. El motor las carga una vez (⛔ duplica). Sin botón: se llama a mano.
+ */
+export async function precioACuentaErp({ marca, body, usuario }, deps = {}) {
+  if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
+  if (!UUID.test(String(body?.ventaId || ''))) return { status: 400, error: 'Venta inválida' }
+  const m = deps.correccion || await moduloDelMotor('correccion')
+  if (typeof m?.precioPendienteACuenta !== 'function') return { status: 409, error: ESPERA_AL_MOTOR }
+  const correr = deps.db ? (fn) => fn(deps.db) : (fn) => conPg(marca, fn)
+  return correr(async (db) => {
+    const r = await m.precioPendienteACuenta(db, { venta_id: body.ventaId, usuario })
+    return r.ok ? { ok: true, cargado: r.cargado } : errorDe(r.error)
+  })
+}
+
+/**
  * Lo de AFUERA del motor para la ficha de UNA venta: cliente y número de GN, pedido de TN (con su link), facturas con
  * número y fecha (del ERP y de GN) para el historial. Las ediciones y notas, cuando el motor las tenga (§16).
  */
@@ -519,11 +558,15 @@ export async function extraDeVenta({ marca, id }, deps = {}) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   if (!/^[0-9a-f-]{36}$/i.test(String(id || ''))) return { status: 400, error: 'Venta inválida' }
   const sb = deps.sb || (() => { const { url, key } = cfgDeMarca(marca); return createClient(url, key) })()
+  // ⚡ 23-nov: el historial del motor sólo necesita el id ⇒ arranca YA, a la par de todo lo demás (iba ÚLTIMO, en fila).
+  // La base de BDI está en us-west-2 y la función en iad1: cada viaje en fila cuesta. Medido: ficha BDI 2,1 s vs Zattia 0,6 s.
+  const motor = delMotorParaLaFicha(marca, id, deps)
+  motor.catch(() => {}) // si la venta ⛔ existe se sale antes de esperarlo: que un rechazo ⛔ quede sin atender
   let { data: v, error } = await sb.from('venta_ficha').select(`${COLUMNAS_LISTA}, ${COLUMNAS_027}`).eq('id', id).maybeSingle()
   if (error) ({ data: v, error } = await sb.from('venta_ficha').select(COLUMNAS_LISTA).eq('id', id).maybeSingle())
   if (error) throw new Error(`venta_ficha: ${error.message}`)
   if (!v) return { status: 404, error: 'La venta no existe.' }
-  const [a, cuentas, destinos] = await Promise.all([deAfuera(sb, [v]), cuentasDeCobro(sb, v.marca), destinosDeCobro(marca, v.marca, v.canal, deps)])
+  const [a, cuentas, destinos, delMotor] = await Promise.all([deAfuera(sb, [v]), cuentasDeCobro(sb, v.marca), destinosDeCobro(marca, v.marca, v.canal, deps), motor])
   const g = a.deVenta(v)
   const o = a.orden(v)
   const fg = a.facGn(g)
@@ -537,7 +580,7 @@ export async function extraDeVenta({ marca, id }, deps = {}) {
     // 🔑 La ENTREGA QUE COBRA (motor sql/039): si Logística cobró al entregar, la venta lo lleva en `detalle.entrega` (quién, cuándo, con qué; la transferencia queda «por verificar»).
     cobroEnEntrega: v.detalle?.entrega ? { entrego: v.detalle.entrega.entrego ?? null, fecha: v.detalle.entrega.fecha ?? null, formaPago: v.detalle.entrega.forma_pago ?? null, porVerificar: v.detalle.entrega.por_verificar === true } : null,
     tn: o ? { numero: o.numero, estado: o.estado, envioTipo: o.envio_tipo, creadaEn: o.creada_en, actualizadaEn: o.actualizada_en, link: ADMIN[o.tienda] ? `${ADMIN[o.tienda]}/orders/${o.tn_id}` : null } : null,
-    facturas, cuentas, ...destinos, ...(await delMotorParaLaFicha(marca, id, deps)),
+    facturas, cuentas, ...destinos, ...delMotor,
   }
 }
 

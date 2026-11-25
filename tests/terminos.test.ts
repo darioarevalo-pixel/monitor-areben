@@ -18,7 +18,7 @@ import ts from 'typescript'
  */
 
 const RAIZ = process.cwd()
-const DOC = readFileSync(join(RAIZ, 'VOCABULARIO.md'), 'utf8')
+const DOC = readFileSync(join(RAIZ, 'AREBEN-COMUN.md'), 'utf8')
 
 type Fila = { dice: string; prohibidas: string[]; donde: string[] }
 

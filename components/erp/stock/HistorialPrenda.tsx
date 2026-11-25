@@ -111,7 +111,7 @@ export function HistorialPrenda({ marca, producto, talle, datos, onCerrar }: {
   /** Lo que frena el botón principal (se muestra en el botón apagado). */
   const frena = !panel ? null
     : !panel.cantidad ? 'Escribí la cantidad'
-    : panel.tipo === 'transf' ? (panel.desde === panel.hacia ? 'Elegí depósitos distintos' : panel.cantidad > hay(panel.desde) ? `Hay ${hay(panel.desde)} en ${nombreDep(panel.desde)}` : null)
+    : panel.tipo === 'transf' ? (panel.desde === panel.hacia ? 'Elegí ubicaciones distintas' : panel.cantidad > hay(panel.desde) ? `Hay ${hay(panel.desde)} en ${nombreDep(panel.desde)}` : null)
     : panel.sentido === 'salida' && panel.cantidad > hay(panel.deposito) ? `Hay ${hay(panel.deposito)} en ${nombreDep(panel.deposito)}`
     : panel.motivo === 'otro' && panel.porque.trim().length < 3 ? 'Escribí el porqué'
     : null
@@ -181,7 +181,7 @@ export function HistorialPrenda({ marca, producto, talle, datos, onCerrar }: {
       </div>
       {h && (
         <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
-          <div role="group" aria-label="Depósito" style={{ display: 'flex', background: color.bg2, borderRadius: 10, padding: 3, gap: 2, maxWidth: '100%', overflowX: 'auto' }}>
+          <div role="group" aria-label="Ubicación" style={{ display: 'flex', background: color.bg2, borderRadius: 10, padding: 3, gap: 2, maxWidth: '100%', overflowX: 'auto' }}>
             {opciones.map((o) => (
               <button key={o.k} type="button" aria-pressed={dep === o.k} onClick={() => setDeposito(o.k)} style={boton(dep === o.k)}>
                 {o.n} <b style={{ marginLeft: 4, fontVariantNumeric: 'tabular-nums' }}>{o.s}</b>
@@ -226,7 +226,7 @@ export function HistorialPrenda({ marca, producto, talle, datos, onCerrar }: {
             ))}
           </div>
         </Field>
-        <Field label="Depósito">
+        <Field label="Ubicación">
           <Select value={panel.deposito} onChange={(e) => setPanel({ ...panel, deposito: e.target.value })}>
             {deps.map((d) => <option key={d} value={d}>{nombreDep(d)} · {hay(d)}</option>)}
           </Select>
@@ -267,8 +267,8 @@ export function HistorialPrenda({ marca, producto, talle, datos, onCerrar }: {
       <div style={{ minHeight: angosta ? undefined : 'calc(100vh - 250px)' }}>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
-      {!h ? (!error && <div style={{ padding: space[6], color: color.mut }}>Leyendo los movimientos…</div>)
-        : !filas.length ? <div style={{ padding: space[6], color: color.mut }}>No hay movimientos con ese filtro.</div>
+      {!h ? (!error && <div style={{ padding: space[6], color: color.mut }}>Leyendo…</div>)
+        : !filas.length ? <div style={{ padding: space[6], color: color.mut }}>Ningún movimiento coincide con el filtro.</div>
         : angosta ? (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {filas.map((f) => (
@@ -294,7 +294,7 @@ export function HistorialPrenda({ marca, producto, talle, datos, onCerrar }: {
               <tr>
                 <th style={{ ...th, width: 84 }}>Fecha</th>
                 <th style={{ ...th, width: 230 }}>Movimiento</th>
-                {todos && <th style={{ ...th, width: 140 }}>Depósito</th>}
+                {todos && <th style={{ ...th, width: 140 }}>Ubicación</th>}
                 <th style={{ ...th, textAlign: 'right', width: 70 }}>Entrada</th>
                 <th style={{ ...th, textAlign: 'right', width: 64 }}>Salida</th>
                 {conSaldo && <th style={{ ...th, textAlign: 'right', width: 64 }}>Saldo</th>}

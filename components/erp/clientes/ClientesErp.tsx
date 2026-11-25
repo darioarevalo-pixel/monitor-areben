@@ -97,7 +97,7 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
           // Los clientes de GN no traen documento: ⛔ comparar `null === null` (abría la primera fila sin documento).
           const f = pedido.doc ? d.filas.find((x) => x.doc === pedido.doc) : d.filas.find((x) => x.nombre.trim().toLowerCase() === pedido.nombre.trim().toLowerCase())
           if (f) setFicha(f)
-          else setError(`${pedido.doc ? `El documento ${pedido.doc}` : pedido.nombre} todavía no está en la lista de clientes.`)
+          else setError(`Ningún cliente coincide con «${pedido.doc ?? pedido.nombre}».`)
           soltar?.()
         }
       })
@@ -143,8 +143,8 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
     if (k === 'primera') return <span style={{ color: color.mut }}>{fechaCorta(f.primera)}</span>
     if (k === 'canales') return <span title={f.canales.join(', ')} style={{ color: color.mut }}>{f.canales.join(' · ') || '—'}</span>
     if (k === 'saldo') {
-      if (f.saldo == null) return <span style={{ color: color.mut2 }} title="Areben Gestión todavía no lleva la cuenta de este cliente">sin cuenta</span>
-      if (f.saldo === 0) return <span style={{ color: color.mut }}>al día</span>
+      if (f.saldo == null) return <span style={{ color: color.mut2 }}>—</span>
+      if (f.saldo === 0) return <span style={{ color: color.mut }}>Sin saldo</span>
       return <span style={{ fontWeight: 700, color: f.vencido ? 'var(--mo-danger-ink)' : f.saldo < 0 ? 'var(--mo-success-ink)' : color.ink }}>{f.saldo < 0 ? `${formatMoney(-f.saldo)} a favor` : formatMoney(f.saldo)}</span>
     }
     return null
@@ -152,36 +152,25 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
 
   const acciones = (f: FilaCliente) => {
     const menu: AccionMenu[] = [
-      { key: 'ficha', label: 'Abrir la ficha', icono: 'abrir', onClick: () => setFicha(f) },
-      { key: 'csv', label: 'Exportar sus datos', icono: 'bajar', onClick: () => bajarCsv([f], marca) },
+      { key: 'ficha', label: 'Abrir', icono: 'abrir', onClick: () => setFicha(f) },
+      { key: 'csv', label: 'Exportar', icono: 'bajar', onClick: () => bajarCsv([f], marca) },
     ]
     return (
       <>
-        <IconoFila label="Abrir la ficha" onClick={() => setFicha(f)}><Icono nombre="abrir" size={16} /></IconoFila>
+        <IconoFila label="Abrir" onClick={() => setFicha(f)}><Icono nombre="abrir" size={16} /></IconoFila>
         <MenuAcciones acciones={menu} etiqueta={`Más acciones del cliente ${f.nombre}`} vertical alinear="izquierda" />
       </>
     )
   }
 
-  const nombreVista = TODAS_LAS_VISTAS.find(([k]) => k === vistaVale)?.[1] ?? ''
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>Cada cliente con lo que compró y el saldo de su cuenta.</p>
-      {sinCuentas && (
-        <Notice tone="warning">
-          Los clientes salen de <b>Gestión Nube</b>: Areben Gestión todavía no tiene clientes propios (ninguna venta de Areben Gestión trae cliente),
-          así que todavía no lleva cuentas corrientes. El saldo aparece acá cuando se venda a cuenta desde Areben Gestión.
-          {datos?.porNombre && <> En Zattia, Gestión Nube no manda el número de cliente: se juntan por <b>nombre</b> (dos con el mismo nombre se ven como uno).</>}
-        </Notice>
-      )}
-      {datos && !datos.cuentaLista && <Notice tone="warning">No se pudo leer la cuenta corriente: el saldo no se muestra.</Notice>}
+      {datos && !datos.cuentaLista && <Notice tone="warning">No se pudo leer el saldo.</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       {!enSaldo && <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-        {conCuentas && <TileResumen titulo="Por cobrar" valor={sinCuentas ? '—' : cuentas ? formatMoney(cuentas.porCobrar) : '…'} oscuro nota={sinCuentas ? 'todavía sin cuentas corrientes' : `todas las cuentas${cuentas?.prueba ? ', de prueba' : ''} · lo que deben − lo que tienen a favor`} />}
-        <TileResumen titulo="Compraron este mes" valor={n(res.compraron)} nota={`de ${n(res.clientes)} en ${nombreVista.toLowerCase()}`} />
-        <TileResumen titulo="Mayoristas" valor={n(res.mayoristas)} nota="con alguna compra mayorista" />
-        <TileResumen titulo="Comprado" valor={formatMoney(res.total)} nota={`${n(res.clientes)} clientes`} />
+        {conCuentas && <TileResumen titulo="Por cobrar" valor={sinCuentas ? '—' : cuentas ? formatMoney(cuentas.porCobrar) : '…'} oscuro />}
+        <TileResumen titulo="Comprado" valor={formatMoney(res.total)} />
       </div>}
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
@@ -204,7 +193,7 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
           activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `el cliente ${f.nombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay clientes con ese nombre o documento.' : 'No hay clientes en esta vista.'} />
+              <EmptyState title={q ? `Ningún cliente coincide con «${q}».` : 'No hay clientes en esta vista.'} />
               {vista !== 'todos' && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todos')}>Ver todos</Button></div>}
             </div>
           ) : null}
@@ -215,15 +204,14 @@ export function ClientesErp({ abrir, alAbrir, vistaInicial = 'todos' }: {
           </div>
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo los clientes…' : `${n(Math.min(mostrar, filas.length))} de ${n(filas.length)}`}
-          {datos && <> · compras de Gestión Nube hasta {fechaCorta(datos.gnHasta)} · sin «Consumidor Final»</>}
+          {cargando && !datos ? 'Leyendo…' : `${n(Math.min(mostrar, filas.length))} de ${n(filas.length)}`}
         </div>
         </>}
       </div>
       {conCuentas && <div hidden={!enSaldo}><CuentaCorriente embebida vistaDeAfuera={enSaldo ? vistaVale : 'saldo'} alContar={setCuentas} /></div>}
 
       <BarraSeleccion cuantas={elegidas.length} onSoltar={() => setSeleccion(new Set())}>
-        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca)}>Exportar los elegidos</AccionSeleccion>
+        <AccionSeleccion icono="bajar" onClick={() => bajarCsv(elegidas, marca)}>Exportar</AccionSeleccion>
       </BarraSeleccion>
 
       {ficha && <FichaCliente key={`${marca}/${ficha.id}`} marca={marca} fila={ficha} onCerrar={() => setFicha(null)} />}

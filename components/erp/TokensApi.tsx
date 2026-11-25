@@ -185,7 +185,7 @@ function Actividad({ t, onCerrar }: { t: TokenApi; onCerrar: () => void }) {
       {filas && !filas.length && <EmptyState title="Este token todavía no consultó nada." />}
       {filas && filas.length > 0 && (
         <table style={{ width: '100%', fontSize: font.sm }}>
-          <thead><tr><th align="left">Cuándo</th><th align="left">Qué pidió</th><th align="right">Respuesta</th><th align="right">Filas</th><th align="left">Desde</th></tr></thead>
+          <thead><tr><th align="left">Fecha</th><th align="left">Qué pidió</th><th align="right">Respuesta</th><th align="right">Filas</th><th align="left">Desde</th></tr></thead>
           <tbody>{filas.map((f, i) => (
             <tr key={i}><td>{fechaHora(f.en)}</td><td>{f.metodo} {f.molde}</td><td align="right">{f.status}{f.code ? ` ${f.code}` : ''}</td><td align="right">{f.cantidad ?? '—'}</td><td>{f.ip ?? '—'}</td></tr>
           ))}</tbody>
@@ -256,7 +256,7 @@ export function TokensApi() {
   const conteo = { activos: tokens.filter((t) => vistaDeToken(t) === 'activos').length, revocados: tokens.filter((t) => vistaDeToken(t) === 'revocados').length }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>Quién consulta Areben Gestión desde afuera. Un token es de un solo negocio y actúa a nombre de una persona.</p>
+      <p style={{ margin: 0, color: color.mut }}>Qué apps leen Areben Gestión desde afuera.</p>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       <div style={{ display: 'flex', gap: space[2] }}>
         <Button onClick={() => setVentana({ tipo: 'nuevo' })} disabled={!cat}>Nuevo token</Button>

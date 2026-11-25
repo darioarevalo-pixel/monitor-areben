@@ -88,6 +88,27 @@ describe('cierres de la Caja por marca (Stunned)', () => {
     const r = await enviarVentaErp({ ...venta, store: 'zattia', email: 'a@b.co' }, { sb, registrar: async () => ({ ok: true }), mailer: { url: 'http://m', key: 'k', fetch: fetchFalso } })
     expect(pedidos).toHaveLength(0); expect(r.venta.ticket_mail).toBe('apagado: Stunned sin remitente')
   })
+  it('🔑 con `enCola` el ticket ⛔ espera al mailer (Bruno 23-nov): la venta vuelve anotada y el mail sigue por detrás', async () => {
+    const { sb } = baseFalsa({ ...venta, store: 'bdi', email: 'a@b.co', renglones: [{ linea: 'bdi', product_id: 1, size_id: 1, nombre: 'Funda', talle: 'U', cantidad: 1, precio: 1, importe: 1 }], pagos: [], subtotal: 1, total: 1 })
+    let soltar: () => void = () => {}
+    let pedidos = 0
+    const fetchLento = (async () => { pedidos++; await new Promise<void>((ok) => { soltar = ok }); return { status: 200, text: async () => '{"encolado":true}' } }) as unknown as typeof fetch
+    const cola: Promise<unknown>[] = []
+    const r = await enviarVentaErp({ ...venta, store: 'bdi', email: 'a@b.co' }, { sb, registrar: async () => ({ ok: true, numero: 7 }), mailer: { url: 'http://m', key: 'k', fetch: fetchLento }, enCola: (p) => { cola.push(p) } })
+    // Volvió con el mailer todavía colgado: el ticket se imprime ya.
+    expect(r.venta.estado).toBe('en_erp')
+    expect(cola).toHaveLength(1)
+    for (let i = 0; i < 50 && !pedidos; i++) await new Promise((ok) => setTimeout(ok, 0))
+    expect(pedidos).toBe(1)
+    soltar()
+    await cola[0]
+  })
+  it('sin `enCola` (el reintento) el mail se espera, como antes', async () => {
+    const { sb } = baseFalsa({ ...venta, store: 'bdi', email: 'a@b.co', renglones: [{ linea: 'bdi', product_id: 1, size_id: 1, nombre: 'Funda', talle: 'U', cantidad: 1, precio: 1, importe: 1 }], pagos: [], subtotal: 1, total: 1 })
+    const fetchOk = (async () => ({ status: 200, text: async () => '{"encolado":true}' })) as unknown as typeof fetch
+    const r = await enviarVentaErp({ ...venta, store: 'bdi', email: 'a@b.co' }, { sb, registrar: async () => ({ ok: true }), mailer: { url: 'http://m', key: 'k', fetch: fetchOk } })
+    expect(r.venta.ticket_mail).toBeTruthy()
+  })
   it('si la venta queda en error ⛔ sale el mail', async () => {
     const { sb } = baseFalsa({ ...venta, store: 'zattia', email: 'a@b.co' }); let n = 0
     const fetchFalso = (async () => { n++; return { status: 200, text: async () => '{}' } }) as unknown as typeof fetch

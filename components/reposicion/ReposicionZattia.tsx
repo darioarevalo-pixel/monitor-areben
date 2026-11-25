@@ -27,7 +27,6 @@ import { useRecargarDatos } from '@/components/productos/BotonRecargar'
 import { puedeEliminarTn } from '@/components/caducados/eliminarTn'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { dispararSyncStock } from '@/lib/sync-gn'
 import { indexarTn, matchTn } from '@/lib/tn'
 import { construirInv } from '@/lib/reposicion/inventario'
 import { aplicarCats } from '@/lib/reposicion/core'
@@ -38,13 +37,12 @@ import { filasDevolucionBdi } from '@/lib/reposicion/devolucionBdi'
 import { reposicionPDFFilas } from '@/lib/reposicion/pdf'
 import type { Producto } from '@/lib/etl/tipos'
 import { useReposicion } from './useReposicion'
-import { ultimaSincronizacion } from '@/lib/reposicion/cliente'
 import { useEtiquetasCampania } from '@/components/etiquetas/useEtiquetasCampania'
 import { ArmadoLector } from './ArmadoLector'
 import { OpcionesBdi } from './OpcionesBdi'
 import { HistorialArmados } from './HistorialArmados'
 import { SolicitudDevolucion, type DatoTn } from './SolicitudDevolucion'
-import { agruparLista, paraPedidoDe, separarNegativos, soloEnDeposito, unidadesEnPedidos, type NegativoSinPedido, type PrendaPedido } from '@/lib/reposicion/paraPedido'
+import { agruparLista, descontarReservas, paraPedidoDe, reservadasEnPedidos, separarNegativos, soloEnDeposito, unidadesEnPedidos, type NegativoSinPedido, type PrendaPedido } from '@/lib/reposicion/paraPedido'
 import { abrirArmado, articuloDe, cambiarCantidadesArmado, codigoArmado, leerArmadoHoy, leerPedidosSinArmar, pedidoDesde, resolverArmado, resumenArmado, talle, trabado, type Armado, type LineaPedido, type Sentido } from '@/lib/reposicion/armado'
 import { cambiarCantidades, transferidoDe } from '@/lib/reposicion/armado.core.js'
 import { Badge, Button, EmptyState, Esqueleto, Modal, Notice, Select, SelectorLinea, Tabs, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
@@ -85,8 +83,8 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   // al abrir y con cada stock nuevo, de la Tienda Nube DE LA LÍNEA. `undefined` = leyendo · `null` = no se pudieron leer.
   // La lectura queda con la clave de lo que se leyó (línea + stock): con otra clave es «leyendo», ⛔ la de la otra línea.
   const [lectura, setLectura] = useState<{ clave: string; datos: { prendas: PrendaPedido[]; noLeidas: number } | null } | null>(null)
-  const hayNegativo = useMemo(() => inv.some((it) => it.local < 0), [inv])
-  const leePedidos = !bdi && hayNegativo
+  // 🔴 Siempre (⛔ sólo con un negativo): desde el corte el pedido reserva sin bajar el libro, y el Local ⛔ queda en negativo.
+  const leePedidos = !bdi
   const claveLectura = `${linea}|${rep.lastUpdate?.getTime() ?? ''}`
   const prendasLeidas = lectura && lectura.clave === claveLectura ? lectura.datos : undefined
   useEffect(() => {
@@ -107,9 +105,11 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   const enPedidos = useMemo(() => unidadesEnPedidos(inv, prendasWeb?.prendas ?? []), [inv, prendasWeb])
   // 🔑 Negativo sin pedido = error de stock, ⛔ se repone (Darío, 12-nov-2026): va a «A revisar» y el cálculo lo toma como 0.
   // Mientras se leen o si no se pudieron leer, el negativo cuenta como antes: ⛔ se sabe si es de un pedido.
+  // 🔴 El Local que cuenta es el físico MENOS lo reservado por pedidos sin armar (después del corte el libro baja al armar).
+  const reservadas = useMemo(() => reservadasEnPedidos(inv, prendasWeb?.prendas ?? []), [inv, prendasWeb])
   const { inv: invCalculo, revisar } = useMemo(
-    () => (prendasWeb ? separarNegativos(inv, enPedidos) : { inv, revisar: [] as NegativoSinPedido<(typeof inv)[number]>[] }),
-    [inv, enPedidos, prendasWeb],
+    () => (prendasWeb ? separarNegativos(descontarReservas(inv, reservadas), enPedidos) : { inv, revisar: [] as NegativoSinPedido<(typeof inv)[number]>[] }),
+    [inv, reservadas, enPedidos, prendasWeb],
   )
   const filas = useMemo(() => decidirTodo(invCalculo, cfg, hoy, linea), [invCalculo, cfg, hoy, linea])
   // La Propuesta de devolución muestra el alta en Tienda Nube y si tiene precio promocional (Darío,
@@ -134,7 +134,6 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   const [manual, setManual] = useState<Record<string, number>>({})
   const [configOpen, setConfigOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  const [syncLabel, setSyncLabel] = useState('')
 
   const [armados, setArmados] = useState<Record<Sentido, Armado | null>>({ llevar: null, devolver: null })
   // 🔑 Con un armado empezado, las cantidades son las del ARMADO (Darío, 17-oct-2026): lo cambiado en
@@ -150,49 +149,16 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
   const paraExhibir = llevar.filter((f) => f.d.exhibir && cantLlevar(f) > paraPedido(f)).length
   const conAlarma = llevar.filter((f) => f.d.soloAlarma).reduce((s, f) => s + cantLlevar(f), 0)
 
-  // Desde cuándo se espera un «Actualizar stock» que tardó más de lo normal (`null` = no se espera).
-  const [esperandoSync, setEsperandoSync] = useState<number | null>(null)
-  useEffect(() => {
-    if (esperandoSync == null) return
-    const desde = rep.lastUpdate?.getTime() ?? 0
-    const t = setInterval(() => {
-      void (async () => {
-        const s = await ultimaSincronizacion(marca)
-        if (s && s.getTime() > desde) {
-          setEsperandoSync(null)
-          await Promise.all([rep.traer({ forzar: true }), recargar()])
-          toast.ok('Stock actualizado')
-        } else if (Date.now() - esperandoSync > 10 * 60_000) {
-          setEsperandoSync(null)
-          toast.aviso('Gestión Nube no terminó de actualizar el stock. Probá «Actualizar stock» de nuevo en unos minutos.')
-        }
-      })()
-    }, 30_000)
-    return () => clearInterval(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [esperandoSync, marca])
-
+  // 🔑 «Actualizar» vuelve a leer Areben Gestión (unos segundos, 25-nov-2026). Antes disparaba el sync de GN y esperaba
+  // hasta 10 min a que `sync_state` se moviera; desde el corte ese reloj ⛔ se movía y la espera terminaba siempre en aviso.
   const onActualizar = async () => {
     if (syncing) return
     setSyncing(true)
     try {
-      // Ver el porqué de mirar el `done` en `Reposicion.tsx` (el 4-sep el local bajó con stock de ayer).
-      const done = await dispararSyncStock(marca, setSyncLabel)
-      setSyncLabel('↻ Recargando…')
-      await Promise.all([rep.traer({ forzar: true }), recargar()])
+      await Promise.all([rep.traer(), recargar()])
       setManual({})
-      if (done) toast.ok('Stock actualizado')
-      else {
-        // 🔑 Sin «tocá Recargar» (Darío, 12-oct-2026: Recargar quedó sólo para él y Bruno): la
-        // pantalla mira sola cada 30 s hasta que Gestión Nube termina.
-        toast.aviso('Gestión Nube está tardando. La pantalla se actualiza sola cuando termine.')
-        setEsperandoSync(Date.now())
-      }
-    } catch (e) {
-      toast.error('No se pudo actualizar: ' + (e as Error).message)
     } finally {
       setSyncing(false)
-      setSyncLabel('')
     }
   }
 
@@ -390,7 +356,7 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
     return (
       <Notice tone="danger" icon="⚠">
         No pude cargar la reposición: {rep.error}{' '}
-        <Button size="sm" variant="outline" tone="danger" onClick={() => void rep.traer({ forzar: true })}>
+        <Button size="sm" variant="outline" tone="danger" onClick={() => void rep.traer()}>
           Reintentar
         </Button>
       </Notice>
@@ -450,20 +416,14 @@ export function ReposicionZattia({ allProductos }: { allProductos: Producto[] })
             Ventas del local y de Tienda Nube: últimos {cv.ventanaDias} días y última semana.
           </InfoPopover>
         )}
-        {/* Configurar y Recargar, sólo Darío y Bruno (Darío, 12-oct-2026): para quien arma, una
-            pantalla más simple. Recargar no hace falta: la espera de «Actualizar stock» se resuelve sola. */}
+        {/* Configurar, sólo Darío y Bruno (Darío, 12-oct-2026): para quien arma, una pantalla más simple. */}
         {puedeMarcar && (
           <Button variant="ghost" onClick={() => setConfigOpen(true)}>
             Configurar
           </Button>
         )}
-        {puedeMarcar && (
-          <Button variant="ghost" onClick={() => void Promise.all([rep.traer({ forzar: true }), recargar()])} loading={recargando} title="Vuelve a leer los datos ya sincronizados, sin ir a Gestión Nube">
-            Recargar
-          </Button>
-        )}
-        <Button variant="outline" onClick={() => void onActualizar()} loading={syncing || esperandoSync != null} title="Carga el stock de Gestión Nube (unos 2 minutos)">
-          {syncing ? syncLabel || 'Actualizando…' : esperandoSync != null ? 'Esperando a Gestión Nube…' : 'Actualizar stock'}
+        <Button variant="outline" onClick={() => void onActualizar()} loading={syncing || recargando} title="Vuelve a leer el stock y las ventas de Areben Gestión">
+          Actualizar
         </Button>
       </HeaderAcciones>
 

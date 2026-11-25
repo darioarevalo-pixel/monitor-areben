@@ -32,8 +32,9 @@ import inventario from './_inventario-vivo.js';
 import observaciones from './_observaciones.js';
 import noVa from './_conteo-no-va.js';
 import ubicacionesErp from './_ubicaciones-erp.js';
+import reposicionErp from './_reposicion-erp.js';
 
-const RECURSOS = { conteos, inventario, observaciones, 'no-va': noVa, 'ubicaciones-erp': ubicacionesErp };
+const RECURSOS = { conteos, inventario, observaciones, 'no-va': noVa, 'ubicaciones-erp': ubicacionesErp, 'reposicion-erp': reposicionErp };
 
 /**
  * 🔴 **Esto vivía en `api/_inventario-vivo.js:107` y NO se estaba aplicando.**

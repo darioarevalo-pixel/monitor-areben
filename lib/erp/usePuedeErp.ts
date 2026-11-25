@@ -30,3 +30,17 @@ export function usePuedeErp(marca: MarcaErp): (permiso: string) => boolean {
   }, [])
   return (permiso) => permisos?.[marca]?.[permiso] !== false
 }
+
+/**
+ * ¿Ya se sabe si puede? `null` mientras se leen los permisos; después, igual que `usePuedeErp` (falla abierto si no se pudieron
+ * leer). Para lo que LEE algo apenas se monta (la cuenta corriente de Clientes): ⛔ pedir antes de saber el permiso.
+ */
+export function usePuedeErpListo(marca: MarcaErp, permiso: string): boolean | null {
+  const [estado, setEstado] = useState<boolean | null>(null)
+  useEffect(() => {
+    let vivo = true
+    void unaVez().then((p) => { if (vivo) setEstado(p?.[marca]?.[permiso] !== false) })
+    return () => { vivo = false }
+  }, [marca, permiso])
+  return estado
+}

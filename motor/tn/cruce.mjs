@@ -66,7 +66,7 @@ function sumarPorVariante(lineas, varianteDe) {
 
 /**
  * La variante de GN de una línea de TN: por vínculo, código de barras y, si no, por SKU.
- * 🔴 Un CONJUNTO (sql/092, la bikini) ⇒ null: ⛔ es UNA prenda. Quien lo entiende usa `piezasDeLineaTN`; el resto lo cuenta como
+ * 🔴 Un CONJUNTO (sql/093, la bikini) ⇒ null: ⛔ es UNA prenda. Quien lo entiende usa `piezasDeLineaTN`; el resto lo cuenta como
  * «sin variante» y ⛔ hace nada con él (ej. el precio de la bikini ⛔ es el de una pieza).
  */
 export const varianteDeLineaTN = (indice) => (l) => (indice.piezasTN?.(l.variant_id) ? null

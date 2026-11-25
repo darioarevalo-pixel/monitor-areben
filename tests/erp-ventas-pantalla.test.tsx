@@ -34,6 +34,7 @@ const extra: ExtraDeVenta = {
 }
 vi.mock('@/lib/erp/cliente', () => ({
   leerListaDeVentas: () => leerListaDeVentas(),
+  ultimaListaDeVentas: () => null,
   leerFichaDeVenta: async () => ficha,
   leerExtraDeVenta: async () => extra,
   anularVenta: vi.fn(), notaDeCreditoDeVenta: vi.fn(), editarVentaErp: vi.fn(), guardarNotaDeVenta: vi.fn(), cobrarVentaErp: vi.fn(),

@@ -1,5 +1,5 @@
 /**
- * LOS CONJUNTOS (sql/092): una variante de Tienda Nube que son varias prendas del ERP — la bikini 2027 de Zattia = corpiño +
+ * LOS CONJUNTOS (sql/093): una variante de Tienda Nube que son varias prendas del ERP — la bikini 2027 de Zattia = corpiño +
  * bombacha, cada uno con su talle (Bruno, 21-nov). Puro.
  *
  * 🔑 Qué es un conjunto para cada parte del sistema:

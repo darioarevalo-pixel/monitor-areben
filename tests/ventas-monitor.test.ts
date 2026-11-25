@@ -30,6 +30,14 @@ vi.mock('@/api/_ventas-monitor.js', async (original) => {
   }
 })
 
+// Lo que se prueba acá es el registro de la venta de GN ⇒ la línea ⛔ cortó. Desde el 23-nov las regaladas de una línea cortada
+// van al ERP (`reclamoAlErp`, tests/crear-venta-guard.test.ts) y, sin base para mirar el corte, frenan.
+vi.mock('@/api/_salida-documento.js', async (original) => ({
+  ...(await original<typeof import('@/api/_salida-documento.js')>()),
+  reclamoAlErp: vi.fn(async () => null),
+  cambioAlErp: vi.fn(async () => null),
+}))
+
 function resFalso() {
   const r = {
     code: 0 as number,

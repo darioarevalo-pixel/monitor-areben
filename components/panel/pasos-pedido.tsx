@@ -8,7 +8,10 @@
  * Un color por paso: rojo = trabado o plata en riesgo · ámbar = esperando el pago · verde = listo para avanzar · índigo =
  * para despachar · celeste = avisar al cliente · gris = esperando al depósito. Lo viejo (más de un día) va en rojo.
  */
+import { useState } from 'react'
 import { color, font, radius, space } from '@/components/ui/tokens'
+import { mensajeLink, type LinkPedido } from '@/lib/crm/pedidos-catalogo'
+import { copiarAlPortapapeles } from '@/lib/portapapeles'
 
 export type TonoPaso = 'rojo' | 'ambar' | 'verde' | 'azul' | 'celeste' | 'gris'
 
@@ -108,6 +111,31 @@ export function BotonPaso({ children, onClick, solido, title }: { children: Reac
       style={{ height: 30, padding: '0 10px', borderRadius: radius.md, fontSize: font.xs, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer', border: `1px solid ${solido ? color.brandSolid : color.line2}`, background: solido ? color.brandSolid : color.surface, color: solido ? color.sideActiveInk : color.ink }}
     >
       {children}
+    </button>
+  )
+}
+
+/**
+ * Copiar el link del pedido con su total (Darío, 26-oct-2026: «gente que a veces no guarda los
+ * links»). Cuadrado como el ✓ y el de WhatsApp; el ✓ verde dura un momento y sólo sale si copió de
+ * verdad.
+ */
+export function BotonLink({ l }: { l: LinkPedido }) {
+  const [copiado, setCopiado] = useState<boolean | null>(null)
+  const copiar = async () => {
+    const ok = await copiarAlPortapapeles(mensajeLink(l, plataPedido))
+    setCopiado(ok)
+    setTimeout(() => setCopiado(null), 1400)
+  }
+  return (
+    <button
+      type="button"
+      onClick={copiar}
+      title={copiado === false ? 'No se pudo copiar' : copiado ? 'Copiado: pegalo en el chat' : `Copiar el link del pedido (total ${plataPedido(l.total)})`}
+      aria-label="Copiar el link del pedido"
+      style={{ width: 32, minWidth: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', borderRadius: radius.md, border: `1px solid ${copiado ? color.success : color.line}`, background: copiado ? color.successBg : color.bg2, color: copiado ? color.successInk : color.ink, fontSize: 14, cursor: 'pointer' }}
+    >
+      {copiado ? '✓' : copiado === false ? '!' : '🔗'}
     </button>
   )
 }

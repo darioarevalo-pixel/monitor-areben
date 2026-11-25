@@ -1,8 +1,7 @@
 /**
- * Lecturas y guardado de Reposición. El inventario (Local+Depósito) y las ventas del
- * local 7d salen de Supabase (`fetchAll`); la config se guarda en REPO_API
- * (compartida). Port de repoCargarInventario/repoVentasLocal7d/repoCfgSave
- * (index.html:12515/12592/12314). Read-only sobre stock (nunca ajusta GN).
+ * Lecturas y guardado de Reposición. El inventario (Local+Depósito) y las ventas del local salen DIRECTO de Areben
+ * Gestión (`leerReposicionErp`, 25-nov-2026); la config se guarda en REPO_API (compartida). Read-only sobre stock.
+ * `ultimaSincronizacion` queda para Exhibición, que todavía lee el espejo.
  */
 
 import { apiFetch } from '../api-fetch'
@@ -15,55 +14,31 @@ import { conUbicacionDelErp } from '@/lib/ubicaciones/erp-cliente'
 
 const REPO_API = 'https://bdi-catalogo.vercel.app/api/reposicion'
 
-/**
- * Inventario Local + Depósito, con `observation` (la ubicación en el estante). Port de
- * repoCargarInventario @12514. Antes la ubicación se pedía sólo en BDI; Zattia la empieza a cargar
- * en el depósito (oct-2026) y la lista de Lorena se ordena por ella apenas aparezca. El `barcode` lo
- * usa el armado con el lector (12-oct-2026).
- */
-export async function leerInventario(marca: Marca): Promise<FilaInvRepo[]> {
-  const filas = await fetchAll<FilaInvRepo>(CUENTAS[marca], 'inventario', 'select=product_id,product_name,size_id,size_name,sku,barcode,available_quantity,store_name,observation')
-  // Las líneas que ya cortaron leen la ubicación del ERP (motor sql/066): ordena el armado y la columna «Ubic.» del PDF.
-  return conUbicacionDelErp(marca, filas)
+/** Lo que Reposición lee de Areben Gestión (`api/_reposicion-erp.js`). */
+export type DatosRepoErp = {
+  /** Local + Depósito por variante, con la ubicación del ERP en `observation`. */
+  inventario: FilaInvRepo[]
+  /** Unidades vendidas que descuentan del Local, por ventana de días y variante (`pid_sid`). */
+  ventas: Record<number, Record<string, number>>
+  /** Cuándo el servidor leyó el libro: ES la hora del stock (⛔ hay una copia de por medio). */
+  leidoEn: Date
 }
 
 /**
- * Ventas que descuentan del Local en los últimos `dias` días, por variante (`pid_sid`).
- * BDI: solo canal "Mi Local". Zattia: "Mi Local" + "Tienda Nube" (el online se despacha desde el
- * local). Port de repoVentasLocal7d @12592, generalizado para la reposición según ventas (60 días).
+ * El stock y las ventas del local DIRECTO de Areben Gestión (Darío, 25-nov-2026). Antes salían del espejo de GN, que desde
+ * el corte se llena una vez por día y cuya hora (`sync_state`) ya ⛔ se movía: la pantalla mostraba stock de la mañana con
+ * una hora vieja. Ver `lib/reposicion/erp.core.js`.
  *
- * El orden de los renglones va con desempate único (`sale_id,product_id,size_id`): ordenar sólo por
- * `sale_id` deja empates que cruzan el borde de una página de 1.000 y se pisan.
+ * BDI: sólo el local. Zattia: local + Tienda Nube (el online se despacha desde el local). 🔴 Si Areben Gestión ⛔ contesta,
+ * TIRA: una lista vacía parecería «no hay nada que reponer».
  */
-export async function ventasLocal(marca: Marca, dias: number): Promise<Record<string, number>> {
-  const out: Record<string, number> = {}
-  try {
-    const desde = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10)
-    const filtroCanal = marca === 'zattia' ? 'or=(channel.ilike.*local*,channel.ilike.*tienda*)' : 'channel=ilike.*local*'
-    const ventas = await fetchAll<{ id: number }>(CUENTAS[marca], 'ventas', `select=id&${filtroCanal}&date_sale=gte.${desde}&order=id`)
-    if (!ventas.length) return out
-    const ids = new Set(ventas.map((v) => String(v.id)))
-    const minId = Math.min(...ventas.map((v) => v.id))
-    const det = await fetchAll<{ sale_id: number; product_id: number | string; size_id: number | string; quantity?: number }>(
-      CUENTAS[marca],
-      'venta_detalles',
-      `select=sale_id,product_id,size_id,quantity&sale_id=gte.${minId}&order=sale_id,product_id,size_id`,
-    )
-    det.forEach((d) => {
-      if (ids.has(String(d.sale_id))) {
-        const vid = String(d.product_id) + '_' + String(d.size_id)
-        out[vid] = (out[vid] || 0) + (d.quantity || 1)
-      }
-    })
-  } catch {
-    /* si falla, queda en 0 */
-  }
-  return out
-}
-
-/** Las de los últimos 7 días (la columna «7d local» de la pantalla de BDI). */
-export function ventasLocal7d(marca: Marca): Promise<Record<string, number>> {
-  return ventasLocal(marca, 7)
+export async function leerReposicionErp(marca: Marca, dias: number[]): Promise<DatosRepoErp> {
+  const r = await apiFetch(`/api/deposito?recurso=reposicion-erp&marca=${marca}&dias=${[...new Set(dias)].join(',')}`)
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d || !Array.isArray(d.inventario)) throw new Error(d?.error || `No se pudo leer Areben Gestión (HTTP ${r.status})`)
+  // La ubicación vive SÓLO en el ERP desde el corte (motor sql/066): ordena el armado y la columna «Ubic.» del PDF.
+  const inventario = await conUbicacionDelErp(marca, d.inventario as FilaInvRepo[])
+  return { inventario, ventas: d.ventas || {}, leidoEn: new Date(d.leidoEn) }
 }
 
 /**
@@ -91,23 +66,6 @@ export async function ultimaSincronizacion(marca: Marca): Promise<Date | null> {
     return fechas.length ? new Date(Math.max(...fechas)) : null
   } catch {
     // Que no se pueda leer el reloj no puede voltear la pantalla: el stock ya vino.
-    return null
-  }
-}
-
-/**
- * La «huella» de los datos de Reposición: la hora de CADA sync que escribe en el espejo (stock y
- * ventas) más el día. Si no cambió desde la última vez, el inventario y las ventas son los mismos y
- * la pantalla puede mostrar lo guardado en la compu sin volver a bajar 1,3 MB (Darío, 12-oct-2026:
- * «¿por qué vuelve a cargar si la foto ya fue hecha?»). El día entra porque la ventana de ventas
- * corre sola a la medianoche. `null` si no se pudo leer: entonces se baja todo, como siempre.
- */
-export async function huellaDatos(marca: Marca, hoy: string): Promise<string | null> {
-  try {
-    const filas = await fetchAll<{ clave: string; updated_at: string | null }>(CUENTAS[marca], 'sync_state', 'select=clave,updated_at&order=clave')
-    if (!filas.length) return null
-    return hoy + '|' + filas.map((f) => `${f.clave}:${f.updated_at ?? ''}`).join('|')
-  } catch {
     return null
   }
 }

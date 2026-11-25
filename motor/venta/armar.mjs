@@ -229,6 +229,34 @@ export function armarVenta(e, conf, { ahora = new Date() } = {}) {
 }
 
 /**
+ * 🔑 **El cambio vale SIEMPRE la LISTA** (Bruno, 22-nov): el redondeo y el descuento de la forma de pago quedan en el pago.
+ * La Caja ya escribe así sus ventas (renglón a lista, redondeo en `pagos[].redondeo`), pero las que mandó a GN antes del
+ * corte llevaban el redondeo PARA ARRIBA sumado al `unit_price` (GN ⛔ acepta descuento negativo: `armarVentaGN` del
+ * monitor) y así se trajeron (`origen = 'gn'`): la BERMUDA de lista $ 49.490 quedó en $ 49.500. `venta_linea` es inmutable
+ * ⇒ el cambio toma lo que guardó la Caja (`caja_venta.renglones`: importe = lista − rebaja de la cajera, por unidad).
+ * Sólo BAJA: lo de la Caja nunca sube lo que se devuelve. Sin renglón de la Caja para ese producto y variante, igual que antes.
+ * Medido 22-nov: Zattia 125 renglones y BDI 3 en los 30 días del plazo de cambio, de $ 2 a $ 18.
+ * @param {any[]} lineas las de la venta original @param {any[] | null} renglones `caja_venta.renglones`, o null si ⛔ hay
+ * @returns {any[]} las líneas, con `importe` a la lista de la Caja donde hacía falta
+ */
+export function aLaListaDeLaCaja(lineas, renglones) {
+  if (!Array.isArray(renglones) || !renglones.length) return lineas
+  const porVariante = new Map()
+  for (const r of renglones) {
+    const k = `${Number(r?.product_id)}:${Number(r?.size_id)}`
+    const a = porVariante.get(k) || { importe: 0, cantidad: 0 }
+    a.importe += num(r?.importe); a.cantidad += num(r?.cantidad)
+    porVariante.set(k, a)
+  }
+  return lineas.map((l) => {
+    const c = porVariante.get(`${Number(l.product_id)}:${Number(l.size_id)}`)
+    if (!c || !(c.cantidad > 0) || !(c.importe > 0) || !(num(l.cantidad) > 0)) return l
+    const lista = pesos(c.importe / c.cantidad)
+    return lista < pesos(num(l.importe) / num(l.cantidad)) ? { ...l, importe: pesos(lista * num(l.cantidad)) } : l
+  })
+}
+
+/**
  * El cambio: UNA venta de tipo `cambio` con las devueltas en negativo (al precio que se PAGARON) y las
  * nuevas en positivo. `original` = `{ venta, lineas }` como están en la base, con `cambiado` por línea
  * (lo ya devuelto en cambios anteriores).

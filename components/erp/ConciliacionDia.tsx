@@ -25,7 +25,7 @@ import { useTiendaErp } from '@/lib/erp/linea-erp'
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 /** Contra qué se compara cada fila (el `tipo` del motor). */
-const CONTRA: Record<string, string> = { stock_tn: 'Tienda Nube', stock_ml: 'Mercado Libre', pedido_erp: 'Pedido Tienda Nube', pedido_gn: 'Pedido Tienda Nube · Gestión Nube', pedido_ml: 'Venta Mercado Libre' }
+const CONTRA: Record<string, string> = { stock_tn: 'Tienda Nube', stock_ml: 'Mercado Libre', pedido_erp: 'Pedido Tienda Nube', pedido_gn: 'Pedido Tienda Nube · Sistema anterior', pedido_ml: 'Venta Mercado Libre' }
 const dia = (f: string) => `${f.slice(8, 10)}/${f.slice(5, 7)}`
 const pesos = (n: number | null) => (n == null ? '—' : `$ ${n.toLocaleString('es-AR', { maximumFractionDigits: 2 })}`)
 const pct = (a: number, b: number) => (b ? `${((100 * a) / b).toFixed(1)}%` : '—')
@@ -37,7 +37,6 @@ const COLUMNAS: ColumnaLista[] = [
   { key: 'contra', titulo: 'Contra', ancho: '128px', movil: 'chico' },
   { key: 'ellos', titulo: 'En la tienda', ancho: '92px', derecha: true, movil: 'chico' },
   { key: 'erp', titulo: 'Areben Gestión', ancho: '92px', derecha: true, movil: 'dato' },
-  { key: 'gn', titulo: 'Gestión Nube', ancho: '64px', derecha: true, movil: 'oculta' },
   { key: 'dias', titulo: 'Días', ancho: '56px', derecha: true, movil: 'oculta' },
   { key: 'paso', titulo: 'Qué pasó', ancho: 'minmax(220px, 1.6fr)', movil: 'chico' },
 ]
@@ -94,7 +93,6 @@ export function ConciliacionDia({ ajustar, alContar }: { ajustar: (p: PrendaAAju
     if (k === 'erp') return esStock(f)
       ? <span title={f.reservado ? `${f.reservado} reservado por pedidos sin pagar` : undefined}>{f.erp ?? '—'}{f.reservado ? <span style={{ color: color.mut }}> ({f.reservado} res.)</span> : null}</span>
       : <span>{pesos(f.totalErp)}</span>
-    if (k === 'gn') return <span style={{ color: color.mut }}>{esStock(f) ? f.gn ?? '—' : '—'}</span>
     if (k === 'dias') return <span style={{ color: f.dias > 1 ? 'var(--mo-warning-ink)' : color.mut }} title={f.dias > 1 ? 'Viene de días anteriores' : undefined}>{f.dias}</span>
     if (k === 'paso') return <span title={`${f.grupoNombre}: ${f.mirar}${f.motivo ? ` · ${f.motivo}` : ''}`}><ChipEstado mapa={{ x: ['warning', f.grupoNombre] }} k="x" /></span>
     return null
@@ -140,10 +138,6 @@ export function ConciliacionDia({ ajustar, alContar }: { ajustar: (p: PrendaAAju
                     : t.noCierran ? `${t.noCierran} de ${t.total} ${t.unidad} no coinciden (7 días)` : `Coinciden los ${t.total} ${t.unidad} (7 días)`}
               />
             ))}
-            {!datos.gn.sinGn && (
-              <TileResumen titulo="Con Gestión Nube" valor={!datos.gn.calculado ? '—' : (datos.gn.sinExplicar ?? 0).toLocaleString('es-AR')}
-                nota={!datos.gn.calculado ? 'No se calculó ese día.' : datos.gn.sinExplicar ? 'sin explicar' : 'todo explicado'} />
-            )}
           </div>
           {datos.enVuelo > 0 && <Notice tone="neutral">Recién pagados, todavía en camino: {datos.enVuelo}.</Notice>}
           {datos.desconocidas > 0 && <Notice tone="warning">{datos.desconocidas} sin clasificar.</Notice>}
@@ -155,7 +149,7 @@ export function ConciliacionDia({ ajustar, alContar }: { ajustar: (p: PrendaAAju
             </div>
             {enVista !== 'todas' && <div style={{ padding: '0 16px 10px', fontSize: font.sm, color: color.mut }}>Qué mirar: {datos.grupos.find((g) => `${g.tipo}/${g.clase}` === enVista)?.mirar}{(() => { const g = datos.grupos.find((x) => `${x.tipo}/${x.clase}` === enVista); return g?.deAntes ? ` (${g.deAntes} vienen de días anteriores)` : '' })()}</div>}
             <ListaTrabajo
-              columnas={datos.gn.sinGn ? COLUMNAS.filter((c) => c.key !== 'gn') : COLUMNAS} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={40}
+              columnas={COLUMNAS} filas={filas} claveDe={(f) => f.id} celda={celda} acciones={acciones} anchoAcciones={40}
               activa={ficha ? filas.find((f) => f.producto === ficha.producto && f.talle === ficha.talle)?.id ?? null : null}
               onAbrir={(f) => (f.producto && f.talle ? abrir(f) : f.link ? window.open(f.link, '_blank', 'noopener') : undefined)}
               etiquetaFila={(f) => (esStock(f) ? `el producto ${prendaDe(f)}` : `el pedido #${f.numero}`)}

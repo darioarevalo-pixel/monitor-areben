@@ -697,6 +697,7 @@ export function ResumenCobro({ c, nombreCuenta }: { c: { subtotal: number; aVent
 export function UltimaVenta({
   venta,
   onReimprimir,
+  onFacturar,
   onTicketCambio,
   onOtra,
   nombreCuenta,
@@ -709,6 +710,8 @@ export function UltimaVenta({
   cambio?: { aFavor: number; desestimado?: number }
   /** Sin él, ⛔ hay «Reimprimir» (el celular ⛔ imprime: el ticket va por mail). */
   onReimprimir?: () => void
+  /** «Facturar» (Bruno, 22-nov): sólo una venta en Areben Gestión, ⛔ un cambio. Sin él, ⛔ está. */
+  onFacturar?: () => void
   /** El ticket de cambio solo (regalo, Bruno 13-oct): sin precios. */
   onTicketCambio?: () => void
   /**
@@ -767,6 +770,11 @@ export function UltimaVenta({
       {onReimprimir && (
         <Button variant="outline" onClick={onReimprimir}>
           Reimprimir ticket
+        </Button>
+      )}
+      {onFacturar && enErp && !cambio && (
+        <Button variant="outline" onClick={onFacturar}>
+          Facturar
         </Button>
       )}
       {onTicketCambio && (
@@ -1182,7 +1190,7 @@ function Anuladas({ donde, lista }: { donde: string; lista: NonNullable<ResumenT
 const numeroDeVenta = (v: Venta) => (numeroDeLaVenta(v) != null ? `#${numeroDeLaVenta(v)}` : `Provisoria ${numeroProvisorio(v.id)}`)
 
 /** El resumen de una venta (Bruno, 12-oct): qué se llevó, cómo pagó y quién la cobró, para identificarla rápido. */
-function ResumenVenta({ venta: v, nombreCuenta, onVolver, onReimprimir, onTicketCambio }: { venta: Venta; nombreCuenta: (id: number) => string; onVolver: () => void; onReimprimir?: () => void; onTicketCambio?: () => void }) {
+function ResumenVenta({ venta: v, nombreCuenta, onVolver, onReimprimir, onTicketCambio, onFacturar }: { venta: Venta; nombreCuenta: (id: number) => string; onVolver: () => void; onReimprimir?: () => void; onTicketCambio?: () => void; onFacturar?: () => void }) {
   const e = estadoDeVenta(v)
   const marcas = marcasDe(v)
   const fila: React.CSSProperties = { display: 'flex', gap: space[3], justifyContent: 'space-between', fontSize: font.base }
@@ -1200,6 +1208,11 @@ function ResumenVenta({ venta: v, nombreCuenta, onVolver, onReimprimir, onTicket
         {onReimprimir && (
           <Button size="sm" variant="outline" onClick={onReimprimir} title="Reimprimir ticket">
             <Icono nombre="impresora" size={16} /> Reimprimir
+          </Button>
+        )}
+        {onFacturar && (
+          <Button size="sm" variant="outline" onClick={onFacturar}>
+            Facturar
           </Button>
         )}
         {onTicketCambio && (
@@ -1265,7 +1278,7 @@ function ResumenVenta({ venta: v, nombreCuenta, onVolver, onReimprimir, onTicket
  */
 const CLAVE_PROVISORIAS = 'caja:ventas:provisorias-abiertas'
 
-export function VentasDelTurno({ nombreCuenta, onReimprimir, onTicketCambio, onCerrar, turnoId, titulo = 'Ventas' }: { nombreCuenta: (id: number) => string; /** Sin él, ⛔ hay «Reimprimir». */ onReimprimir?: (v: Venta) => void; /** El ticket de cambio solo (regalo); sin él, ⛔ está. */ onTicketCambio?: (v: Venta) => void; onCerrar: () => void; /** Sin él, el turno abierto. */ turnoId?: string; titulo?: string }) {
+export function VentasDelTurno({ nombreCuenta, onReimprimir, onTicketCambio, onFacturar, onCerrar, turnoId, titulo = 'Ventas' }: { nombreCuenta: (id: number) => string; /** Sin él, ⛔ hay «Reimprimir». */ onReimprimir?: (v: Venta) => void; /** «Facturar» en las ventas que están en Areben Gestión (Bruno, 22-nov); sin él, ⛔ está. */ onFacturar?: (v: Venta) => void; /** El ticket de cambio solo (regalo); sin él, ⛔ está. */ onTicketCambio?: (v: Venta) => void; onCerrar: () => void; /** Sin él, el turno abierto. */ turnoId?: string; titulo?: string }) {
   const [ventas, setVentas] = useState<Venta[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [viendo, setViendo] = useState<Venta | null>(null)
@@ -1343,6 +1356,11 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onTicketCambio, onC
                       <Icono nombre="impresora" size={16} />
                     </Button>
                   )}
+                  {onFacturar && v.estado === 'en_erp' && (
+                    <Button size="sm" variant="ghost" onClick={() => onFacturar(v)}>
+                      Facturar
+                    </Button>
+                  )}
                 </td>
               </tr>
             )
@@ -1364,6 +1382,7 @@ export function VentasDelTurno({ nombreCuenta, onReimprimir, onTicketCambio, onC
           onVolver={() => setViendo(null)}
           onReimprimir={onReimprimir && conTicket(viendo) ? () => onReimprimir(viendo) : undefined}
           onTicketCambio={onTicketCambio && conTicket(viendo) ? () => onTicketCambio(viendo) : undefined}
+          onFacturar={onFacturar && viendo.estado === 'en_erp' ? () => onFacturar(viendo) : undefined}
         />
       )}
       {!viendo && ventas && ventas.length > 0 && (

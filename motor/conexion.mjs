@@ -4,6 +4,7 @@
  * 🔴 El token va sólo en la cabecera: ⛔ se sigue una redirección (se lo llevaría a otro host) y ⛔ aparece en ningún error.
  */
 import { cargarCostosDeIngresos, cargarPreciosDeIngresos, guardarTiposDeIngreso } from './costo-ingresos.mjs'
+import { fichaDeIngresos } from './ficha-ingresos.mjs'
 import { candidatos, importarElegidos, skusDeOcSinCruzar, variantesDelErp } from './catalogo-ingresos.mjs'
 import { leerCortes, productoIngresosManda, pruebaIngresos } from './llave-corte.mjs'
 
@@ -92,8 +93,16 @@ export async function correrCostos({ control, db, negocio, token, manda, seco = 
   try {
     const t = await mirarToken(negocio, o)
     vence = t.vence
-    const salida = { manda, seco, vence, tipos: null, costos: null, precios: null }
+    const salida = { manda, seco, vence, tipos: null, ficha: null, costos: null, precios: null }
     if (t.permisos.includes('suppliers:read')) salida.tipos = await guardarTiposDeIngreso(db, { proveedores: await listarExt('/suppliers', o), escribir: !seco })
+    // 🔑 El proveedor y el código del proveedor de cada producto (Darío 23-nov, `lib/ficha-ingresos.mjs`): la lista entera, como el
+    // alta. Si falla, ⛔ frena los costos: queda dicho en el resumen.
+    try {
+      const { muestra, ...f } = await fichaDeIngresos(db, { marca: negocio, productos: await listarExt('/products', o), escribir: !seco })
+      salida.ficha = f
+    } catch (e) {
+      salida.ficha = { error: e instanceof ErrorExt ? (e.code ?? `contestó ${e.status}`) : String(e?.message ?? e).slice(0, 200) }
+    }
     if (!t.permisos.includes(PERMISO_COSTOS)) {
       const detalle = `El token ⛔ tiene el permiso ${PERMISO_COSTOS}.`
       await anotar({ ok: true, status: 200, code: 'sin_permiso', detalle, vence, resumen: salida })

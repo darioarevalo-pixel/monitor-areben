@@ -26,7 +26,7 @@ import { leerCorteDeLinea } from '@/lib/erp/cliente'
 import { usarMarcaCaja } from '@/lib/caja/marca'
 import { CUENTAS } from '@/lib/cuentas'
 import type { Marca } from '@/lib/nav.datos'
-import { esAdmin, perfilVistoComo, puedeVer, type Perfil } from '@/lib/permisos'
+import { perfilVistoComo, puedeVer, type Perfil } from '@/lib/permisos'
 import { CambioCaja } from './CambioCaja'
 import { FacturaCaja } from './FacturaCaja'
 import { Facturacion } from './Facturacion'
@@ -38,7 +38,6 @@ import { TransferenciasStock } from './stock/TransferenciasStock'
 import { MoverYRecibir } from './stock/MoverYRecibir'
 import { RecepcionesStock } from './stock/RecepcionesStock'
 import { ComparacionStock } from './stock/ComparacionStock'
-import { DiferenciasDia } from './DiferenciasDia'
 import { ConciliacionDia } from './ConciliacionDia'
 import { ChequeoLibro } from './ChequeoLibro'
 import { AjustesStock } from './AjustesStock'
@@ -112,7 +111,7 @@ export const SECCIONES_ERP: Seccion[] = [
       { key: 'stock', label: 'Stock', vistas: [{ key: 'stock', label: 'Productos' }, { key: 'movimientos', label: 'Movimientos' }] },
       { key: 'transferencias', label: 'Transferencias', vistas: [{ key: 'transferencias', label: 'Transferencias' }, { key: 'mover', label: 'Nueva transferencia' }] },
       { key: 'ajustes', label: 'Ingresos y ajustes', junta: 'Tipo', vistas: [{ key: 'ajustes', label: 'Ajustes' }, { key: 'ingresos', label: 'Ingresos de mercadería' }] },
-      { key: 'diferencias', label: 'Diferencias', junta: 'Contra qué', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre', permiso: 'configurar' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'diferencias', label: 'Con Gestión Nube' }, { key: 'chequeo', label: 'Chequeo de movimientos', permiso: 'configurar' }] },
+      { key: 'diferencias', label: 'Diferencias', junta: 'Contra qué', vistas: [{ key: 'comparacion', label: 'Con Tienda Nube y Mercado Libre', permiso: 'configurar' }, { key: 'conciliacion', label: 'Conciliación' }, { key: 'chequeo', label: 'Chequeo de movimientos', permiso: 'configurar' }] },
     ],
   },
   { key: 'productos', titulo: 'Productos', icono: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z M7.5 7.5h.01', pestanias: [{ key: 'productos', label: 'Productos' }, { key: 'precios', label: 'Precios' }, { key: 'vincular', label: 'Vincular', permiso: 'configurar' }] },
@@ -125,8 +124,8 @@ export const SECCIONES_ERP: Seccion[] = [
     pestanias: [
       { key: 'cuentas', label: 'Cuentas y formas de pago', permiso: 'configurar', junta: 'Qué lista', vistas: [{ key: 'cuentas', label: 'Cuentas' }, { key: 'rutas', label: '¿A qué cuenta va?' }] },
       { key: 'reglas', label: 'Descuentos y redondeo', permiso: 'configurar', vistas: [{ key: 'reglas', label: 'Descuentos por forma de pago' }, { key: 'redondeo', label: 'Redondeo' }] },
-      { key: 'estructura', label: 'Marcas, depósitos y puntos de venta', permiso: 'configurar' },
-      { key: 'tokens', label: 'Tokens de la API', permiso: 'configurar' },
+      { key: 'estructura', label: 'Marcas y ubicaciones', permiso: 'configurar' },
+      { key: 'tokens', label: 'Conexiones', permiso: 'configurar' },
     ],
   },
 ]
@@ -257,9 +256,9 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
   // Selector BDI · Zattia · Stunned (diseño §9). 🔴 Stunned no es una `Marca`: es marca zattia + línea `stunned` (`docs/lineas.md`).
   const [linea, setLineaEstado] = useState<LineaErp>(lineaElegida)
   const setLinea = (l: LineaErp) => { elegirLinea(l); setLineaEstado(l) }
-  // 🎯 Bruno 30-oct: la línea Zattia queda oculta para el local (⛔ admin) hasta que Zattia pase al ERP ⇒ ven sólo Stunned.
-  const soloStunned = !esAdmin(perfil)
-  const lineaVista: LineaErp = marca === 'zattia' ? (soloStunned || linea === 'stunned' ? 'stunned' : 'zattia') : ''
+  // 🎯 Bruno 30-oct: la línea Zattia quedó oculta para el local hasta que Zattia pasara al ERP. Zattia se cortó el 22-nov ⇒
+  // Bruno 24-nov («los usuarios del local no tienen acceso al erp de zattia»): el local ve Zattia y Stunned, como el admin.
+  const lineaVista: LineaErp = marca === 'zattia' ? (linea === 'stunned' ? 'stunned' : 'zattia') : ''
   const itemActual = seccion.pestanias.find((p) => p.key === pestania)
   // 🔑 Lo que el rol ⛔ puede abrir ⛔ se dibuja (menú, pestañas, vistas, «Más»); una sección que se queda sin ítems, tampoco.
   const puede = usePuedeErp(marca === 'bdi' ? 'bdi' : 'zattia')
@@ -298,18 +297,16 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
   // Darío 19-nov: en Ventas las dos vistas son la MISMA información de dos formas ⇒ interruptor al lado del título
   // («Por venta | Por producto»), ⛔ la fila de pestañas. Por ahora sólo acá.
   const comoInterruptor = seccion.key === 'ventas' && pestania === 'ventas'
-  const vistasDeAca = paraVer(itemActual?.vistas).filter((v) => !((transferenciaEnErp || !corteLeido) && v.key === 'mover') && !((lineaEnErp || lineaVista === 'stunned') && v.key === 'diferencias'))
+  const vistasDeAca = paraVer(itemActual?.vistas).filter((v) => !((transferenciaEnErp || !corteLeido) && v.key === 'mover'))
   // Contadores rojos del menú y de las pestañas: los mismos números de «Para hacer» de Inicio (la marca como Inicio: BDI o Zattia).
   const contadores = useContadoresErp(marca === 'bdi' ? 'bdi' : 'zattia', lineaVista)
-  const opciones = marcas.flatMap((m): Opcion[] => m === 'bdi' ? [{ key: 'bdi', titulo: 'BDI' }] : (soloStunned ? [] : [{ key: 'zattia', titulo: 'Zattia' } as Opcion]).concat({ key: 'stunned', titulo: 'Stunned' }))
+  const opciones = marcas.flatMap((m): Opcion[] => m === 'bdi' ? [{ key: 'bdi', titulo: 'BDI' }] : [{ key: 'zattia', titulo: 'Zattia' } as Opcion].concat({ key: 'stunned', titulo: 'Stunned' }))
   const opcionActiva = marca === 'bdi' ? 'bdi' : lineaVista === 'stunned' ? 'stunned' : 'zattia'
   const elegirOpcion = (k: 'bdi' | 'zattia' | 'stunned') => {
     if (k === 'bdi') { setMarca('bdi'); return }
     setLinea(k)
     if (marca !== 'zattia') setMarca('zattia')
   }
-  // La tira de Configuración (cuenta · ruta · regla) salta a la pestaña o la vista que corresponde.
-  const irAPieza = (k: 'cuentas' | 'rutas' | 'reglas') => (k === 'reglas' ? ir('configuracion', 'reglas') : ir('configuracion', 'cuentas', k))
   const ajustarPrenda = (p: PrendaAAjustar) => { setAAjustar(p); setPrendaGlobal(null); ir('stock', 'ajustes') }
   const elegirDeLaBusqueda = (d: DestinoBusqueda) => {
     setPanel(null)
@@ -328,14 +325,13 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
 
   // Las listas de una pantalla junta (`ListasJuntas`): todas montadas, cada una con su número; el filtro elige cuál se ve.
   const parteJunta = (k: string, alContar: AlContar) => {
-    if (k === 'ajustes') return <AjustesStock key={aAjustar ? `${aAjustar.linea}/${aAjustar.producto}/${aAjustar.talle}` : `lista/${lineaVista}`} pedida={aAjustar} alContar={alContar} enErp={lineaEnErp} />
+    if (k === 'ajustes') return <AjustesStock key={aAjustar ? `${aAjustar.linea}/${aAjustar.producto}/${aAjustar.talle}` : `lista/${lineaVista}`} pedida={aAjustar} alContar={alContar} />
     if (k === 'ingresos') return <RecepcionesStock key={marca} alContar={alContar} />
-    if (k === 'comparacion') return <ComparacionStock key={marca} ajustar={ajustarPrenda} irAConciliacion={() => ir('stock', 'diferencias', 'conciliacion')} alContar={alContar} enErp={lineaEnErp} />
+    if (k === 'comparacion') return <ComparacionStock key={marca} ajustar={ajustarPrenda} irAConciliacion={() => ir('stock', 'diferencias', 'conciliacion')} alContar={alContar} />
     if (k === 'conciliacion') return <ConciliacionDia key={`${marca}/${lineaVista}`} ajustar={ajustarPrenda} alContar={alContar} />
-    if (k === 'diferencias') return <DiferenciasDia key={marca} ajustar={ajustarPrenda} alContar={alContar} />
     if (k === 'chequeo') return <ChequeoLibro key={marca} alContar={alContar} />
-    if (k === 'cuentas') return <CuentasErp key={marca} ir={irAPieza} alContar={alContar} />
-    if (k === 'rutas') return <RutasCobro key={`${marca}/${lineaVista}`} ir={irAPieza} alContar={alContar} />
+    if (k === 'cuentas') return <CuentasErp key={marca} alContar={alContar} />
+    if (k === 'rutas') return <RutasCobro key={`${marca}/${lineaVista}`} alContar={alContar} />
     return null
   }
 
@@ -406,7 +402,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
                     )
                   })}
                   {/* La Caja (el POS) ⛔ es una pantalla del ERP: se abre aparte, como siempre. */}
-                  {s.key === 'ventas' && <Link href="/pos" className="erp-menu-sub erp-menu-sub--afuera"><span>Abrir la Caja</span><span aria-hidden>↗</span></Link>}
+                  {s.key === 'ventas' && <Link href="/pos" className="erp-menu-sub erp-menu-sub--afuera"><span>Caja</span><span aria-hidden>↗</span></Link>}
                 </div>
               )}
             </div>
@@ -438,7 +434,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
             {/* 🐛 Bruno 10-nov: en Stunned salía «modo paralelo» los primeros segundos ⇒ se dibuja recién leído el corte (si la lectura falla, `leida` igual se pone y el cartel sale: el prudente). */}
             {seccion.key !== 'inicio' && corteLeido && !lineaEnErp && (
               <p style={{ margin: 0, padding: '0 8px', lineHeight: '20px', fontSize: 12, color: 'var(--mo-info)', background: 'var(--mo-info-bg)', borderRadius: 4, borderLeft: `3px solid ${COLOR_DE_MARCA[opcionActiva]}` }}>
-                {`${lineaVista === 'stunned' ? 'Stunned' : CUENTAS[marca].nombre} · modo paralelo: Gestión Nube sigue siendo el que sirve hoy.`}
+                {`${lineaVista === 'stunned' ? 'Stunned' : CUENTAS[marca].nombre} · todavía no está en Areben Gestión.`}
               </p>
             )}
             {seccion.key !== 'inicio' && (
@@ -466,7 +462,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
             )}
             {/* 📱 Las pantallas de compu se miran desde el celular, pero se cambian en la compu (Bruno, 29-oct). En la compu ⛔ se ve (globals.css). */}
             {(seccion.key === 'configuracion' || pestania === 'facturacion') && (
-              <div className="erp-aviso-compu" role="note"><span aria-hidden>⌨︎</span><span>Esta pantalla se mira desde acá, pero se <b>cambia en la compu</b>.</span></div>
+              <div className="erp-aviso-compu" role="note"><span aria-hidden>⌨︎</span><span>Para cambiar algo, usá la compu.</span></div>
             )}
             {seccion.key === 'inicio' && <InicioErp key={marca} href={hrefErp} />}
             {seccion.vacia && <EmptyState title={seccion.vacia} />}
@@ -500,7 +496,7 @@ function ErpAdentro({ ruta = [] }: { ruta?: string[] }) {
             {/* 🎨 Tanda 3: la cuenta corriente es la vista «Con saldo» de Clientes; su dirección vieja abre ahí. */}
             {(vista === 'clientes' || vista === 'cuenta-corriente') && <ClientesErp key={`${marca}/${pedidoN}/${vista}`} vistaInicial={vista === 'cuenta-corriente' ? 'saldo' : undefined} abrir={aAbrir?.tipo === 'cliente' ? aAbrir : null} alAbrir={() => setAAbrir(null)} />}
             {pestania === 'proveedores' && <ProveedoresErp key={marca} />}
-            {vista === 'reglas' && <ReglasComerciales key={`${marca}/${lineaVista}`} ir={irAPieza} />}
+            {vista === 'reglas' && <ReglasComerciales key={`${marca}/${lineaVista}`} />}
             {vista === 'redondeo' && <Redondeo key={`${marca}/${lineaVista}`} />}
             {pestania === 'estructura' && <EstructuraErp key={marca} />}
             {pestania === 'tokens' && <TokensApi />}

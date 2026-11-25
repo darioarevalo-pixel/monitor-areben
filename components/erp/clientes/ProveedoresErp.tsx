@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, EmptyState, MenuAcciones, Notice, color, font, space, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo, type ColumnaLista, type OrdenLista } from '@/components/ui/ListaTrabajo'
-import { BuscadorLista, ChipEstado, TileResumen, VistasLista, estiloNombre, tonoDeConteo } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, VistasLista, estiloNombre } from '@/components/ui/PiezasLista'
 import { leerProveedores, type MarcaErp, type ProveedorErp } from '@/lib/erp/cliente'
 import { normal } from '@/lib/erp/stock-lista.core.js'
 import { useTiendaErp } from '@/lib/erp/linea-erp'
@@ -24,7 +24,6 @@ const VISTAS: Array<[string, string, (p: ProveedorErp) => boolean]> = [
 ]
 const COLUMNAS: ColumnaLista[] = [
   { key: 'p', titulo: 'Proveedor', ancho: 'minmax(200px, 2fr)', ordena: true, movil: 'titulo' },
-  { key: 'gn', titulo: 'En Gestión Nube como', ancho: 'minmax(160px, 1.4fr)', ordena: false, movil: 'oculta' },
   { key: 'cuit', titulo: 'CUIT', ancho: '124px', ordena: false, movil: 'chico' },
   { key: 'prod', titulo: 'Productos', ancho: '96px', ordena: true, derecha: true, movil: 'dato' },
   { key: 'estado', titulo: 'Estado', ancho: '96px', ordena: false, movil: 'chico' },
@@ -62,7 +61,6 @@ export function ProveedoresErp() {
 
   const celda = (p: ProveedorErp, k: string): React.ReactNode => {
     if (k === 'p') return <span title={p.nombre} style={estiloNombre}>{p.nombre}</span>
-    if (k === 'gn') return <span style={{ color: p.nombreGn ? color.ink2 : color.mut2 }}>{p.nombreGn ?? '—'}</span>
     if (k === 'cuit') return <span style={{ color: p.cuit ? color.ink2 : color.mut2 }}>{p.cuit ?? '—'}</span>
     if (k === 'prod') return <span style={{ color: p.productos ? color.ink : color.mut2 }}>{p.productos}</span>
     if (k === 'estado') return <ChipEstado mapa={{ a: ['success', 'Activo'], i: ['neutral', 'Inactivo'] }} k={p.activo ? 'a' : 'i'} />
@@ -70,43 +68,32 @@ export function ProveedoresErp() {
   }
   const acciones = (p: ProveedorErp) => {
     const menu: AccionMenu[] = [
-      { key: 'prm', label: 'Ver visitas y compromisos ↗', icono: 'abrir', onClick: () => abrir('/prm'), hint: 'Visitas, compromisos y cómo se mueve lo que se le compra.' },
-      { key: 'rec', label: 'Lo que entró, en Ingresos ↗', icono: 'abrir', onClick: () => abrir('/recepciones') },
+      { key: 'prm', label: 'Visitas y compromisos ↗', icono: 'abrir', onClick: () => abrir('/prm') },
+      { key: 'rec', label: 'Ingresos ↗', icono: 'abrir', onClick: () => abrir('/recepciones') },
     ]
     return <MenuAcciones acciones={menu} etiqueta={`Más acciones del proveedor ${p.nombre}`} vertical alinear="izquierda" />
   }
 
-  const res = { total: base.length, conProd: conteo.conprod ?? 0, sinCuit: conteo.sincuit ?? 0, productos: base.reduce((a, p) => a + p.productos, 0) }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap', alignItems: 'center' }}>
-        <p style={{ margin: 0, color: color.mut }}>Los proveedores de Areben Gestión, para ver. Nacen en Ingresos, con la orden de compra.</p>
-        <div style={{ display: 'flex', gap: space[2] }}>
-          <Button variant="outline" onClick={() => abrir('/prm')}>Ver visitas y compromisos ↗</Button>
-          <Button variant="outline" onClick={() => abrir('/recepciones')}>Abrir Ingresos ↗</Button>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: space[2], flexWrap: 'wrap' }}>
+        <Button variant="outline" onClick={() => abrir('/prm')}>Visitas y compromisos ↗</Button>
+        <Button variant="outline" onClick={() => abrir('/recepciones')}>Ingresos ↗</Button>
       </div>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
-
-      <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-        <TileResumen titulo="Proveedores" valor={res.total.toLocaleString('es-AR')} oscuro nota="de la empresa" />
-        <TileResumen titulo="Con productos" valor={res.conProd.toLocaleString('es-AR')} nota={`${res.productos.toLocaleString('es-AR')} productos atados`} />
-        <TileResumen tono={tonoDeConteo(res.sinCuit)} titulo="Sin CUIT" valor={res.sinCuit.toLocaleString('es-AR')} nota={res.sinCuit ? 'para completar' : 'ninguno'} />
-        <TileResumen titulo="Cuentas por pagar" valor="—" nota="viven en el dashboard" />
-      </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un proveedor" placeholder="Nombre, nombre en Gestión Nube o CUIT" />
+          <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un proveedor" placeholder="Nombre o CUIT" />
         </div>
         <ListaTrabajo
           columnas={COLUMNAS} filas={filas} claveDe={(p) => p.id} celda={celda} acciones={acciones} anchoAcciones={44}
           orden={orden} onOrden={setOrden} etiquetaFila={(p) => `el proveedor ${p.nombre}`}
-          vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={q ? 'No hay proveedores con ese nombre o CUIT.' : 'No hay proveedores en esta vista.'} /></div> : null}
+          vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={q ? `Ningún proveedor coincide con «${q}».` : 'No hay proveedores en esta vista.'} /></div> : null}
         />
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando ? 'Leyendo los proveedores…' : `${filas.length.toLocaleString('es-AR')} de ${base.length.toLocaleString('es-AR')}`}
+          {cargando ? 'Leyendo…' : `${filas.length.toLocaleString('es-AR')} de ${base.length.toLocaleString('es-AR')}`}
         </div>
       </div>
     </div>

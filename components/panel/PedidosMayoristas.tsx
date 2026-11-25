@@ -30,7 +30,9 @@ import { cuentaDelPedido } from '@/lib/erp/precio-tienda.core.js'
 import { esAprobador } from '@/lib/reposicion/armado.core.js'
 import { usePerfilOpcional } from '@/components/SesionProvider'
 import { copiarAlPortapapeles } from '@/lib/portapapeles'
-import { Bloque, BotonPaso, Cuando, Paso, Renglon } from './pasos-pedido'
+import { Bloque, BotonLink, BotonPaso, Cuando, Paso, Renglon } from './pasos-pedido'
+import { linksDePedidos, type LinkPedido } from '@/lib/crm/pedidos-catalogo'
+import { Pliegue } from './Pliegue'
 
 const plata = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 const diaMes = (iso: string) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}` }
@@ -93,12 +95,26 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
   // Sólo lo que pide algo (Darío 17-nov: «es molesto»): ⛔ los vendidos por GN ni los ya pagos y enviados a preparar —eso
   // ya lo dice «Última compra»—. Queda lo que falta entrar, pagar o enviar a preparación.
   const conAlgo = pedidos.pedidos.filter((p) => p.etapa !== 'anulado' && ((!!p.pago && p.pago.falta > 0) || (p.etapa === 'pedido' && pedidos.escribir)))
+  // 🧾 Los ya pagos, plegados (Darío 25-nov: «no me permite ver sus últimos pedidos para facturarle», caso Camila #118): tocar
+  // uno abre su hoja, que tiene «Facturar».
+  const anteriores = pedidos.pedidos.filter((p) => p.etapa !== 'anulado' && !conAlgo.includes(p))
+  const [verAnteriores, setVerAnteriores] = useState(false)
   // ⚡ Los pedidos sin terminar se traen ya: al tocarlo, la hoja abre al instante (Darío 18-nov: tardaba 3 s).
   const abiertos = conAlgo.slice(0, 3).map((p) => p.id).join(',')
   useEffect(() => {
     for (const id of abiertos ? abiertos.split(',') : []) adelantarPedidoPanel(id)
   }, [abiertos])
-  if (!conAlgo.length && !pedidos.sinEntrar.length) return null
+  // 🔗 El link que recibió la clienta al confirmar en la tienda (Darío 24-nov), para volver a pasárselo. Sólo los que salieron
+  // de la tienda lo tienen (y dura 90 días); si no hay, el botón ⛔ aparece.
+  const numeros = conAlgo.map((p) => String(p.numero ?? '')).filter(Boolean).sort().join(',')
+  const [links, setLinks] = useState<Record<string, LinkPedido>>({})
+  useEffect(() => {
+    if (!numeros) return
+    let vivo = true
+    linksDePedidos(numeros.split(',')).then((l) => vivo && setLinks(l))
+    return () => { vivo = false }
+  }, [numeros])
+  if (!conAlgo.length && !pedidos.sinEntrar.length && !anteriores.length) return null
   const aPreparacion = async (p: PedidoDelCliente) => {
     setEnviando(p.id)
     try { await mandarAPrepararPanel(p.id); decir('Enviado a preparación.'); onCambio() } catch (e) { decir(e instanceof Error ? e.message : 'No se pudo enviar a preparación.', true) } finally { setEnviando(null) }
@@ -149,6 +165,7 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
                   {p.unidades} u · {plata(p.total)}{p.etapa === 'anulado' ? ' · Anulado' : p.pago ? <> · <b style={{ color: tonoPago(p.pago) }}>{textoPago(p.pago).toLowerCase()}</b></> : ''}
                 </div>
               </button>
+              {links[String(p.numero)] && <BotonLink l={{ link: links[String(p.numero)].link, total: p.total }} />}
               {pagar
                 ? <Button size="sm" variant="solid" tone="brand" onClick={() => setPagando({ ventaId: p.venta_id as string, numero: p.numero, falta: (p.pago as PagoPedido).falta })}>$ Cargar pago</Button>
                 : enviar && <Button size="sm" variant="solid" tone="success" disabled={enviando === p.id} onClick={() => void aPreparacion(p)}>Enviar a preparación</Button>}
@@ -163,6 +180,16 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
           </div>
         )
       })}
+      {anteriores.length > 0 && (
+        <Pliegue titulo="Anteriores" cantidad={String(anteriores.length)} abierto={verAnteriores} onTocar={() => setVerAnteriores((v) => !v)}>
+          {anteriores.slice(0, 10).map((p) => (
+            <button key={p.id} type="button" onClick={() => setAbierto(p.id)} title={`Ver el pedido ${codigoPedido(p.numero)}`}
+              style={{ display: 'block', width: '100%', height: 'auto', textAlign: 'left', background: 'none', border: 0, padding: '4px 0', cursor: 'pointer', fontSize: font.sm, color: 'inherit' }}>
+              <b>Pedido {codigoPedido(p.numero)}</b> <span style={{ color: color.mut2 }}>· {diaMes(p.recibido_en)} · {p.unidades} u · {plata(p.total)}</span>
+            </button>
+          ))}
+        </Pliegue>
+      )}
       {!pedidos.escribir && <div style={{ fontSize: 11, color: color.mut2, marginTop: 6 }}>{APAGADO}</div>}
       {abierto && <HojaPedido pedidoId={abierto} cuenta={cuenta} onCerrar={() => setAbierto(null)} onHecho={(t) => { decir(t); onCambio() }} />}
       {pagando && cuenta && (
@@ -312,6 +339,8 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
   const [cantidades, setCantidades] = useState<Record<string, number>>({})
   /** Los renglones AGREGADOS sin guardar (su cantidad vive en `cantidades`, como la de los demás). */
   const [agregados, setAgregados] = useState<Agregado[]>([])
+  /** Precio a mano sobre un renglón que YA estaba en el pedido (Darío 25-nov, M-124: antes se perdía sin avisar). */
+  const [aManoYa, setAManoYa] = useState<Record<string, number>>({})
   /** Packs por diseño (Darío 18-nov): cuántos lleva cada uno (los del pedido y los agregados) y su armado. */
   const [packs, setPacks] = useState<Record<string, number>>({})
   const [packInfo, setPackInfo] = useState<Record<string, InfoPack>>({})
@@ -324,6 +353,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
     setFicha(r)
     setCantidades(Object.fromEntries(r.lineas.map((l) => [`${l.product_id}:${l.size_id}`, l.cantidad])))
     setAgregados([])
+    setAManoYa({})
     const enPack = Object.entries(r.tienda?.packs ?? {}).filter(([, x]) => x.enPedido > 0)
     setPacks(Object.fromEntries(enPack.map(([id, x]) => [id, x.enPedido])))
     setPackInfo(Object.fromEntries(enPack.map(([id, x]) => [id, { pack: x, inicial: x.enPedido, nombre: r.lineas.find((l) => String(l.product_id) === id)?.nombre ?? `Producto ${id}` }])))
@@ -348,7 +378,8 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
   const packsCambiados = Object.keys({ ...packs, ...Object.fromEntries([...enPackOriginal].map((id) => [id, 0])) })
     .some((id) => (packs[id] ?? 0) !== (ficha?.tienda?.packs?.[id]?.enPedido ?? 0))
   const cambiado = (!!ficha && (ficha.lineas.some((l) => !enPackOriginal.has(String(l.product_id)) && cantidades[`${l.product_id}:${l.size_id}`] !== l.cantidad)
-    || agregados.some((a) => (cantidades[a.k] ?? 0) > 0))) || packsCambiados
+    || agregados.some((a) => (cantidades[a.k] ?? 0) > 0)
+    || ficha.lineas.some((l) => { const m = aManoYa[`${l.product_id}:${l.size_id}`]; return m != null && m !== (l.base ?? l.precio) }))) || packsCambiados
   /**
    * La cuenta en el momento, como en la tienda (Darío 18-nov): subtotal, el descuento por monto que aparece o se va, el
    * redondeo mayorista y el envío. Sin las reglas de la tienda, renglones × precio como antes.
@@ -357,7 +388,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
     if (!ficha) return null
     const sueltos = [
       ...ficha.lineas.filter((l) => !enPackOriginal.has(String(l.product_id)))
-        .map((l) => ({ base: l.base ?? l.precio, tipo: l.tipo ?? 'fijo', promo: l.promo ?? null, cantidad: cantidades[`${l.product_id}:${l.size_id}`] ?? l.cantidad })),
+        .map((l) => { const m = aManoYa[`${l.product_id}:${l.size_id}`]; return { base: m ?? l.base ?? l.precio, tipo: m != null ? 'fijo' : l.tipo ?? 'fijo', promo: l.promo ?? null, cantidad: cantidades[`${l.product_id}:${l.size_id}`] ?? l.cantidad } }),
       ...agregados.map((a) => ({ base: a.precio, tipo: a.tipo, promo: a.promo, cantidad: cantidades[a.k] ?? 0 })),
       ...Object.entries(packs).map(([id, n]) => ({ base: packInfo[id]?.pack.precio ?? 0, tipo: 'pack', cantidad: n * (packInfo[id]?.pack.fundas ?? 0) })),
     ].filter((r) => r.cantidad > 0)
@@ -377,6 +408,13 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
       const ya = ficha?.lineas.some((l) => `${l.product_id}:${l.size_id}` === k) || agregados.some((a) => a.k === k) || nuevos.some((a) => a.k === k)
       const deTienda = v.precio ?? prod.precio
       const final = precio ?? deTienda
+      // Precio a mano sobre lo que YA está: lo toma ese renglón (⛔ se pierde en silencio).
+      if (ya && precio != null) {
+        if (ficha?.lineas.some((l) => `${l.product_id}:${l.size_id}` === k)) setAManoYa((m) => ({ ...m, [k]: precio }))
+        else setAgregados((as) => as.map((a) => (a.k === k ? { ...a, precio, tipo: 'fijo', aMano: true } : a)))
+        const nuevo = nuevos.find((a) => a.k === k)
+        if (nuevo) Object.assign(nuevo, { precio, tipo: 'fijo', aMano: true })
+      }
       if (!ya && final != null) nuevos.push({ k, product_id: prod.product_id, size_id: v.size_id, nombre: prod.nombre, talle: v.talle, precio: final, tipo: precio != null ? 'fijo' : (v.tipo ?? 'lista'), promo: prod.promo ?? null, aMano: precio != null, stock: v.stock })
     }
     setAgregados((as) => [...as, ...nuevos])
@@ -427,7 +465,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
         {cambiado
           ? <Button variant="solid" tone="brand" disabled={!puede || ocupado}
               onClick={() => void hacer(() => cambiarPedidoPanel(pedidoId, [
-                ...ficha.lineas.filter((l) => l.size_id != null && !enPackOriginal.has(String(l.product_id))).map((l) => ({ productId: l.product_id, sizeId: l.size_id as number, cantidad: cantidades[`${l.product_id}:${l.size_id}`] ?? l.cantidad })),
+                ...ficha.lineas.filter((l) => l.size_id != null && !enPackOriginal.has(String(l.product_id))).map((l) => { const k = `${l.product_id}:${l.size_id}`; return { productId: l.product_id, sizeId: l.size_id as number, cantidad: cantidades[k] ?? l.cantidad, ...(aManoYa[k] != null ? { precio: aManoYa[k] } : {}) } }),
                 ...agregados.map((a) => ({ productId: a.product_id, sizeId: a.size_id, cantidad: cantidades[a.k] ?? 0, ...(a.aMano ? { precio: a.precio } : {}) })).filter((a) => a.cantidad > 0),
               ], Object.entries({ ...Object.fromEntries([...enPackOriginal].map((id) => [id, 0])), ...packs }).map(([id, n]) => ({ productId: Number(id), packs: n }))), 'Cambio guardado.')}>Guardar</Button>
           : p?.etapa === 'pedido' && <Button variant="solid" tone="brand" disabled={!ficha.escribir || ocupado || !!p.falta_cliente} title={p.falta_cliente ? 'Sin cliente' : undefined} onClick={() => void hacer(() => mandarAPrepararPanel(pedidoId), 'Enviado a preparación.')}>Enviar a preparación</Button>}
@@ -449,7 +487,7 @@ export function HojaPedido({ pedidoId, cuenta = null, onCerrar, onHecho }: { ped
           {!ficha.escribir && <Notice tone="info">{APAGADO}</Notice>}
           {ficha.escribir && !p.editable && p.etapa !== 'anulado' && <Notice tone="info">El depósito ya empezó a prepararlo: no se cambia.</Notice>}
           <RenglonesPorDiseno
-            renglones={[...ficha.lineas.filter((l) => !enPackOriginal.has(String(l.product_id))).map((l) => ({ ...l, nuevo: false })),
+            renglones={[...ficha.lineas.filter((l) => !enPackOriginal.has(String(l.product_id))).map((l) => { const m = aManoYa[`${l.product_id}:${l.size_id}`]; return m != null ? { ...l, precio: m, tipo: 'fijo' as const, nuevo: false } : { ...l, nuevo: false } }),
               ...agregados.map((a) => ({ ...a, cantidad: 0, nuevo: true }))]}
             cantidades={cantidades} puede={puede}
             poner={(k, n) => setCantidades((c) => ({ ...c, [k]: Math.max(0, n) }))}

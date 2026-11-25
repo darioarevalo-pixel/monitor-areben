@@ -394,7 +394,7 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
-            <span style={rotulo}>Cliente <span style={{ fontWeight: 400, color: color.mut }}>(opcional)</span></span>
+            <span style={rotulo}>Cliente</span>
             {cliente && !crearCliente ? (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ color: color.ink }}>{cliente.nombre}{cliente.doc ? ` · ${cliente.doc}` : ' · sin documento'}</span>
@@ -403,7 +403,7 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
             ) : (
               <>
                 <div style={fila}>
-                  <Input aria-label="Buscar cliente" placeholder="Nombre o documento" value={qCliente} onChange={(e) => setQCliente(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void buscarCliente() }} style={{ flex: '1 1 180px' }} />
+                  <Input aria-label="Buscar cliente" placeholder="Opcional · nombre o documento" value={qCliente} onChange={(e) => setQCliente(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void buscarCliente() }} style={{ flex: '1 1 180px' }} />
                   <Button variant="outline" onClick={() => void buscarCliente()}>Buscar</Button>
                   <Button variant="ghost" onClick={() => { setCrearCliente(true); setCliente({ doc: '', nombre: qCliente }) }}>Crear cliente</Button>
                 </div>
@@ -421,7 +421,7 @@ export function NuevaVenta({ marca, onCerrar, onGuardada, onVer, onFacturar }: {
             )}
           </div>
 
-          <Field label="Nota (opcional)"><Input value={nota} maxLength={500} onChange={(e) => setNota(e.target.value)} /></Field>
+          <Field label="Nota"><Input value={nota} maxLength={500} onChange={(e) => setNota(e.target.value)} placeholder="Opcional" /></Field>
 
           {falta && renglones.length > 0 && <p style={{ margin: 0, color: color.mut }}>{falta}</p>}
           <Button size="lg" disabled={!!falta || enviando || !datos?.manualHabilitado || (aCuenta && pidePin && pin.length < 4)} onClick={() => void enviar()}>

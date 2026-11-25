@@ -22,17 +22,24 @@ import { space } from '@/components/ui'
 import { hoyIso, promosDe, type Canal } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { TarjetaPromo } from './TarjetaPromo'
+import { TarjetaPromoProducto } from './TarjetaPromoProducto'
 
 export function BandaPromoHoy({ canal = 'mostrador' }: { canal?: Canal }) {
   const { marca } = useSesion()
   const promos = useAgenda((s) => s.promos)
-  const deHoy = promosDe(promos, hoyIso(), { canal, marca })
+  const deProducto = useAgenda((s) => s.promosProducto)
+  const hoy = hoyIso()
+  const deHoy = promosDe(promos, hoy, { canal, marca })
+  // 🔑 Las de PRODUCTO (Bruno, 23-nov-2026) van en la misma banda, con la misma regla de canal: una
+  // promo de la tienda online ⛔ vale en el local, y al revés. La vigencia la decide el navegador.
+  const productoHoy = deProducto.filter((p) => p.marca === marca && p.canal === canal && (!p.desde || p.desde <= hoy) && (!p.hasta || p.hasta >= hoy))
 
-  if (deHoy.length === 0) return null
+  if (deHoy.length === 0 && productoHoy.length === 0) return null
 
   return (
     <div style={{ display: 'grid', gap: space[2], marginBottom: space[4] }}>
       {deHoy.map((p) => <TarjetaPromo key={p.id} promo={p} compacta />)}
+      {productoHoy.map((p) => <TarjetaPromoProducto key={p.id} promo={p} />)}
     </div>
   )
 }

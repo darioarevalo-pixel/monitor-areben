@@ -24,14 +24,13 @@ import { Button, Icono } from '@/components/ui'
 import { telefonoDeCliente } from '@/lib/crm/panel'
 import { telDelChat } from '@/lib/crm/telefono.core.js'
 import { type EscritosHoy } from '@/lib/crm/escritos'
-import { armarFilasPedidos, claveContacto, leerContactados, linksDePedidos, marcarContactado, mensajeLink, traerPedidosCatalogo, type FilaPedido, type LinkPedido, type ResultadoCatalogo, type UltimosMios } from '@/lib/crm/pedidos-catalogo'
+import { armarFilasPedidos, claveContacto, leerContactados, linksDePedidos, marcarContactado, traerPedidosCatalogo, type FilaPedido, type LinkPedido, type ResultadoCatalogo, type UltimosMios } from '@/lib/crm/pedidos-catalogo'
 import { tomar } from '@/lib/crm/precarga'
 import { enviarMedicion, marca } from '@/lib/medir'
-import { copiarAlPortapapeles } from '@/lib/portapapeles'
 import { enGrupoDeposito, estadoDeposito, faltanUnidades, formaCorta, pasoPanel, pendientesLogistica, TRANSPORTE, type PendienteLogistica, type Resultado } from '@/lib/crm/logistica'
 import { escrituras, leerEstadoPedidos, PEDIDOS_CAMBIARON, type EstadoPedidoPanel } from '@/lib/erp/cliente'
 import { PedidosSinCliente, PreparadosSinPagar } from './PedidosMayoristas'
-import { Bloque, Cuando, Paso, Renglon, plataPedido as plata } from './pasos-pedido'
+import { Bloque, BotonLink, Cuando, Paso, Renglon, plataPedido as plata } from './pasos-pedido'
 
 /**
  * Los pedidos del catálogo de hoy y ayer (Darío, 20-oct-2026). Ver `lib/crm/pedidos-catalogo.ts`.
@@ -158,31 +157,6 @@ function useContactados(): [Set<string> | null, (clave: string, marcado: boolean
     return !!r
   }, [])
   return [s, tildar]
-}
-
-/**
- * Copiar el link del pedido con su total (Darío, 26-oct-2026: «gente que a veces no guarda los
- * links»). Cuadrado como el ✓ y el de WhatsApp; el ✓ verde dura un momento y sólo sale si copió de
- * verdad.
- */
-function BotonLink({ l }: { l: LinkPedido }) {
-  const [copiado, setCopiado] = useState<boolean | null>(null)
-  const copiar = async () => {
-    const ok = await copiarAlPortapapeles(mensajeLink(l, plata))
-    setCopiado(ok)
-    setTimeout(() => setCopiado(null), 1400)
-  }
-  return (
-    <button
-      type="button"
-      onClick={copiar}
-      title={copiado === false ? 'No se pudo copiar' : copiado ? 'Copiado: pegalo en el chat' : `Copiar el link del pedido (total ${plata(l.total)})`}
-      aria-label="Copiar el link del pedido"
-      style={{ width: 32, minWidth: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', borderRadius: radius.md, border: `1px solid ${copiado ? color.success : color.line}`, background: copiado ? color.successBg : color.bg2, color: copiado ? color.successInk : color.ink, fontSize: 14, cursor: 'pointer' }}
-    >
-      {copiado ? '✓' : copiado === false ? '!' : '🔗'}
-    </button>
-  )
 }
 
 /**

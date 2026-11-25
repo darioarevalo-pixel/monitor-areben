@@ -53,6 +53,13 @@ export const CATALOGO_ID_DESDE = 1_000_000_000
 
 export const lineasDeBase = (base) => (base === 'zattia' ? ['zattia', 'stunned'] : base === 'bdi' ? ['bdi'] : [])
 
+/**
+ * ¿Todas las líneas de la base ya cortaron (`erp_corte`)? Entonces GN ⛔ cuenta para su stock: el sync diario deja de guardar la
+ * foto (BDI desde el 14-nov; Zattia+Stunned desde el 22-nov) y el libro ⛔ la pide (22-nov: libro:bdi falló cada noche por eso).
+ * @param {string} base @param {Record<string, string>} cortes línea → instante
+ */
+export const todasCortaron = (base, cortes) => lineasDeBase(base).length > 0 && lineasDeBase(base).every((l) => Boolean(cortes?.[l]))
+
 export function lineaDe(base, sku) {
   if (base === 'zattia') return sku && /^stu/i.test(String(sku)) ? 'stunned' : 'zattia'
   return 'bdi'
@@ -117,7 +124,7 @@ export function indiceDeVariantes(filas, vinculos = [], kits = []) {
     const v = porVariante.get(`${f.product_id}:${f.size_id}`)
     if (v) porVarianteTN.set(String(f.variant_id), v)
   }
-  // 🔑 Los CONJUNTOS de TN (sql/092): una variante de TN = varias prendas. Un conjunto con una pieza que ⛔ está queda ROTO (null en
+  // 🔑 Los CONJUNTOS de TN (sql/093): una variante de TN = varias prendas. Un conjunto con una pieza que ⛔ está queda ROTO (null en
   // `piezasTN` no: `{ rota: true }`), para que nadie lo trate como prenda suelta ni mande stock con una pieza de menos.
   const conjuntos = new Map()
   for (const f of kits) {

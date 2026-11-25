@@ -128,14 +128,14 @@ export async function guardarVinculoDelERP(db, { tienda, variant_id, product_id,
 }
 
 /**
- * Guarda las PIEZAS de un conjunto (sql/092): la variante de TN «Bikini MADDIE · Camo (S, M)» = corpiño S + bombacha M, en ese orden
+ * Guarda las PIEZAS de un conjunto (sql/093): la variante de TN «Bikini MADDIE · Camo (S, M)» = corpiño S + bombacha M, en ese orden
  * (`piezas[0]` es la pieza 1). Reemplaza lo que hubiera. Desde Vincular (`origen = 'erp'`) o desde el script que crea el producto
  * (`'script'`). Valida: la variante está en TN, cada pieza está en el ERP y es de la misma marca, al menos dos y sin repetir.
  * @param {{ tienda: string, variant_id: number, piezas: Array<{ product_id: number, size_id: number, cantidad?: number }>, usuario?: string, origen?: 'erp'|'script' }} e
  */
 export async function guardarConjunto(db, { tienda, variant_id, piezas, usuario = null, origen = 'erp', empresa = 'areben' }) {
   if (!TIENDAS.includes(tienda)) return fallo('TIENDA_DESCONOCIDA', `Tienda desconocida: ${tienda}`)
-  if (!(await hayConjuntos(db))) return fallo('SIN_TABLA', 'Los conjuntos todavía no están en la base del motor (migración 092).')
+  if (!(await hayConjuntos(db))) return fallo('SIN_TABLA', 'Los conjuntos todavía no están en la base del motor (migración 093).')
   if (!['erp', 'script'].includes(origen)) return fallo('ENTRADA_INVALIDA', `Origen inválido: ${origen}`)
   if (!Array.isArray(piezas) || piezas.length < 2 || piezas.length > 9) return fallo('ENTRADA_INVALIDA', 'Un conjunto lleva entre 2 y 9 piezas.')
   const claves = piezas.map((p) => `${Number(p.product_id)}:${Number(p.size_id)}`)

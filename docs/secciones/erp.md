@@ -462,6 +462,10 @@ Tests: `tests/arca-*.test.ts`. Prueba contra ARCA: `scripts/arca-probar.mjs` (ce
   hace cumplir el MOTOR (409); la pantalla usa `diferenciaDeCambio`, la MISMA cuenta. ✅ (Bruno, 14-oct) La diferencia
   se cobra CON el descuento de la forma de pago (`cobroDelCambio` = el `cobro()` de la Caja), la transferencia se
   ESPERA como en la Caja (`cruzarTransferencia`) y lo devuelto que vale más queda como SALDO A FAVOR (DNI + nombre).
+  🔑 **Lo devuelto vale la LISTA, ⛔ el redondeo** (Bruno 22-nov): la historia de GN que hizo la Caja trae el redondeo para
+  arriba sumado al renglón (`armarVentaGN`); el motor la devuelve a la lista de `caja_venta.renglones` (`aLaListaDeLaCaja`,
+  sólo baja) y el monitor hace la MISMA cuenta en la ficha (`importeCambio`, `conImporteDelCambio`) y en el servidor, o el
+  cambio da 409. La ficha sigue mostrando lo cobrado. Muere sola cuando pasa el plazo de cambio de esas ventas (fin de dic).
 - 🔑 **`erp › Caja › Factura` = la factura A PEDIDO** (`FacturaCaja.tsx`, 14-oct): busca la venta propia y saca UNA
   factura B (sin identificar, DNI o CUIT) o A (CUIT + inscripta/monotributista) por el MISMO `facturarLote` de la
   masiva (`facturarVentaPropia` en `api/_erp.js`, núcleo en `lib/erp/factura.core.js`). 🔴 **`facturas.venta_id` =

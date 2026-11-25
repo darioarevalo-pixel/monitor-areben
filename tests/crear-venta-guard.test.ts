@@ -169,7 +169,7 @@ describe('crear-venta sin el token de GN: se frena sólo lo que VA a GN', () => 
     vi.resetModules()
     vi.stubEnv('GN_TOKEN_VENTAS_BDI', '')
     vi.doMock('@/api/_salida-documento.js', () => ({
-      fallaAlErp: async () => ({ ajuste: 9, linea: 'bdi', ya: false }), canjeAlErp: async () => null, solicitudAlErp: async () => null, documentarCanje: async () => null,
+      fallaAlErp: async () => ({ ajuste: 9, linea: 'bdi', ya: false }), canjeAlErp: async () => null, reclamoAlErp: async () => null, cambioAlErp: async () => null, solicitudAlErp: async () => null, documentarCanje: async () => null,
     }))
     const { aGN } = redFalsa({ kvDiceQueSi: true })
     const res = resFalso()
@@ -180,11 +180,39 @@ describe('crear-venta sin el token de GN: se frena sólo lo que VA a GN', () => 
     expect(aGN).toEqual([])
   })
 
+  it('🔴 las regaladas de un reclamo de una línea cortada van al ERP (A-n), ⛔ a GN (Bruno 23-nov)', async () => {
+    vi.resetModules()
+    vi.doMock('@/api/_salida-documento.js', () => ({
+      fallaAlErp: async () => null, canjeAlErp: async () => null, reclamoAlErp: async () => ({ ajuste: 14, linea: 'zattia', ya: false }), cambioAlErp: async () => null, solicitudAlErp: async () => null, documentarCanje: async () => null,
+    }))
+    const { aGN } = redFalsa({ kvDiceQueSi: true })
+    const res = resFalso()
+    await (await traerHandler())({ method: 'POST', headers: conSesion, body: { ...FALLA, store: 'zattia', proposito: 'reclamo', solicitudId: 'reclamo-7-regaladas' } }, res)
+    vi.doUnmock('@/api/_salida-documento.js')
+    expect(res.code).toBe(200)
+    expect(res.body).toMatchObject({ ok: true, venta: { number: 'Areben Gestión A-14' }, erp: { ajuste: 14 } })
+    expect(aGN).toEqual([])
+  })
+
+  it('🔴 el cambio de Reclamos de una línea cortada FRENA (409), ⛔ crea la venta en GN', async () => {
+    vi.resetModules()
+    vi.doMock('@/api/_salida-documento.js', () => ({
+      fallaAlErp: async () => null, canjeAlErp: async () => null, reclamoAlErp: async () => null, cambioAlErp: async () => ({ error: 'hacelo en la Caja' }), solicitudAlErp: async () => null, documentarCanje: async () => null,
+    }))
+    const { aGN } = redFalsa({ kvDiceQueSi: true })
+    const res = resFalso()
+    await (await traerHandler())({ method: 'POST', headers: conSesion, body: { ...FALLA, accion: 'cambio_real', proposito: 'cambio', origen: 'deposito', forma_pago: 'transferencia', solicitudId: 'reclamo-7-cambio' } }, res)
+    vi.doUnmock('@/api/_salida-documento.js')
+    expect(res.code).toBe(409)
+    expect(String(res.body?.error)).toMatch(/Caja/)
+    expect(aGN).toEqual([])
+  })
+
   it('🔴 lo que sigue en GN sin token ⇒ 500, y ⛔ sale a GN', async () => {
     vi.resetModules()
     vi.stubEnv('GN_TOKEN_VENTAS_BDI', '')
     vi.doMock('@/api/_salida-documento.js', () => ({
-      fallaAlErp: async () => null, canjeAlErp: async () => null, solicitudAlErp: async () => null, documentarCanje: async () => null,
+      fallaAlErp: async () => null, canjeAlErp: async () => null, reclamoAlErp: async () => null, cambioAlErp: async () => null, solicitudAlErp: async () => null, documentarCanje: async () => null,
     }))
     const { aGN } = redFalsa({ kvDiceQueSi: true })
     const res = resFalso()

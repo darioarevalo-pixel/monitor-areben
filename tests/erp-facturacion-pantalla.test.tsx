@@ -124,7 +124,7 @@ describe('ERP › Facturación con el molde', () => {
   it('Facturas: las de GN y las del ERP juntas; la que tiene NC dice «anulada con NC»; la NC resta', async () => {
     await montar()
     await clic(vista(/^Facturas/))
-    expect(filas().some((f) => f.includes('Factura B 00005-00012144') && f.includes('Gestión Nube') && f.includes('Juana'))).toBe(true)
+    expect(filas().some((f) => f.includes('Factura B 00005-00012144') && f.includes('Sistema anterior') && f.includes('Juana'))).toBe(true)
     expect(filas().some((f) => f.includes('Factura B 00009-00000012') && f.includes('anulada con nota de crédito'))).toBe(true)
     await clic(vista(/Notas de crédito/))
     expect(filas().some((f) => f.includes('Nota de crédito B 00009-00000003') && f.includes('−'))).toBe(true)

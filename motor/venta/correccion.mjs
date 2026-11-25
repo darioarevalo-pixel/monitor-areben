@@ -2,7 +2,8 @@
  * CORREGIR EL PRECIO de una venta ya hecha, CASO 1: sin mover plata (sql/036; Bruno 24-oct). La venta, sus líneas y sus
  * pagos ⛔ se editan: la corrección es una fila inmutable con el precio antes/después de cada línea, el motivo y quién.
  * El total nuevo = el vigente + la diferencia de importes de las líneas corregidas (el descuento por forma de pago ⛔ se
- * recalcula). Se compara con lo COBRADO y la diferencia queda guardada y visible, para resolverla a mano.
+ * recalcula). Se compara con lo COBRADO y la diferencia queda guardada y visible, para resolverla a mano. Si la venta está A CUENTA,
+ * la diferencia va a la cuenta corriente (25-nov).
  * Con factura (`venta_factura`) ⇒ `FACTURADA`. Quién puede (el interruptor `precio`) lo decide el monitor, ⛔ el motor.
  *
  * `db` conectado y sin transacción. Devuelven `{ ok: true, … }` o `{ ok: false, error: { codigo, mensaje, campo? } }`.
@@ -17,6 +18,8 @@ const falla = (codigo, mensaje, campo) => ({ ok: false, error: campo ? { codigo,
 const UUID = /^[0-9a-f-]{36}$/i
 const pesos = (n) => Math.round(Number(n) * 100) / 100
 const texto = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+/** ¿La base tiene esa tabla? (una base sin la 017 o la 025 ⛔ tiene pedidos ni cuenta corriente: ⛔ se consulta, rompería la transacción). */
+const hay = async (db, tabla) => (await q(db, 'select to_regclass($1) is not null as hay', [tabla]))[0]?.hay === true
 
 /** El precio y el importe VIGENTES de cada línea (el de la última corrección, o el original). */
 async function vigentes(db, ventaId) {
@@ -83,17 +86,108 @@ async function dentro(db, e, motivo, usuario, pedidas) {
   const totalAntes = pesos(ult ? ult.t : v.total)
   const totalDespues = pesos(totalAntes + filas.reduce((s, x) => s + x.importe_despues - x.importe_antes, 0))
   if (totalDespues < 0) return falla('ENTRADA_INVALIDA', 'El total no puede quedar en negativo', 'lineas')
-  const [{ cobrado }] = await q(db, 'select coalesce(sum(monto), 0)::float as cobrado from venta_pago where venta_id = $1', [v.id])
-  const diferencia = pesos(totalDespues - cobrado)
+  const [{ cobrado: pagado }] = await q(db, 'select coalesce(sum(monto), 0)::float as cobrado from venta_pago where venta_id = $1', [v.id])
+  // A CUENTA (Darío 25-nov, pedido M-124 de Fabio): la diferencia la toma la cuenta corriente, como al cambiar un pedido
+  // (`cambiarPedido`) ⇒ lo «cobrado» acompaña al total y ⛔ queda diferencia suelta. Sin esto la venta decía un total y la cuenta otro.
+  const compra = await compraACuenta(db, v)
+  const cobrado = compra ? pesos(pagado + totalDespues - totalAntes) : pesos(pagado)
+  const diferencia = compra ? 0 : pesos(totalDespues - pagado)
   const [k] = await q(db, `insert into venta_correccion (empresa_id, marca, venta_id, motivo, total_antes, total_despues, cobrado, diferencia, prueba, usuario)
     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id::text, creada_en`,
-  [v.empresa_id, v.marca, v.id, motivo, totalAntes, totalDespues, pesos(cobrado), diferencia, v.prueba, usuario])
+  [v.empresa_id, v.marca, v.id, motivo, totalAntes, totalDespues, cobrado, diferencia, v.prueba, usuario])
   for (const x of filas) {
     await q(db, `insert into venta_correccion_linea (correccion_id, venta_linea_id, precio_antes, precio_despues, importe_antes, importe_despues)
       values ($1, $2, $3, $4, $5, $6)`, [k.id, x.id, x.precio_antes, x.precio_despues, x.importe_antes, x.importe_despues])
   }
+  const cuenta = compra ? await precioACuenta(db, v, compra, usuario) : []
+  await precioAlPedido(db, v, filas, totalDespues, usuario)
   return { ok: true, correccion: { id: k.id, venta_id: v.id, numero: Number(v.numero), total_antes: totalAntes, total_despues: totalDespues,
-    cobrado: pesos(cobrado), diferencia, motivo, usuario, creada_en: k.creada_en, lineas: filas } }
+    cobrado, diferencia, motivo, usuario, creada_en: k.creada_en, lineas: filas, cuenta } }
+}
+
+/**
+ * El PEDIDO MAYORISTA de la venta toma los precios corregidos y el total (Darío 25-nov, M-124): si ⛔, el panel muestra lo viejo y
+ * el próximo cambio del pedido PISA la corrección (el cambio arma la venta desde los renglones del pedido). Sin pedido, nada.
+ * Queda en el historial del pedido como `edicion`. Dentro de la transacción del que llama.
+ */
+async function precioAlPedido(db, v, filas, totalDespues, usuario) {
+  if (!await hay(db, 'pedido_mayorista')) return
+  const [p] = await q(db, `select id::text, empresa_id, total::float as total, unidades, lineas from pedido_mayorista
+    where venta_id = $1 and anulado_en is null for update`, [v.id])
+  if (!p || !Array.isArray(p.lineas)) return
+  const delas = await q(db, 'select id::text, product_id, size_id from venta_linea where id = any($1::uuid[])', [filas.map((x) => x.id)])
+  const nuevo = new Map()
+  for (const x of filas) {
+    const l = delas.find((d) => d.id === x.id)
+    if (l) nuevo.set(`${Number(l.product_id)}:${Number(l.size_id)}`, x.precio_despues)
+  }
+  const lineas = p.lineas.map((l) => {
+    const precio = nuevo.get(`${Number(l.product_id)}:${Number(l.size_id)}`)
+    return precio == null ? l : { ...l, precio }
+  })
+  const totalCatalogo = pesos(lineas.reduce((s, l) => s + Number(l.precio) * Number(l.cantidad), 0))
+  await q(db, 'update pedido_mayorista set lineas = $2::jsonb, total = $3, total_catalogo = $4, editado_en = now() where id = $1',
+    [p.id, JSON.stringify(lineas), totalDespues, totalCatalogo])
+  await q(db, `insert into pedido_mayorista_cambio (empresa_id, pedido_id, motivo, antes, despues, usuario) values ($1, $2, 'edicion', $3::jsonb, $4::jsonb, $5)`,
+    [p.empresa_id, p.id, JSON.stringify({ total: p.total, unidades: Number(p.unidades), lineas: p.lineas }),
+      JSON.stringify({ total: totalDespues, unidades: Number(p.unidades), lineas, de: 'corregir-precio' }), usuario])
+}
+
+/** La compra de la venta en la cuenta corriente (la mayorista y la que dejó algo a cuenta), o null. */
+async function compraACuenta(db, v) {
+  if (!await hay(db, 'cuenta_movimiento')) return null
+  const [compra] = await q(db, `select cliente_id::text, marca, empresa_id, prueba from cuenta_movimiento where empresa_id = $1 and ref = $2 and tipo = 'compra'`,
+    [v.empresa_id, `venta:${v.id}`])
+  return compra ?? null
+}
+
+/**
+ * Pasa a la cuenta corriente cada corrección de PRECIO de la venta que todavía ⛔ está ahí (la de recién y las de antes de este
+ * arreglo, que no la movían). Una fila `correccion` por corrección, con la misma ref que usa `cambiarPedido` ⇒ ⛔ se duplica.
+ * Dentro de la transacción del que llama. Devuelve lo que cargó: `[{ correccion, monto }]`.
+ */
+async function precioACuenta(db, v, compra, usuario) {
+  const faltan = await q(db, `select k.id::text, k.motivo, (k.total_despues - k.total_antes)::float as monto from venta_correccion k
+    where k.venta_id = $1 and coalesce(to_jsonb(k)->>'tipo', 'precio') = 'precio' and k.total_despues <> k.total_antes
+      and not exists (select 1 from cuenta_movimiento m where m.empresa_id = $2 and m.ref = 'venta:' || $1::text || ':correccion:' || k.id::text)
+    order by k.creada_en, k.id`, [v.id, v.empresa_id])
+  for (const f of faltan) {
+    await q(db, `insert into cuenta_movimiento (empresa_id, marca, cliente_id, tipo, ref, monto, venta_id, detalle, prueba, usuario, ocurrida_en)
+      values ($1, $2, $3, 'correccion', $4, $5, $6, $7::jsonb, $8, $9, now())`,
+    [compra.empresa_id, compra.marca, compra.cliente_id, `venta:${v.id}:correccion:${f.id}`, pesos(f.monto), v.id,
+      JSON.stringify({ correccion: f.id, motivo: f.motivo, de: 'precio' }), compra.prueba, usuario])
+  }
+  return faltan.map((f) => ({ correccion: f.id, monto: pesos(f.monto) }))
+}
+
+/**
+ * Pone al día la cuenta corriente y el pedido del panel con las correcciones de precio de UNA venta que no los movieron (las de
+ * antes del 25-nov).
+ * Sin venta a cuenta ⇒ `NO_A_CUENTA`. ⛔ Duplica: la ref de cada fila es la de su corrección.
+ */
+export async function precioPendienteACuenta(db, { venta_id, usuario }) {
+  if (!UUID.test(String(venta_id ?? ''))) return falla('NO_ENCONTRADA', 'No está esa venta', 'venta_id')
+  const quien = texto(usuario)
+  if (!quien) return falla('ENTRADA_INVALIDA', 'Falta quién', 'usuario')
+  await db.query('begin')
+  try {
+    const [v] = await q(db, 'select id::text, empresa_id, numero, estado from venta where id = $1 for update', [venta_id])
+    if (!v) { await db.query('rollback'); return falla('NO_ENCONTRADA', 'No está esa venta', 'venta_id') }
+    const compra = await compraACuenta(db, v)
+    if (!compra) { await db.query('rollback'); return falla('NO_A_CUENTA', `La venta ${v.numero} no está a cuenta`) }
+    const cargado = await precioACuenta(db, v, compra, quien)
+    // Y el pedido del panel, con lo último de cada renglón corregido (de la más vieja a la más nueva: gana la última).
+    const filas = await q(db, `select cl.venta_linea_id::text as id, cl.precio_despues::float as precio_despues from venta_correccion_linea cl
+      join venta_correccion k on k.id = cl.correccion_id where k.venta_id = $1 and coalesce(to_jsonb(k)->>'tipo', 'precio') = 'precio'
+      order by k.creada_en, k.id`, [v.id])
+    const [ult] = await q(db, 'select total_despues::float as t from venta_correccion where venta_id = $1 order by creada_en desc, id desc limit 1', [v.id])
+    if (filas.length && ult) await precioAlPedido(db, v, filas, pesos(ult.t), quien)
+    await db.query('commit')
+    return { ok: true, cargado }
+  } catch (x) {
+    await db.query('rollback').catch(() => {})
+    throw x
+  }
 }
 
 /** Las correcciones de una venta (de la más vieja a la más nueva) y su estado vigente: total, cobrado y lo que falta resolver. */
@@ -108,6 +202,9 @@ export async function correccionesDe(db, { venta_id }) {
   for (const k of correcciones) if (k.tipo === 'productos') k.renglones = await renglonesDe(db, k.id)
   const [{ cobrado }] = await q(db, 'select coalesce(sum(monto), 0)::float as cobrado from venta_pago where venta_id = $1', [venta_id])
   const total = correcciones.length ? correcciones.at(-1).total_despues : v.total
+  // A CUENTA (25-nov): lo que falta lo tiene la cuenta corriente ⇒ ⛔ «faltan cobrar» en la ficha.
+  const [a] = await hay(db, 'cuenta_movimiento') ? await q(db, `select 1 from cuenta_movimiento where ref = $1 and tipo = 'compra' limit 1`, [`venta:${venta_id}`]) : []
+  if (a) return { ok: true, correcciones, total, cobrado: pesos(total), diferencia: 0, aCuenta: true }
   return { ok: true, correcciones, total, cobrado: pesos(cobrado), diferencia: pesos(total - cobrado) }
 }
 

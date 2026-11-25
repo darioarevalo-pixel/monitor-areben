@@ -16,11 +16,10 @@
  */
 
 import { useTiendaErp } from '@/lib/erp/linea-erp'
-import { usePruebaSegunCorte } from '@/lib/erp/prueba-corte'
 import { usePantallaAngosta } from '@/lib/movil'
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { Button, EmptyState, Icono, MenuAcciones, MoneyText, Notice, color, font, space, type AccionMenu } from '@/components/ui'
+import { Button, EmptyState, Icono, MenuAcciones, MoneyText, Notice, color, font, space, weight, type AccionMenu } from '@/components/ui'
 import { formatMoney } from '@/components/ui/MoneyText'
 import { ListaTrabajo, IconoFila, type MovilColumna, type OrdenLista } from '@/components/ui/ListaTrabajo'
 import { PanelColumnas } from '@/components/ui/PanelColumnas'
@@ -31,11 +30,10 @@ import {
 } from '@/lib/erp/cuenta-corriente.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
 import { esAdmin } from '@/lib/permisos'
-import { usePuedeErp } from '@/lib/erp/usePuedeErp'
+import { usePuedeErp, usePuedeErpListo } from '@/lib/erp/usePuedeErp'
 import { ESTADO_CUENTA, FichaCuenta, type FilaCuenta } from './FichaCuenta'
 import { imprimirResumenDeFila } from './resumen-cuenta'
 import { enlaceWhatsapp } from '@/lib/erp/resumen-cuenta.core.js'
-import { fechaCorta } from './FichaCliente'
 
 type Prefs = { orden: string[]; visibles: string[] }
 
@@ -59,8 +57,10 @@ export function CuentaCorriente({ embebida = false, vistaDeAfuera = 'saldo', alC
   const usuario = perfil?.name ?? null
   const admin = esAdmin(perfil)
   const lista = 'erp-cuenta-corriente'
-  // Hasta el corte con GN, las mayoristas de BDI son de PRUEBA (corren en sombra): se abre en ese libro (A, 20-oct).
-  const { prueba, setPrueba, listo } = usePruebaSegunCorte(tienda)
+  // Darío 22-nov: las dos marcas ya pasaron ⇒ sólo las cuentas REALES (⛔ botón «De prueba»).
+  const prueba = false
+  // Antes esperaba al corte (async) y, sin querer, a los permisos: ⛔ leer las cuentas antes de saber si puede verlas.
+  const listo = usePuedeErpListo(marca, 'cuentas') === true
   const [datos, setDatos] = useState<(CuentasDeLaMarca & { clave: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [vistaPropia, setVista] = useState('saldo')
@@ -107,7 +107,7 @@ export function CuentaCorriente({ embebida = false, vistaDeAfuera = 'saldo', alC
   })
 
   const celda = (f: FilaCuenta, k: string): React.ReactNode => {
-    if (k === 'c') return <span style={{ minWidth: 0 }}><span title={f.nombre} style={estiloNombre}>{f.nombre}</span><span style={{ color: f.doc ? color.mut : color.mut2 }}> · {f.doc ?? 'sin documento'}</span></span>
+    if (k === 'c') return <span style={{ minWidth: 0 }}><span title={f.nombre} style={estiloNombre}>{f.nombre}</span>{f.doc && <span style={{ color: color.mut }}> · {f.doc}</span>}</span>
     if (k === 'linea') return <span style={{ color: color.mut }}>{NOMBRE_LINEA[f.linea as keyof typeof NOMBRE_LINEA] ?? f.linea}</span>
     if (k === 'debe') return f.debe ? <MoneyText value={f.debe} /> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'favor') return f.aFavor ? <span style={{ color: 'var(--mo-success-ink)' }}><MoneyText value={f.aFavor} /></span> : <span style={{ color: color.mut2 }}>—</span>
@@ -115,7 +115,7 @@ export function CuentaCorriente({ embebida = false, vistaDeAfuera = 'saldo', alC
     if (k === 'vencido') return f.vencido ? <span style={{ color: 'var(--mo-danger-ink)' }}><MoneyText value={f.vencido} /></span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'dias') return f.debe ? <span style={{ color: color.ink2 }}>{n(f.diasMayor)} días</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'ventas') return f.ventasConSaldo ? <span style={{ color: color.ink2 }}>{n(f.ventasConSaldo)}</span> : <span style={{ color: color.mut2 }}>—</span>
-    if (k === 'cobro') return f.ultimoCobro ? <span style={{ color: color.ink2 }}>{`${String(f.ultimoCobro.fecha).slice(8, 10)}/${String(f.ultimoCobro.fecha).slice(5, 7)} · ${formatMoney(f.ultimoCobro.monto)}`}</span> : <span style={{ color: color.mut2 }}>Ninguno</span>
+    if (k === 'cobro') return f.ultimoCobro ? <span style={{ color: color.ink2 }}>{`${String(f.ultimoCobro.fecha).slice(8, 10)}/${String(f.ultimoCobro.fecha).slice(5, 7)} · ${formatMoney(f.ultimoCobro.monto)}`}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'credito') return <span title={f.credito?.puesto_por ? `Lo marcó ${f.credito.puesto_por}` : undefined} style={{ color: f.credito?.credito ? color.ink2 : color.mut }}>{textoCredito(f.credito, formatMoney)}</span>
     if (k === 'estado') return <ChipEstado mapa={ESTADO_CUENTA} k={f.estado} />
     if ((TRAMOS as string[]).includes(k)) return f.tramos[k] ? <MoneyText value={f.tramos[k]} /> : <span style={{ color: color.mut2 }}>—</span>
@@ -143,37 +143,21 @@ export function CuentaCorriente({ embebida = false, vistaDeAfuera = 'saldo', alC
     )
   }
 
-  const libro = prueba ? 'de prueba' : 'reales'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      {!embebida && <p style={{ margin: 0, color: color.mut }}>Un solo saldo por cliente: lo que deben sus ventas a cuenta, menos lo que tiene a favor.</p>}
-      {datos && datos.clientesErp === 0 && (
-        <Notice tone="neutral">Esta marca todavía no tiene clientes en Areben Gestión: la cuenta corriente empieza cuando se le venda a cuenta a un cliente desde Areben Gestión.</Notice>
-      )}
-      {datos && datos.clientesErp > 0 && (prueba || datos.otroLibro > 0) && (
-        <Notice tone={prueba ? 'warning' : 'neutral'}>
-          {prueba
-            ? <>Estás mirando las cuentas <b>de prueba</b>: las ventas mayoristas que Areben Gestión copia de Gestión Nube hasta el corte. Los cobros a cuenta que se cargan en Gestión Nube todavía no llegan acá, así que algunos saldos dan de más. {datos.otroLibro ? `Hay ${n(datos.otroLibro)} ${datos.otroLibro === 1 ? 'cliente' : 'clientes'} con movimientos reales.` : 'Todavía no hay ninguna cuenta real.'}</>
-            : <>Hay {n(datos.otroLibro)} {datos.otroLibro === 1 ? 'cliente' : 'clientes'} con movimientos <b>de prueba</b>, que no se suman acá. <Button variant="outline" onClick={() => setPrueba(true)}>Ver las de prueba</Button></>}
-        </Notice>
-      )}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-        <TileResumen titulo="Por cobrar" valor={formatMoney(res.porCobrar)} oscuro nota={`${n(res.conSaldo)} ${res.conSaldo === 1 ? 'cuenta' : 'cuentas'} con saldo · lo que deben − lo que tienen a favor`} />
+        <TileResumen titulo="Por cobrar" valor={formatMoney(res.porCobrar)} oscuro nota={`${n(res.conSaldo)} ${res.conSaldo === 1 ? 'cuenta' : 'cuentas'}`} />
         <TileResumen tono={tonoDeConteo(res.vencido)} titulo="Vencido" valor={formatMoney(res.vencido)} nota={`${n(res.atrasadas)} ${res.atrasadas === 1 ? 'atrasada' : 'atrasadas'}`} />
         <TileResumen titulo="Saldo a favor" valor={formatMoney(res.aFavor)} nota={`${n(res.conFavor)} ${res.conFavor === 1 ? 'cliente' : 'clientes'}`} />
-        <TileResumen titulo="Por antigüedad" valor={formatMoney(res.tramos['más de 90'])} nota={`más de 90 días · 61–90 ${formatMoney(res.tramos['61–90'])} · 31–60 ${formatMoney(res.tramos['31–60'])} · 0–30 ${formatMoney(res.tramos['0–30'])}`} />
+        <TileAntiguedad tramos={res.tramos} entera={angosta} />
       </div>
 
       <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
         {!embebida && <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />}
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar un cliente" placeholder="Nombre o DNI / CUIT" />
-          <div role="group" aria-label="Qué cuentas" style={{ display: 'flex', gap: 4 }}>
-            <Button variant={prueba ? 'outline' : 'solid'} aria-pressed={!prueba} onClick={() => { setPrueba(false); setFicha(null) }}>Reales</Button>
-            <Button variant={prueba ? 'solid' : 'outline'} aria-pressed={prueba} onClick={() => { setPrueba(true); setFicha(null) }}>De prueba</Button>
-          </div>
           <PanelColumnas
             columnas={prefs.orden.filter((k) => variasLineas || k !== 'linea').map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
             onAlternar={(k) => setPrefs(alternarColumna(prefs, k))}
@@ -188,18 +172,42 @@ export function CuentaCorriente({ embebida = false, vistaDeAfuera = 'saldo', alC
           activa={ficha?.id ?? null} onAbrir={abrirFicha} etiquetaFila={(f) => `la cuenta de ${f.nombre}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay cuentas con ese nombre o documento.' : todas.length ? 'No hay cuentas en esta vista.' : `No hay cuentas corrientes ${libro} todavía.`} />
+              <EmptyState title={q ? `Ninguna cuenta coincide con «${q}».` : todas.length ? 'No hay cuentas en esta vista.' : 'Todavía no hay cuentas.'} />
               {!embebida && vista !== 'todas' && todas.length > 0 && <div style={{ textAlign: 'center' }}><Button variant="outline" onClick={() => setVista('todas')}>Ver todas</Button></div>}
             </div>
           ) : null}
         />
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo las cuentas…' : `${n(filas.length)} de ${n(todas.length)} cuentas ${libro}`}
-          {datos?.hoy && <> · al {fechaCorta(datos.hoy)} · las atrasadas primero</>}
+          {cargando && !datos ? 'Leyendo…' : `${n(filas.length)} de ${n(todas.length)}`}
         </div>
       </div>
 
       {ficha && <FichaCuenta key={`${marca}/${prueba}/${ficha.id}/${cobroPedido}`} marca={marca} fila={ficha} prueba={prueba} admin={admin} cobrarAlAbrir={cobroPedido > 0} onCerrar={() => setFicha(null)} onCambio={() => setVuelta((x) => x + 1)} />}
+    </div>
+  )
+}
+
+/** «Por antigüedad» (Darío 22-nov): los cuatro tramos con su barra; el de +90 días en rojo cuando hay. */
+function TileAntiguedad({ tramos, entera }: { tramos: Record<string, number>; /** 📱 todo el renglón (⛔ de a dos) */ entera: boolean }) {
+  const max = Math.max(1, ...TRAMOS.map((t) => tramos[t] ?? 0))
+  return (
+    <div className={entera ? undefined : 'mo-tile'} style={{ flex: entera ? '1 1 100%' : '2 1 340px', minWidth: 0, padding: '8px 14px', borderRadius: 12, background: color.surface, border: `1px solid ${color.line}` }}>
+      <div style={{ fontSize: font.xs, lineHeight: '14px', color: color.mut }}>Por antigüedad</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginTop: 2 }}>
+        {TRAMOS.map((t) => {
+          const v = tramos[t] ?? 0
+          const rojo = t === 'más de 90' && v > 0
+          return (
+            <div key={t} style={{ minWidth: 0 }}>
+              <div style={{ fontSize: font.xs, color: color.mut }}>{t === 'más de 90' ? '+90 días' : `${t} días`}</div>
+              <div style={{ fontSize: font.sm, fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: rojo ? 'var(--mo-danger-ink)' : v ? color.ink : color.mut2 }}>{v ? formatMoney(v) : '—'}</div>
+              <div style={{ height: 4, borderRadius: 2, background: color.bg2, marginTop: 3 }}>
+                <div style={{ width: `${Math.round((v / max) * 100)}%`, height: '100%', borderRadius: 2, background: rojo ? 'var(--mo-danger-ink)' : 'var(--mo-brand-solid)' }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

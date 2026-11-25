@@ -47,10 +47,10 @@ describe('armarComparacion (la cuenta de la conciliación del motor, en vivo)', 
     expect(r.filas.find((f) => f.id === '3/3')).toBeUndefined()
   })
 
-  it('Stunned publica Depósito + Local; Zattia sólo el Local', () => {
+  it('Stunned y Zattia publican Depósito + Local (Zattia: Bruno 22-nov, la tienda online vende del depósito)', () => {
     const filas = [fila('1/1', 'STN-1', { local: 1, deposito: 2 }, 0, { linea: 'stunned' }), fila('2/2', 'Z-1', { local: 1, deposito: 7 }, 0, { linea: 'zattia' })]
-    const r = armarComparacion({ cortes: CORTES, marca: 'zattia', filas, inventario: [], tn: [{ ...tn(1, 'STN-1', 3), tienda: 'stunned' }, { ...tn(2, 'Z-1', 1), tienda: 'zattia' }] })
-    expect(r.filas.map((f) => [f.id, f.paraTienda, f.clase])).toEqual([['1/1', 3, 'coincide'], ['2/2', 1, 'gn_aparte']])
+    const r = armarComparacion({ cortes: CORTES, marca: 'zattia', filas, inventario: [], tn: [{ ...tn(1, 'STN-1', 3), tienda: 'stunned' }, { ...tn(2, 'Z-1', 8), tienda: 'zattia' }] })
+    expect(r.filas.map((f) => [f.id, f.paraTienda, f.clase])).toEqual([['1/1', 3, 'coincide'], ['2/2', 8, 'gn_aparte']])
   })
 
   it('Stunned ya cortó: sólo el ERP contra TN, ⛔ GN (Bruno 28-oct: SCOTTISH S, ERP 0 = TN 0, salía «Gestión Nube dice otro stock»)', () => {

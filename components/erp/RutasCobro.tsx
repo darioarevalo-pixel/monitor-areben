@@ -23,7 +23,6 @@ import { leerRutas, ponerRuta, type CanalRuta, type CuentaReal, type FilaDeRuta,
 import { avisoDeRuta, nombreDeCuenta, CANALES_DE_RUTA, NOMBRE_MEDIO, NOMBRE_TITULAR } from '@/lib/erp/rutas.core.js'
 import { NOMBRE_CANAL, NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
 import { normal } from '@/lib/erp/stock-lista.core.js'
-import { TiraConfiguracion, type PiezaConfiguracion } from './TiraConfiguracion'
 import { useTiendaErp } from '@/lib/erp/linea-erp'
 
 const SE_ELIGE = ''
@@ -40,22 +39,22 @@ type Editando = { fila: FilaDeRuta; cuenta: string; tasa: string; dias: string; 
 const COLUMNAS: ColumnaLista[] = [
   { key: 'canal', titulo: 'Canal', ancho: '120px', movil: 'chico' },
   { key: 'medio', titulo: 'Forma de pago', ancho: '130px', movil: 'titulo' },
-  { key: 'cuenta', titulo: 'Va a la cuenta', ancho: 'minmax(230px, 1.6fr)', movil: 'chico' },
+  { key: 'cuenta', titulo: 'Cuenta', ancho: 'minmax(230px, 1.6fr)', movil: 'chico' },
   { key: 'factura', titulo: 'Se factura', ancho: '96px', movil: 'oculta' },
   { key: 'tasa', titulo: 'Comisión', ancho: '90px', derecha: true, movil: 'dato' },
   { key: 'dias', titulo: 'La plata llega en', ancho: '96px', movil: 'chico' },
   { key: 'desde', titulo: 'Desde', ancho: 'minmax(150px, 1fr)', movil: 'oculta' },
 ]
 const COLUMNAS_CAMBIOS: ColumnaLista[] = [
-  { key: 'puesta', titulo: 'Cuándo', ancho: '104px', movil: 'chico' },
-  { key: 'por', titulo: 'Quién', ancho: '130px', movil: 'oculta' },
+  { key: 'puesta', titulo: 'Fecha', ancho: '104px', movil: 'chico' },
+  { key: 'por', titulo: 'Responsable', ancho: '130px', movil: 'oculta' },
   { key: 'canal', titulo: 'Canal', ancho: '120px', movil: 'chico' },
   { key: 'medio', titulo: 'Forma de pago', ancho: '130px', movil: 'titulo' },
-  { key: 'cuenta', titulo: 'Va a la cuenta', ancho: 'minmax(230px, 1.6fr)', movil: 'chico' },
+  { key: 'cuenta', titulo: 'Cuenta', ancho: 'minmax(230px, 1.6fr)', movil: 'chico' },
   { key: 'vale', titulo: 'Vale desde', ancho: '104px', movil: 'oculta' },
 ]
 
-export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => void; alContar?: AlContar }) {
+export function RutasCobro({ alContar }: { alContar?: AlContar }) {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const configura = usePuedeErp(marca)('configurar')
@@ -115,7 +114,7 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
     const e = editando
     const { canal, medio } = e.fila
     const hoy = hoyAR()
-    if (e.dia < hoy) { setError('El cambio vale desde ahora en adelante: el pasado no se cambia.'); return }
+    if (e.dia < hoy) { setError('Elegí hoy o un día que viene.'); return }
     const cuenta = e.cuenta ? cuentaPorId(e.cuenta) : null
     const cuando = e.dia === hoy ? 'desde ahora' : `desde el ${e.dia.slice(8, 10)}/${e.dia.slice(5, 7)}`
     const ok = await confirmar({
@@ -187,20 +186,11 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
   const enCambios = vista === CAMBIOS
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <TiraConfiguracion activa="rutas" ir={ir} />
-      <p style={{ margin: 0, color: color.mut }}>
-        A qué cuenta va la plata de cada forma de pago. En el local se elige sólo la forma de pago; el descuento sale de sus reglas.
-        Un cambio vale desde ese momento: lo cobrado antes no se toca.
-      </p>
-      <Notice tone="neutral">
-        Por ahora se anota en las ventas de Areben Gestión: la Caja sigue cobrando como hoy hasta que se active Areben Gestión.
-        {datos?.cuentasCopiadasEn ? ` Las cuentas son las del dashboard (copiadas el ${cuandoCorto(datos.cuentasCopiadasEn)}).` : ''}
-      </Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
       {aviso && <Notice tone="warning" onClose={() => setAviso(null)}>{aviso}</Notice>}
 
-      {!datos && !error && <EmptyState title="Leyendo a qué cuenta va cada forma de pago…" />}
+      {!datos && !error && <EmptyState title="Leyendo…" />}
       {datos && (
         <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
           <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
@@ -213,10 +203,10 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
                 columnas={COLUMNAS} filas={filas} claveDe={(f) => `${f.canal}/${f.medio}`} celda={celda} acciones={acciones} anchoAcciones={40}
                 activa={editando ? `${editando.fila.canal}/${editando.fila.medio}` : null}
                 onAbrir={configura ? empezar : undefined} etiquetaFila={(f) => `${NOMBRE_MEDIO[f.medio]} en ${nombreCanal(f.canal)}`}
-                vacio={<div style={{ padding: space[6] }}><EmptyState title={q ? 'Nada con esa búsqueda.' : 'Todas las formas de pago tienen cuenta.'} /></div>}
+                vacio={<div style={{ padding: space[6] }}><EmptyState title={q ? `Ninguna coincide con «${q}».` : 'Todas las formas de pago tienen cuenta.'} /></div>}
               />}
           <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-            {nombreLinea(deLinea)} · {todas.filter((f) => f.vigente).length} de {todas.length} con cuenta · cada cambio queda con quién, cuándo y desde cuándo vale
+            {todas.filter((f) => f.vigente).length} de {todas.length} con cuenta
           </div>
         </div>
       )}
@@ -233,7 +223,7 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
         >
           <p style={{ margin: `0 0 ${space[3]}`, color: color.mut }}>{nombreLinea(deLinea)} · {nombreCanal(editando.fila.canal)} · {NOMBRE_MEDIO[editando.fila.medio]}{editando.fila.vigente ? ` · hoy va a ${nombreDeCuenta(editando.fila.cuenta)}` : ' · hoy sin cuenta'}</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: space[3] }}>
-            <Field label="Desde ahora va a" required hint={editando.cuenta === SE_ELIGE ? 'Para la transferencia mayorista: la cuenta se elige al cobrar.' : undefined}>
+            <Field label="Cuenta" required hint={editando.cuenta === SE_ELIGE ? 'Para la transferencia mayorista: la cuenta se elige al cobrar.' : undefined}>
               <Select value={editando.cuenta} onChange={(e) => setEditando({ ...editando, cuenta: e.target.value })}>
                 <option value={SE_ELIGE}>Se elige en cada cobro</option>
                 {titulares.map((ti) => {
@@ -245,10 +235,10 @@ export function RutasCobro({ ir, alContar }: { ir?: (p: PiezaConfiguracion) => v
             <Field label="Desde" hint="Hoy: desde ahora. Otro día: desde las 0 h">
               <Input type="date" min={hoyAR()} value={editando.dia} onChange={(e) => setEditando({ ...editando, dia: e.target.value })} />
             </Field>
-            <Field label="Comisión %" hint="Lo que se queda Mercado Pago, Payway o Mercado Libre (opcional)">
+            <Field label="Comisión %" hint="Opcional">
               <Input inputMode="decimal" value={editando.tasa} onChange={(e) => setEditando({ ...editando, tasa: e.target.value })} placeholder="0" />
             </Field>
-            <Field label="Días hasta que acredita" hint="Vacío: al momento">
+            <Field label="La plata llega en (días)" hint="Vacío: en el día">
               <Input inputMode="numeric" value={editando.dias} onChange={(e) => setEditando({ ...editando, dias: e.target.value })} placeholder="0" />
             </Field>
           </div>

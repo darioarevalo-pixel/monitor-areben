@@ -2,7 +2,7 @@
  * El PIN de la ENCARGADA, por persona y por marca (motor sql/051; Bruno 26-oct: 4 dígitos, 5 fallos ⇒ 15 min de bloqueo, lo fija sólo Admin).
  * Cada marca guarda sus PINs en SU base (como los roles): el Admin lo fija en la marca donde esa persona autoriza.
  *
- *   GET  ?recurso=erp&vista=pines&marca=bdi                      quién tiene PIN, quién lo puso y si está bloqueado (sólo Admin) · ⛔ nunca el hash
+ *   GET  ?recurso=erp&vista=pines&marca=bdi                      quién tiene PIN, quién lo puso y si está bloqueado (sólo Admin) · ⛔ nunca el PIN ni el hash (Bruno 23-nov)
  *   POST {recurso:'erp', accion:'poner-pin', marca, persona, pin}   fija o cambia (y desbloquea) · sólo Admin
  *   POST {recurso:'erp', accion:'quitar-pin', marca, persona}       sólo Admin
  *   POST {recurso:'erp', accion:'verificar-pin', marca, persona, pin}   `{ ok: true, persona }` · permiso `autorizar-pin` (Local + Admin, configurable)
@@ -13,7 +13,7 @@
  */
 const importar = () => import('../motor/stock/pin.mjs')
 const MARCAS = ['bdi', 'zattia']
-const sinTabla = { status: 409, error: 'Los PIN todavía no están disponibles: falta actualizar la base (051).' }
+const sinTabla = { status: 409, error: 'Todavía no disponible.' } // sin la migración (E.3: el detalle, sólo para Bruno)
 
 function entrada(body, { conPin }) {
   const marca = String(body?.marca || '')
@@ -39,7 +39,8 @@ export async function pinesErp({ marca }, { conMotor }) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Marca inválida' }
   const { pinesDe } = await importar()
   const r = await conTabla(marca, 'Los PINs', conMotor, (db) => pinesDe(db))
-  return r?.status ? r : { marca, pines: r }
+  // ⛔ el PIN, aunque lo traiga una copia vieja del motor o la columna vieja `erp_pin.pin` (Bruno 23-nov: «que no se vean»).
+  return r?.status ? r : { marca, pines: r.map(({ pin: _pin, hash: _hash, sal: _sal, ...p }) => p) }
 }
 
 /**

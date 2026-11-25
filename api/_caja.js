@@ -81,6 +81,7 @@
 // `cruzar` cada pocos segundos, que lee Mercado Pago con la MISMA lectura de Pagos recibidos y busca
 // el monto exacto (`cruzarTransferencia`). Recién con el pago encontrado la venta pasa a `borrador` y
 // se manda. El id del pago de MP queda en la fila con índice ÚNICO: un pago confirma UNA venta.
+import { waitUntil } from '@vercel/functions'
 import { createHash, randomInt } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
@@ -547,7 +548,7 @@ export default async function handler(req, res) {
   // 🔑 Opción (a) (Bruno, 14-oct): la que llega a GN se anota TAMBIÉN en el motor (`prueba`). ⛔ Frena: falla ⇒ log y el repaso.
   const enviar = async (fila) => {
     // 🔑 Stunned (26-oct): su ticket va al ERP, ⛔ a GN. `destino` queda en la fila, así un reintento no lo manda a GN.
-    if (fila.destino === 'erp') return enviarVentaErp(fila, { sb, mailer, registrar: async (v) => registrarEnErp(store, { ...v, deposito: await depositoDeVenta(v) }, { reglas: await leerConfig().then((c) => c.reglas, () => null) }) })
+    if (fila.destino === 'erp') return enviarVentaErp(fila, { sb, mailer, enCola: waitUntil, registrar: async (v) => registrarEnErp(store, { ...v, deposito: await depositoDeVenta(v) }, { reglas: await leerConfig().then((c) => c.reglas, () => null) }) })
     // 🔑 El token de GN se exige acá, sólo a lo que VA a GN: lo del ERP ⛔ lo usa, y el día de revocarlo la Caja sigue cobrando.
     if (!token) throw new Error(FALTA_TOKEN_GN)
     const out = await enviarVenta(fila, { sb, gnFetch, base: GN_BASE, token, mailer })

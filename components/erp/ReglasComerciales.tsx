@@ -17,11 +17,10 @@
 
 import { useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { Button, EmptyState, Field, Input, MenuAcciones, MoneyText, Notice, SectionCard, Select, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, useConfirmar, type AccionMenu } from '@/components/ui'
+import { Button, EmptyState, Field, Input, MenuAcciones, MoneyText, Notice, Select, TableWrap, TBody, Td, Th, THead, Tr, color, font, space, weight, useConfirmar, type AccionMenu } from '@/components/ui'
 import { ListaTrabajo, type ColumnaLista } from '@/components/ui/ListaTrabajo'
-import { BuscadorLista, ChipEstado, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
+import { BuscadorLista, ChipEstado, VistasLista } from '@/components/ui/PiezasLista'
 import { normal } from '@/lib/erp/stock-lista.core.js'
-import { TiraConfiguracion, type PiezaConfiguracion } from './TiraConfiguracion'
 import {
   buscarPrendas, guardarRegla, leerReglas, prenderCajaReglas, simularReglas, traerReglasDeCaja,
   type CopiaEnCaja, type FormaSimulada, type MarcaErp, type MedioRegla, type PrendaASimular, type ReglaComercial, type ReglasDeMarca, type Simulacion,
@@ -33,6 +32,8 @@ import { ofertaVigente } from '@/lib/tienda.core.js'
 import { validarRegla } from '@/motor/venta/reglas.mjs'
 import { esStunned } from '@/lib/lineas'
 import { useTiendaErp } from '@/lib/erp/linea-erp'
+import { FichaCostado } from '@/components/ui/FichaCostado'
+import { usePantallaAngosta } from '@/lib/movil'
 
 const MARCAS: Array<{ key: MarcaErp; label: string }> = [{ key: 'zattia', label: 'Zattia' }, { key: 'bdi', label: 'BDI' }]
 const MEDIOS: Array<{ key: MedioRegla; label: string }> = [
@@ -60,7 +61,7 @@ const COLUMNAS_REGLAS: ColumnaLista[] = [
   { key: 'prendas', titulo: 'En qué productos', ancho: 'minmax(150px, 1fr)', movil: 'oculta' },
   { key: 'campania', titulo: 'Campaña', ancho: '130px', movil: 'oculta' },
   { key: 'canal', titulo: 'Canal', ancho: '76px', movil: 'chico' },
-  { key: 'cuando', titulo: 'Cuándo', ancho: '140px', movil: 'chico' },
+  { key: 'cuando', titulo: 'Fecha', ancho: '140px', movil: 'chico' },
   { key: 'estado', titulo: 'Estado', ancho: '124px', movil: 'chico' },
 ]
 
@@ -84,7 +85,7 @@ function alcanceEnTexto(r: ReglaComercial) {
   return `${r.alcance_ids.length} ${r.alcance === 'productos' ? 'producto' : 'variante'}${r.alcance_ids.length === 1 ? '' : 's'}`
 }
 
-export function ReglasComerciales({ ir }: { ir?: (p: PiezaConfiguracion) => void }) {
+export function ReglasComerciales() {
   const { marca: delShell } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const [datos, setDatos] = useState<ReglasDeMarca | null>(null)
@@ -92,10 +93,12 @@ export function ReglasComerciales({ ir }: { ir?: (p: PiezaConfiguracion) => void
   const [hecho, setHecho] = useState<string | null>(null)
   const [trabajando, setTrabajando] = useState(false)
   const [editando, setEditando] = useState<ReglaComercial | null>(null)
+  const [probando, setProbando] = useState(false)
+  const angosta = usePantallaAngosta()
   // La línea que se mira (Stunned adentro de Zattia); en una marca sin líneas, la marca.
   // La línea es la del selector del menú (⛔ un selector de otra marca adentro: Bruno, 28-oct). Cambiarla remonta (`key` en `Erp`).
   const linea: string = useTiendaErp()
-  const [vista, setVista] = useState('prendidas')
+  const [vista, setVista] = useState('activas')
   const [q, setQ] = useState('')
   const { confirmar } = useConfirmar()
   // 🔑 Las categorías son las de TIENDA NUBE (las mismas que mira la Caja: `matchTn` sobre el catálogo), por nombre.
@@ -133,7 +136,7 @@ export function ReglasComerciales({ ir }: { ir?: (p: PiezaConfiguracion) => void
     return () => { vivo = false }
   }, [marca])
 
-  const nombreCampania = (id: string | null) => (id ? datos?.campanias.find((c) => c.id === id)?.nombre ?? id : 'Temporada')
+  const nombreCampania = (id: string | null) => (id ? datos?.campanias.find((c) => c.id === id)?.nombre ?? id : '—')
 
   async function traerDeCaja() {
     await correr(async () => {
@@ -167,36 +170,36 @@ export function ReglasComerciales({ ir }: { ir?: (p: PiezaConfiguracion) => void
     const nombre = MARCAS.find((m) => m.key === marca)?.label
     const faltan = datos?.caja.diferencias.faltan ?? []
     const ok = await confirmar({
-      titulo: prender ? `Que la Caja de ${nombre} cobre con estas reglas` : `Que la Caja de ${nombre} vuelva a su configuración`,
+      titulo: prender ? `Usar estas reglas en la Caja de ${nombre}` : `Dejar de usar estas reglas en la Caja de ${nombre}`,
       mensaje: prender ? (
         <div>
-          <p>Desde ahora, el descuento de cada forma de pago en la Caja sale de las reglas prendidas de esta pantalla (y de la promo bancaria de la Agenda). La cuenta de Gestión Nube de cada pago no cambia.</p>
-          {faltan.length > 0 && <p style={{ color: 'var(--warning-text, #92400e)' }}>Ojo: la Caja hoy cobra esto y ninguna regla prendida lo dice: {faltan.join(' · ')}. Con las reglas, eso deja de aplicarse.</p>}
+          <p>Desde ahora, el descuento de cada forma de pago en la Caja sale de las reglas activas (y de la promo bancaria de la Agenda).</p>
+          {faltan.length > 0 && <p style={{ color: 'var(--warning-text, #92400e)' }}>Solo en la Caja: {faltan.join(' · ')}. Con las reglas, eso deja de aplicarse.</p>}
           <p>Cada vez que se guarda una regla, la Caja la toma (las pantallas abiertas, al recargar).</p>
         </div>
       ) : <p>La Caja vuelve a cobrar con Formas de pago y Productos en oferta. Las reglas quedan guardadas.</p>,
-      ok: prender ? 'Prender' : 'Volver',
+      ok: prender ? 'Usar en la Caja' : 'Dejar de usar',
       tono: 'warning',
     })
     if (!ok) return
     await correr(async () => {
       const r = await prenderCajaReglas(marca, prender)
-      setHecho(r.prendida ? `La Caja de ${nombre} cobra con las reglas (${r.copiadas ?? 0}).` : `La Caja de ${nombre} volvió a su configuración.`)
+      setHecho(r.prendida ? `La Caja de ${nombre} usa estas reglas.` : `La Caja de ${nombre} dejó de usar estas reglas.`)
       await recargar()
     }, 'No se pudo cambiar con qué cobra la Caja.')
   }
 
   async function prenderApagar(r: ReglaComercial) {
     const ok = await confirmar({
-      titulo: `${r.activa ? 'Apagar' : 'Prender'} «${r.nombre}»`,
-      mensaje: <p>{r.activa ? 'La regla deja de aplicarse (queda guardada y se puede volver a prender).' : 'La regla vuelve a aplicarse.'}</p>,
-      ok: r.activa ? 'Apagar' : 'Prender',
+      titulo: `${r.activa ? 'Desactivar' : 'Activar'} «${r.nombre}»`,
+      mensaje: <p>{r.activa ? 'Deja de aplicarse. Se puede volver a activar.' : 'Vuelve a aplicarse.'}</p>,
+      ok: r.activa ? 'Desactivar' : 'Activar',
       tono: r.activa ? 'warning' : undefined,
     })
     if (!ok) return
     await correr(async () => {
       const g = await guardarRegla(marca, { ...r, activa: !r.activa })
-      setHecho(`«${r.nombre}» ${r.activa ? 'apagada' : 'prendida'}.`)
+      setHecho(`«${r.nombre}» ${r.activa ? 'desactivada' : 'activada'}.`)
       dijoLaCaja(g.caja)
       await recargar()
     }, 'No se pudo guardar la regla.')
@@ -220,10 +223,10 @@ export function ReglasComerciales({ ir }: { ir?: (p: PiezaConfiguracion) => void
   const agenda = esLinea ? [] : datos?.agenda ?? []
   const buscar = (rs: ReglaComercial[]) => (t ? rs.filter((r) => normal([r.nombre, r.fin, resumenDeRegla(r), nombreCampania(r.campania ?? null)].filter(Boolean).join(' ')).includes(t)) : rs)
   const porVista: Record<string, ReglaComercial[]> = {
-    prendidas: buscar(guardadas.filter((r) => r.activa)), apagadas: buscar(guardadas.filter((r) => !r.activa)), agenda: buscar(agenda), todas: buscar(guardadas),
+    activas: buscar(guardadas.filter((r) => r.activa)), inactivas: buscar(guardadas.filter((r) => !r.activa)), agenda: buscar(agenda), todas: buscar(guardadas),
   }
-  const VISTAS_REGLAS = [['prendidas', 'Prendidas'], ['apagadas', 'Apagadas'], ...(agenda.length ? [['agenda', 'Promos bancarias']] : []), ['todas', 'Todas']] as Array<[string, string]>
-  const enVista = VISTAS_REGLAS.some(([k]) => k === vista) ? vista : 'prendidas'
+  const VISTAS_REGLAS = [['activas', 'Activas'], ['inactivas', 'Inactivas'], ...(agenda.length ? [['agenda', 'Promos bancarias']] : []), ['todas', 'Todas']] as Array<[string, string]>
+  const enVista = VISTAS_REGLAS.some(([k]) => k === vista) ? vista : 'activas'
   const conteo = Object.fromEntries(VISTAS_REGLAS.map(([k]) => [k, porVista[k].length]))
   const deAgenda = enVista === 'agenda'
 
@@ -234,45 +237,43 @@ export function ReglasComerciales({ ir }: { ir?: (p: PiezaConfiguracion) => void
     if (k === 'campania') return <span style={{ color: r.campania ? color.ink : color.mut }}>{nombreCampania(r.campania ?? null)}</span>
     if (k === 'canal') return <span style={{ color: color.ink2 }}>{r.canal === 'local' ? 'Local' : 'Online'}</span>
     if (k === 'cuando') return <span style={{ color: color.mut }}>{vigenciaEnTexto(r)}</span>
-    if (k === 'estado') return deAgenda ? <ChipEstado mapa={{ x: ['brand', 'De la Agenda'] }} k="x" /> : <ChipEstado mapa={{ x: r.activa ? ['success', 'Prendida'] : ['neutral', 'Apagada'] }} k="x" />
+    if (k === 'estado') return deAgenda ? <ChipEstado mapa={{ x: ['brand', 'De la Agenda'] }} k="x" /> : <ChipEstado mapa={{ x: r.activa ? ['success', 'Activa'] : ['neutral', 'Inactiva'] }} k="x" />
     return null
   }
   const acciones = (r: ReglaComercial) => {
     if (deAgenda) return null
     const menu: AccionMenu[] = [
       { key: 'editar', label: 'Editar la regla', icono: 'lapiz', onClick: () => setEditando(r), disabled: trabajando },
-      { key: 'prender', label: r.activa ? 'Apagar' : 'Prender', icono: r.activa ? 'pausa' : 'play', tone: r.activa ? 'warning' : undefined, onClick: () => void prenderApagar(r), disabled: trabajando },
+      { key: 'prender', label: r.activa ? 'Desactivar' : 'Activar', icono: r.activa ? 'pausa' : 'play', tone: r.activa ? 'warning' : undefined, onClick: () => void prenderApagar(r), disabled: trabajando },
     ]
     return <MenuAcciones acciones={menu} etiqueta={`Más acciones de «${r.nombre}»`} vertical alinear="izquierda" />
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <TiraConfiguracion activa="reglas" ir={ir} />
       <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <p style={{ margin: 0, flex: '1 1 320px', color: color.mut }}>
-          Cada fin comercial es una regla: cuánto descuenta cada forma de pago, en qué productos y cuándo. En una campaña, sus reglas
-          reemplazan a las de temporada en sus productos; entre dos reglas gana la mejor para la clienta.
-        </p>
-        <Button onClick={() => setEditando({ ...VACIA, marca: deLinea })} disabled={!datos || trabajando}>Agregar regla</Button>
+        <div style={{ display: 'flex', gap: space[2], marginLeft: 'auto', flexWrap: 'wrap' }}>
+          <Button variant="outline" onClick={() => setProbando(true)} disabled={!datos}>Probar una venta</Button>
+          <Button variant="solid" tone="brand" onClick={() => setEditando({ ...VACIA, marca: deLinea })} disabled={!datos || trabajando}>Nueva regla</Button>
+        </div>
       </div>
 
       {cc && !cc.prendida && (
         <Notice tone="warning">
-          La Caja todavía cobra con su configuración (Formas de pago y Productos en oferta). Estas reglas se cargan y se prueban acá.{' '}
-          <Button size="sm" onClick={() => cajaConReglas(true)} disabled={trabajando || !!datos?.caja.diferencias.sinTraer}>Que la Caja cobre con estas reglas</Button>
+          La Caja todavía no usa estas reglas.{' '}
+          <Button size="sm" onClick={() => cajaConReglas(true)} disabled={trabajando || !!datos?.caja.diferencias.sinTraer}>Usar en la Caja</Button>
         </Notice>
       )}
       {cc?.prendida && (
         <Notice tone={cc.alDia ? 'success' : 'danger'}>
           {cc.alDia
-            ? <>La Caja cobra con estas reglas{cc.copiadasEn ? ` (tomadas el ${cuandoCorto(cc.copiadasEn)}${cc.por ? ` por ${cc.por}` : ''})` : ''}.{' '}</>
-            : <>La Caja cobra con una copia VIEJA de las reglas: lo que se cambió después no lo cobra.{' '}<Button size="sm" onClick={() => cajaConReglas(true)} disabled={trabajando}>Pasarle las de ahora</Button>{' '}</>}
-          <Button size="sm" variant="outline" onClick={() => cajaConReglas(false)} disabled={trabajando}>Volver a la configuración de la Caja</Button>
+            ? <>La Caja usa estas reglas.{' '}</>
+            : <>La Caja tiene las reglas de antes.{' '}<Button size="sm" onClick={() => cajaConReglas(true)} disabled={trabajando}>Actualizar</Button>{' '}</>}
+          <Button size="sm" variant="outline" onClick={() => cajaConReglas(false)} disabled={trabajando}>Dejar de usar en la Caja</Button>
         </Notice>
       )}
       {cc && cc.noCobra.length > 0 && (
-        <Notice tone="warning">Estas reglas están prendidas pero la Caja no las puede cobrar: {cc.noCobra.map((r) => `«${r.nombre}» (${r.porque})`).join(' · ')}</Notice>
+        <Notice tone="warning">La Caja no puede aplicar: {cc.noCobra.map((r) => `«${r.nombre}» (${r.porque})`).join(' · ')}</Notice>
       )}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
@@ -284,18 +285,18 @@ export function ReglasComerciales({ ir }: { ir?: (p: PiezaConfiguracion) => void
       )}
       {dif && !dif.sinTraer && (dif.faltan.length > 0 || dif.sobran.length > 0) && (
         <Notice tone="warning">
-          {dif.faltan.length > 0 && <div>La Caja cobra esto y ninguna regla prendida lo dice: {dif.faltan.join(' · ')}</div>}
-          {dif.sobran.length > 0 && <div>Las reglas dicen esto y la Caja todavía no lo cobra: {dif.sobran.join(' · ')}</div>}
+          {dif.faltan.length > 0 && <div>Solo en la Caja: {dif.faltan.join(' · ')}</div>}
+          {dif.sobran.length > 0 && <div>Solo en las reglas: {dif.sobran.join(' · ')}</div>}
         </Notice>
       )}
       {(datos?.caja.avisos ?? []).map((a) => <Notice key={a} tone="neutral">{a}</Notice>)}
       {datos && lineaSinReglas && (
         <Notice tone="neutral">
-          {nombreLinea} no tiene reglas propias: sus productos se cobran con las de {MARCAS.find((m) => m.key === marca)?.label}. Con la primera regla prendida de {nombreLinea}, sus productos se cobran sólo con las de {nombreLinea}.
+          {nombreLinea} usa las reglas de {MARCAS.find((m) => m.key === marca)?.label} hasta que tenga una propia.
         </Notice>
       )}
 
-      {!datos && !error && <EmptyState title="Leyendo las reglas…" />}
+      {!datos && !error && <EmptyState title="Leyendo…" />}
       {datos && (
         <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
           <VistasLista vistas={VISTAS_REGLAS} valor={enVista} conteo={conteo} onCambio={setVista} />
@@ -307,29 +308,39 @@ export function ReglasComerciales({ ir }: { ir?: (p: PiezaConfiguracion) => void
             columnas={COLUMNAS_REGLAS} filas={porVista[enVista]} claveDe={(r) => r.id ?? r.nombre} celda={celda}
             acciones={deAgenda ? undefined : acciones} anchoAcciones={40}
             activa={editando?.id ?? null} onAbrir={deAgenda ? undefined : (r) => setEditando(r)} etiquetaFila={(r) => `la regla «${r.nombre}»`}
-            vacio={<div style={{ padding: space[6] }}><EmptyState title={q ? 'Nada con esa búsqueda.' : guardadas.length ? 'Ninguna en esta vista.' : 'Sin reglas'} hint={!q && !guardadas.length ? 'Traé las de la Caja o agregá una.' : undefined} /></div>}
+            vacio={<div style={{ padding: space[6] }}><EmptyState title={q ? `Ninguna regla coincide con «${q}».` : guardadas.length ? 'Ninguna.' : 'Sin reglas'} hint={!q && !guardadas.length ? 'Traé las de la Caja o agregá una.' : undefined} /></div>}
           />
           <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-            {nombreLinea} · {guardadas.filter((r) => r.activa).length} prendidas de {guardadas.length} · una regla no se elimina: se apaga
+            {guardadas.filter((r) => r.activa).length} activas de {guardadas.length}
           </div>
         </div>
       )}
 
+      {/* Darío 23-nov: la regla se carga en una VENTANA (como Cobrar), con el simulador al lado probándola. */}
       {editando && datos && (
-        <FormRegla
-          key={editando.id ?? 'nueva'} inicial={editando} datos={datos} categorias={catalogo?.categorias ?? []} marca={editando.marca ?? marca} trabajando={trabajando}
-          onCancelar={() => setEditando(null)}
-          onGuardar={(r) => correr(async () => {
-            const g = await guardarRegla(marca, r)
-            setHecho(g.nueva ? `Regla «${g.regla.nombre}» agregada.` : `Regla «${g.regla.nombre}» guardada.`)
-            dijoLaCaja(g.caja)
-            setEditando(null)
-            await recargar()
-          }, 'No se pudo guardar la regla.')}
-        />
+        <FichaCostado abierta ventana onCerrar={() => setEditando(null)} titulo={editando.id ? `Editar «${editando.nombre}»` : 'Nueva regla'} etiqueta={editando.id ? `Editar la regla ${editando.nombre}` : 'Nueva regla'}>
+          {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+          <div style={{ display: 'grid', gridTemplateColumns: angosta ? '1fr' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: angosta ? space[5] : 32, alignItems: 'start' }}>
+            <FormRegla
+              key={editando.id ?? 'nueva'} inicial={editando} datos={datos} categorias={catalogo?.categorias ?? []} marca={editando.marca ?? marca} trabajando={trabajando}
+              onCancelar={() => setEditando(null)}
+              onGuardar={(r) => correr(async () => {
+                const g = await guardarRegla(marca, r)
+                setHecho(g.nueva ? `Regla «${g.regla.nombre}» agregada.` : `Regla «${g.regla.nombre}» guardada.`)
+                dijoLaCaja(g.caja)
+                setEditando(null)
+                await recargar()
+              }, 'No se pudo guardar la regla.')}
+            />
+            <Simulador key={marca} marca={marca} datos={datos} borrador={editando} idx={catalogo?.idx ?? null} />
+          </div>
+        </FichaCostado>
       )}
-
-      {datos && <Simulador key={marca} marca={marca} datos={datos} borrador={editando} idx={catalogo?.idx ?? null} />}
+      {probando && datos && !editando && (
+        <FichaCostado abierta ventana onCerrar={() => setProbando(false)} titulo="Probar una venta" etiqueta="Probar una venta">
+          <Simulador key={marca} marca={marca} datos={datos} borrador={null} idx={catalogo?.idx ?? null} />
+        </FichaCostado>
+      )}
     </div>
   )
 }
@@ -368,18 +379,18 @@ function FormRegla({ inicial, datos, categorias, marca, trabajando, onCancelar, 
   useEffect(() => { window.dispatchEvent(new CustomEvent('erp-regla-borrador', { detail: armar() })) })
 
   return (
-    <SectionCard title={inicial.id ? `Editar «${inicial.nombre}»` : 'Agregar regla'} subtitle="Mientras la cargás, el simulador de abajo la prueba sin guardarla.">
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: space[3] }}>
+    <section aria-label="La regla" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: space[3] }}>
         <Field label="Nombre" required><Input value={r.nombre} onChange={(e) => cambiar({ nombre: e.target.value })} placeholder="Finde jeans efectivo" /></Field>
-        <Field label="Fin comercial" hint="Para qué es (opcional)"><Input value={r.fin ?? ''} onChange={(e) => cambiar({ fin: e.target.value || null })} placeholder="Empujar jeans" /></Field>
+        <Field label="Para qué es" hint="Opcional"><Input value={r.fin ?? ''} onChange={(e) => cambiar({ fin: e.target.value || null })} placeholder="Empujar jeans" /></Field>
         <Field label="Canal" required>
           <Select value={r.canal} onChange={(e) => cambiar({ canal: e.target.value as 'local' | 'online' })}>
             <option value="local">Local</option><option value="online">Online</option>
           </Select>
         </Field>
-        <Field label="Juego" hint="En una campaña, la regla vale sólo en sus productos y mientras tenga reglas">
+        <Field label="Campaña">
           <Select value={r.campania ?? TEMPORADA} onChange={(e) => cambiar({ campania: e.target.value || null })}>
-            <option value={TEMPORADA}>Temporada (siempre)</option>
+            <option value={TEMPORADA}>Ninguna</option>
             {datos.campanias.map((c) => <option key={c.id} value={c.id}>{c.nombre}{c.feria ? ' (en oferta en la Caja)' : ''}</option>)}
           </Select>
         </Field>
@@ -397,13 +408,13 @@ function FormRegla({ inicial, datos, categorias, marca, trabajando, onCancelar, 
           </Select>
         </Field>
         {r.alcance === 'categorias' && (
-          <Field label="Categorías (de Tienda Nube)" hint={categorias.length ? 'Ctrl o ⌘ para elegir varias' : 'Cargando el catálogo de Tienda Nube…'}>
+          <Field label="Categorías" hint={categorias.length ? 'Ctrl o ⌘ para elegir varias' : 'Leyendo…'}>
             <select multiple value={r.alcance_ids} onChange={(e) => cambiar({ alcance_ids: [...e.target.selectedOptions].map((o) => o.value) })} style={{ minHeight: 120, width: '100%' }}>
               {[...new Set([...r.alcance_ids, ...categorias])].map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </Field>
         )}
-        {r.alcance === 'productos' && <Field label="Productos" hint="Los números de producto de Gestión Nube, separados por coma"><Input value={productos} onChange={(e) => setProductos(e.target.value)} placeholder="571449, 1131616" /></Field>}
+        {r.alcance === 'productos' && <Field label="Productos" hint="Números de producto, separados por coma"><Input value={productos} onChange={(e) => setProductos(e.target.value)} placeholder="571449, 1131616" /></Field>}
         <Field label="Desde"><Input type="date" value={diaAR(r.desde)} onChange={(e) => cambiar({ desde: aIso(e.target.value) })} /></Field>
         <Field label="Hasta" hint="El día entero"><Input type="date" value={diaAR(r.hasta)} onChange={(e) => cambiar({ hasta: aIso(e.target.value) })} /></Field>
         {tarjeta && <Field label="Banco" hint="Sólo con tarjeta de ese banco"><Input value={r.banco ?? ''} onChange={(e) => cambiar({ banco: e.target.value || null })} placeholder="Payway" /></Field>}
@@ -435,10 +446,10 @@ function FormRegla({ inicial, datos, categorias, marca, trabajando, onCancelar, 
       </div>
       {falta && <Notice tone="danger" style={{ marginTop: space[3] }}>{falta}</Notice>}
       <div style={{ display: 'flex', gap: space[2], marginTop: space[4] }}>
-        <Button onClick={guardar} disabled={trabajando}>Guardar</Button>
-        <Button variant="ghost" onClick={onCancelar} disabled={trabajando}>Cancelar</Button>
+        <Button variant="solid" tone="brand" onClick={guardar} disabled={trabajando}>Guardar</Button>
+        <Button variant="outline" onClick={onCancelar} disabled={trabajando}>Cancelar</Button>
       </div>
-    </SectionCard>
+    </section>
   )
 }
 
@@ -505,7 +516,9 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
   const nombreCampania = (id: string) => datos.campanias.find((c) => c.id === id)?.nombre ?? id
 
   return (
-    <SectionCard title="Simulador" subtitle="Probá una venta y mirá cuánto se cobra con cada forma de pago y qué regla lo decide. El precio de campaña lo pone el servidor.">
+    <section aria-label="Simulador" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <h3 style={{ margin: 0, fontSize: font.lg, fontWeight: weight.bold }}>Simulador</h3>
+      <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>Cuánto se cobra con cada forma de pago.</div>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <Field label="Buscar producto" hint="SKU o nombre"><Input value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && texto.trim()) void buscar() }} /></Field>
         <Button onClick={buscar} disabled={!texto.trim() || trabajando}>Buscar</Button>
@@ -531,7 +544,7 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
                     <Input value={(p.categorias ?? []).join(', ')} onChange={(e) => cambiar(p.clave, { categorias: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} placeholder="JEANS" />
                   )}</Td>
                   <Td>
-                    {p.producto ? <span style={{ opacity: 0.7 }}>La sabe Liquidación</span> : (
+                    {p.producto ? <span style={{ opacity: 0.7 }}>Automática</span> : (
                       <Select value={p.campanias?.[0] ?? ''} onChange={(e) => cambiar(p.clave, { campanias: e.target.value ? [e.target.value] : [] })}>
                         <option value="">Ninguna</option>
                         {datos.campanias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
@@ -569,12 +582,12 @@ function Simulador({ marca, datos, borrador, idx }: { marca: MarcaErp; datos: Re
               ))}
             </Notice>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: space[3] }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: space[3] }}>
             {res.formas.map((f) => <FormaCobrada key={f.medio} f={f} renglones={res.renglones} />)}
           </div>
         </div>
       )}
-    </SectionCard>
+    </section>
   )
 }
 
@@ -591,7 +604,7 @@ function FormaCobrada({ f, renglones }: { f: FormaSimulada; renglones: Simulacio
             {p.regla ? `${p.regla.nombre}: ${p.pct > 0 ? `−${p.pct} %` : p.pct < 0 ? `+${-p.pct} %` : 'precio final'}` : 'Sin regla: sin descuento'}
             {p.juego !== 'temporada' ? ' · de la campaña' : ''}
           </div>
-          {p.perdieron.length > 0 && <div style={{ opacity: 0.6 }}>No ganaron: {p.perdieron.map((x) => `${x.nombre} (${x.efecto})`).join(', ')}</div>}
+          {p.perdieron.length > 0 && <div style={{ opacity: 0.6 }}>No aplicaron: {p.perdieron.map((x) => `${x.nombre} (${x.efecto})`).join(', ')}</div>}
         </div>
       ))}
       {f.aVenta > 0 && <div style={{ fontSize: '0.85em', opacity: 0.7, marginTop: space[2] }}>Descuento a la venta: <MoneyText value={f.aVenta} /></div>}

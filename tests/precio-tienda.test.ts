@@ -83,12 +83,15 @@ describe('los precios de un cambio (la puerta decide)', () => {
     expect('status' in r ? r : r.pedidas).toEqual([{ product_id: 1, size_id: 10, cantidad: 100, precio: 4990 }])
   })
 
-  it('precio a mano: sólo Darío y sólo en lo nuevo; ⛔ más packs que los que quedan; ⛔ pack y suelta del mismo diseño', () => {
+  it('precio a mano: sólo Darío, en lo nuevo y en lo que ya estaba; ⛔ más packs que los que quedan; ⛔ pack y suelta del mismo diseño', () => {
     const nuevo = [{ productId: 1, sizeId: 10, cantidad: 190 }, { productId: 6, sizeId: 61, cantidad: 2, precio: 2000 }]
     expect(preciosDelCambio({ actuales, lineas: nuevo, reglas: R, datos })).toMatchObject({ status: 403 })
     const ok = preciosDelCambio({ actuales, lineas: nuevo, reglas: R, datos, precioManual: true })
     expect('status' in ok ? ok : ok.pedidas[1]).toEqual({ product_id: 6, size_id: 61, cantidad: 2, precio: 2000 })
-    expect(preciosDelCambio({ actuales, lineas: [{ productId: 1, sizeId: 10, cantidad: 1, precio: 10 }], reglas: R, datos, precioManual: true })).toMatchObject({ status: 400 })
+    // 25-nov (M-124): el precio a mano también vale sobre lo que YA estaba, y ⛔ se pierde; sin ser Darío, 403.
+    const ya = preciosDelCambio({ actuales, lineas: [{ productId: 1, sizeId: 10, cantidad: 1, precio: 10 }], reglas: R, datos, precioManual: true })
+    expect('status' in ya ? ya : ya.pedidas).toEqual([{ product_id: 1, size_id: 10, cantidad: 1, precio: 10 }])
+    expect(preciosDelCambio({ actuales, lineas: [{ productId: 1, sizeId: 10, cantidad: 1, precio: 10 }], reglas: R, datos })).toMatchObject({ status: 403 })
     expect(preciosDelCambio({ actuales, lineas: [], packs: [{ productId: 5, packs: 6 }], reglas: R, datos })).toEqual({ status: 409, error: 'Quedan 5 packs.' })
     expect(preciosDelCambio({ actuales, lineas: [{ productId: 5, sizeId: 51, cantidad: 1 }], packs: [{ productId: 5, packs: 1 }], reglas: R, datos })).toMatchObject({ status: 409 })
     expect(preciosDelCambio({ actuales: [...actuales, { product_id: 5, size_id: 51, cantidad: 1, precio: 4990 }], lineas: [], packs: [{ productId: 5, packs: 1 }], reglas: R, datos })).toEqual({ status: 409, error: 'Ese diseño ya está suelto en el pedido.' })

@@ -123,7 +123,7 @@ export function CambioCaja() {
       <SectionCard title={`Cambio · ${NOMBRE_MARCA[store] ?? store}`}>
         {/* 🔑 El modo lo manda la venta (`prueba`: el motor ⛔ cambia una de prueba con un cambio real ni al revés). El cartel fijo
             seguía diciendo «el cambio de verdad se hace en GN» DESPUÉS del corte de Stunned: ahora sale sólo con una venta de prueba. */}
-        {deEnsayo && <Notice tone="warning">Venta de prueba: el cambio se hace en Gestión Nube.</Notice>}
+        {deEnsayo && <Notice tone="warning">Venta de prueba: el cambio también es de prueba.</Notice>}
         {/* 🔑 El motor mueve el stock sólo si la venta NO es de prueba y NO tiene venta de GN (`mueveStock`, motor/venta/armar.mjs). */}
         {ventaErp && !ventaErp.prueba && !!ventaErp.gnSaleId && <Notice tone="info">Este cambio no mueve el stock.</Notice>}
         {tipo === 'suelto' && !deEnsayo && <Notice tone="info">Cambio sin venta: lo autoriza la encargada.</Notice>}
@@ -152,7 +152,7 @@ export function CambioCaja() {
           {!ventas.length ? <EmptyState title="No hay ventas para cambiar con esa búsqueda." /> : (
             <TableWrap>
               <table>
-                <THead><Tr><Th>Nº</Th><Th>Cuándo</Th><Th>Cliente</Th><Th style={{ textAlign: 'right' }}>Total</Th></Tr></THead>
+                <THead><Tr><Th>Nº</Th><Th>Fecha</Th><Th>Cliente</Th><Th style={{ textAlign: 'right' }}>Total</Th></Tr></THead>
                 <TBody>
                   {ventas.map((v) => (
                     <Tr key={v.clave} onClick={() => void abrir(v)} style={{ cursor: 'pointer' }}>
@@ -255,7 +255,7 @@ export function CambioCaja() {
               <div style={{ fontSize: 18 }}>
                 {diferencia > 0
                   ? <>
-                    {saldoUsado > 0 && <>Con saldo a favor: <MoneyText value={saldoUsado} strong /> · </>}
+                    {saldoUsado > 0 && <>A favor: <MoneyText value={saldoUsado} strong /> · </>}
                     {resto > 0 && (cobrado.total > 0 && cobrado.total - saldoUsado !== resto
                       ? <>A pagar: <MoneyText value={cobrado.total - saldoUsado} strong /> <span style={{ fontSize: 14 }}>· {cobrado.total - saldoUsado < resto ? 'sin descuento' : 'sin recargo'} <MoneyText value={resto} /></span></>
                       : <>A pagar: <MoneyText value={resto} strong /></>)}
@@ -294,7 +294,7 @@ export function CambioCaja() {
             {c.pideClienta && (
               <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[2] }}>
                 <Field label="Nombre"><Input value={c.clienta.nombre} onChange={(e) => c.setClienta({ ...c.clienta, nombre: e.target.value })} /></Field>
-                <Field label="WhatsApp (opcional)"><Input value={c.clienta.whatsapp} onChange={(e) => c.setClienta({ ...c.clienta, whatsapp: e.target.value })} inputMode="tel" /></Field>
+                <Field label="WhatsApp"><Input value={c.clienta.whatsapp} onChange={(e) => c.setClienta({ ...c.clienta, whatsapp: e.target.value })} inputMode="tel" placeholder="Opcional" /></Field>
               </div>
             )}
             {c.faltaClienta && <Notice tone="action">El saldo a favor va a nombre de la clienta: cargá su DNI y su nombre.</Notice>}

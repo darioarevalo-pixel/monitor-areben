@@ -7,15 +7,16 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Button, Field, Input, MenuAcciones, Modal, MoneyText, Notice, Select, color, font, space, weight } from '@/components/ui'
+import { usePantallaAngosta } from '@/lib/movil'
+import { Button, Field, Input, MenuAcciones, Modal, MoneyText, Notice, Select, color, font, space, weight, type AccionMenu } from '@/components/ui'
 import { formatMoney } from '@/components/ui/MoneyText'
 import { DatoFicha, DatosFicha, FichaCostado } from '@/components/ui/FichaCostado'
 import { ChipEstado, cuandoCorto } from '@/components/ui/PiezasLista'
 import { CampoCuentaReal } from '@/components/erp/ventas/CampoCuentaReal'
 import { pideCuentaReal } from '@/lib/erp/cobro-destino.core.js'
 import { useChequeDelCobro } from '@/components/erp/ventas/CamposCheque'
-import { anularPagoCuentaErp, cobrarCuentaErp, leerCuentaDeCliente, ponerContactoCliente, ponerCreditoCliente, type CreditoCliente, type CuentaDeCliente, type MarcaErp } from '@/lib/erp/cliente'
-import { NOMBRE_LINEA, TRAMOS, nombresDeVentas, textoCredito } from '@/lib/erp/cuenta-corriente.core.js'
+import { anularPagoCuentaErp, corregirSaldoInicialErp, cobrarCuentaErp, leerCuentaDeCliente, ponerContactoCliente, ponerCreditoCliente, type CreditoCliente, type CuentaDeCliente, type MarcaErp } from '@/lib/erp/cliente'
+import { TRAMOS, nombresDeVentas, textoCredito } from '@/lib/erp/cuenta-corriente.core.js'
 import { paraEditar, parsearMonto } from '@/lib/compromisos/plata.core.js'
 import { fechaCorta } from './FichaCliente'
 import { usePuedeErp } from '@/lib/erp/usePuedeErp'
@@ -57,6 +58,7 @@ export function FichaCuenta({ marca, fila, prueba, admin, cobrarAlAbrir = false,
   const [s, setS] = useState<(CuentaDeCliente & { clave: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [credito, setCredito] = useState(false)
+  const [corrigiendo, setCorrigiendo] = useState(false)
   const [contactando, setContactando] = useState(false)
   // El WhatsApp recién guardado: la lista de arriba se refresca con `onCambio`, pero la ficha ya lo usa.
   const [whatsappNuevo, setWhatsappNuevo] = useState<string | null>(null)
@@ -78,10 +80,10 @@ export function FichaCuenta({ marca, fila, prueba, admin, cobrarAlAbrir = false,
   const saldo = e?.saldo ?? fila.saldo
   const cred = s ? s.credito : fila.credito
   const ventas = nombresDeVentas(s?.mayor)
+  const angosta = usePantallaAngosta()
   const h3: React.CSSProperties = { margin: 0, fontSize: font.lg, fontWeight: weight.bold }
   const celda: React.CSSProperties = { padding: '7px 0', borderBottom: `1px solid ${color.bg2}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
   const cab = (t: string, derecha: boolean) => <span key={t} role="columnheader" style={{ fontSize: font.sm, color: color.mut, textAlign: derecha ? 'right' : 'left', paddingBottom: 6, borderBottom: `1px solid ${color.line}` }}>{t}</span>
-  const linea = NOMBRE_LINEA[fila.linea as keyof typeof NOMBRE_LINEA] ?? fila.linea
   const wa = enlaceWhatsapp({ whatsapp: whatsappNuevo ?? fila.whatsapp, nombre: fila.nombre, linea: fila.linea, saldo, vencido: e?.vencido ?? fila.vencido })
   const imprimir = () => {
     const w = window.open('', '_blank')
@@ -89,62 +91,60 @@ export function FichaCuenta({ marca, fila, prueba, admin, cobrarAlAbrir = false,
     if (s) imprimirResumenCon(w, fila, prueba, s)
   }
 
+  const waCargado = (whatsappNuevo ?? fila.whatsapp)?.trim()
+  const masAcciones: AccionMenu[] = [
+    { key: 'imprimir', label: 'Imprimir resumen', icono: 'impresora', onClick: imprimir, disabled: !s },
+    ...(admin ? [
+      { key: 'wa', label: 'Editar WhatsApp', icono: 'lapiz', onClick: () => { setHecho(null); setContactando(true) } } as AccionMenu,
+      { key: 'credito', label: 'Editar crédito', icono: 'lapiz', onClick: () => setCredito(true) } as AccionMenu,
+      // Darío 24-nov: anular una venta de ANTES del corte ⛔ baja la deuda (vino en el saldo inicial) ⇒ se corrige acá.
+      { key: 'saldo-inicial', label: 'Corregir saldo inicial', icono: 'lapiz', onClick: () => { setHecho(null); setCorrigiendo(true) }, disabled: !s } as AccionMenu,
+    ] : []),
+  ]
+
   return (
-    <FichaCostado abierta onCerrar={onCerrar} titulo={`Cuenta corriente · ${linea}${prueba ? ' · de prueba' : ''}`} etiqueta={`Cuenta corriente de ${fila.nombre}`}>
+    <FichaCostado abierta ventana onCerrar={onCerrar} titulo="Cuenta corriente" etiqueta={`Cuenta corriente de ${fila.nombre}`}>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: weight.bold, overflowWrap: 'anywhere' }}>{fila.nombre}</h2>
-          <div style={{ color: color.mut }}>{fila.doc ?? 'sin documento'}</div>
+          {fila.doc && <div style={{ color: color.mut }}>{fila.doc}</div>}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
             <ChipEstado mapa={ESTADO_CUENTA} k={fila.estado} />
             {prueba && <ChipEstado mapa={{ p: ['warning', 'Prueba'] }} k="p" />}
           </div>
         </div>
-        <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
-          <div style={{ fontSize: font.sm, color: color.mut }}>Saldo de la cuenta</div>
-          <div style={{ fontSize: 26, fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums', color: saldo > 0 ? color.ink : saldo < 0 ? 'var(--mo-success-ink)' : color.mut2 }}>
-            {formatMoney(Math.abs(saldo))}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: space[2], flex: '0 0 auto' }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: font.sm, color: color.mut }}>Saldo de la cuenta</div>
+            <div style={{ fontSize: 26, fontWeight: weight.bold, fontVariantNumeric: 'tabular-nums', color: saldo > 0 ? color.ink : saldo < 0 ? 'var(--mo-success-ink)' : color.mut2 }}>
+              {formatMoney(Math.abs(saldo))}
+            </div>
+            <div style={{ fontSize: font.sm, color: saldo < 0 ? 'var(--mo-success-ink)' : color.mut }}>{saldo < 0 ? 'A favor' : `Debe ${formatMoney(e?.debe ?? fila.debe)} · A favor ${formatMoney(e?.a_favor ?? fila.aFavor)}`}</div>
           </div>
-          <div style={{ fontSize: font.sm, color: saldo < 0 ? 'var(--mo-success-ink)' : color.mut }}>{saldo < 0 ? 'a favor' : `debe ${formatMoney(e?.debe ?? fila.debe)} · a favor ${formatMoney(e?.a_favor ?? fila.aFavor)}`}</div>
+          {/* Darío 22-nov: «Cobrar» índigo arriba a la derecha; el resto en ⋯. */}
+          <div style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
+            {puedeCobrar && <Button variant="solid" tone="brand" disabled={!s} onClick={() => { setHecho(null); setCobrando(true) }}>Cobrar</Button>}
+            <Button variant="outline" disabled={!wa.url} title={wa.motivo ?? undefined} onClick={() => wa.url && window.open(wa.url, '_blank', 'noopener')}>Escribir por WhatsApp</Button>
+            <MenuAcciones acciones={masAcciones} etiqueta={`Más acciones de la cuenta de ${fila.nombre}`} vertical />
+          </div>
         </div>
       </div>
 
-      {(e?.sin_credito ?? fila.sinCredito) && (
-        <Notice tone="warning">No tiene crédito marcado: todo lo que debe cuenta como vencido y la próxima venta a cuenta se frena{admin ? '' : ' (la autoriza un admin)'}.</Notice>
-      )}
-
-      <DatosFicha>
-        <DatoFicha titulo="Crédito">{textoCredito(cred, formatMoney)}</DatoFicha>
-        <DatoFicha titulo="Lo marcó">{cred?.puesto_por ? `${cred.puesto_por} · ${cred.puesto_en ? cuandoCorto(cred.puesto_en) : ''}` : '—'}</DatoFicha>
-        <DatoFicha titulo="WhatsApp">{(whatsappNuevo ?? fila.whatsapp)?.trim() ? (whatsappNuevo ?? fila.whatsapp) : 'Sin cargar'}</DatoFicha>
-        <DatoFicha titulo="Vencido">{formatMoney(e?.vencido ?? fila.vencido)}</DatoFicha>
-        <DatoFicha titulo="La más vieja">{(e?.debe ?? fila.debe) ? `${e?.dias_mayor ?? fila.diasMayor} días` : '—'}</DatoFicha>
-        {TRAMOS.map((t) => <DatoFicha key={t} titulo={t === 'más de 90' ? 'Más de 90 días' : `${t} días`}>{formatMoney((e?.tramos ?? fila.tramos)[t] ?? 0)}</DatoFicha>)}
-      </DatosFicha>
-      <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-        {puedeCobrar && <Button disabled={!s} onClick={() => { setHecho(null); setCobrando(true) }}>Cobrar</Button>}
-        <Button variant="outline" disabled={!wa.url} title={wa.motivo ?? undefined} onClick={() => wa.url && window.open(wa.url, '_blank', 'noopener')}>Escribir por WhatsApp</Button>
-        <Button variant="outline" disabled={!s} onClick={imprimir}>Resumen de cuenta</Button>
-        {admin && <Button variant="outline" onClick={() => { setHecho(null); setContactando(true) }}>{(whatsappNuevo ?? fila.whatsapp)?.trim() ? 'Cambiar el WhatsApp' : 'Cargar el WhatsApp'}</Button>}
-        {admin && <Button variant="outline" onClick={() => setCredito(true)}>{cred?.credito ? 'Cambiar el crédito' : 'Marcar crédito'}</Button>}
-      </div>
-
+      <div style={{ display: 'grid', gridTemplateColumns: angosta ? '1fr' : 'minmax(0, 2fr) minmax(0, 1fr)', gap: angosta ? space[5] : 32, alignItems: 'start' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[5], minWidth: 0 }}>
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
-        <div>
-          <h3 style={h3}>Ventas con saldo</h3>
-          <div style={{ fontSize: font.sm, color: color.mut }}>lo que debe compra por compra; un cobro paga primero la más vieja</div>
-        </div>
-        {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : !e!.pendientes.length ? <span style={{ color: color.mut }}>No debe ninguna venta.</span> : (
-          <div role="table" aria-label="Ventas con saldo" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 72px 64px 104px 104px', columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
-            {cab('Venta', false)}{cab('Fecha', false)}{cab('Días', true)}{cab('Total', true)}{cab('Pendiente', true)}
+        <h3 style={h3}>Ventas con saldo</h3>
+        {!s ? <span style={{ color: color.mut }}>Leyendo…</span> : !e!.pendientes.length ? <span style={{ color: color.mut }}>Ninguna.</span> : (
+          <div role="table" aria-label="Ventas con saldo" style={{ display: 'grid', gridTemplateColumns: angosta ? 'minmax(0, 1fr) 64px 92px 92px' : 'minmax(0, 1fr) 72px 48px 104px 104px', columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
+            {cab('Venta', false)}{cab('Fecha', false)}{!angosta && cab('Días', true)}{cab('Total', true)}{cab('Pendiente', true)}
             {e!.pendientes.map((p) => (
               <div key={p.ref} role="row" style={{ display: 'contents' }}>
                 <span role="cell" style={celda} title={p.ref}>{ventas.get(p.ref) ?? p.ref}</span>
                 <span role="cell" style={celda}>{fechaCorta(p.fecha)}</span>
-                <span role="cell" style={{ ...celda, textAlign: 'right', color: color.mut }}>{p.dias}</span>
+                {!angosta && <span role="cell" style={{ ...celda, textAlign: 'right', color: color.mut }}>{p.dias}</span>}
                 <span role="cell" style={{ ...celda, textAlign: 'right' }}><MoneyText value={p.monto} /></span>
                 <span role="cell" style={{ ...celda, textAlign: 'right', fontWeight: weight.semibold }}><MoneyText value={p.pendiente} /></span>
               </div>
@@ -155,10 +155,7 @@ export function FichaCuenta({ marca, fila, prueba, admin, cobrarAlAbrir = false,
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[2], alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div>
-            <h3 style={h3}>Mayor</h3>
-            <div style={{ fontSize: font.sm, color: color.mut }}>cada compra y cada pago, con el saldo que va quedando</div>
-          </div>
+          <h3 style={h3}>Movimientos</h3>
           <Button variant="outline" disabled={!s || s.clave !== clave} onClick={() => s && bajar(s.csv, `cuenta-${slug(fila.nombre)}-${fila.linea}${desde ? `-desde-${desde}` : ''}${hasta ? `-hasta-${hasta}` : ''}.csv`)}>Exportar</Button>
         </div>
         <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
@@ -166,7 +163,8 @@ export function FichaCuenta({ marca, fila, prueba, admin, cobrarAlAbrir = false,
           <Field label="Hasta"><Input type="date" value={hasta} min={desde || undefined} onChange={(ev) => setHasta(ev.target.value)} /></Field>
         </div>
         {s && (
-          <div role="table" aria-label="Mayor de la cuenta" style={{ display: 'grid', gridTemplateColumns: `72px minmax(0, 1fr) 96px 96px 104px${admin ? ' 32px' : ''}`, columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
+          <div style={{ overflowX: 'auto', margin: angosta ? '0 -20px' : undefined, padding: angosta ? '0 20px' : undefined }}>
+          <div role="table" aria-label="Mayor de la cuenta" style={{ minWidth: angosta ? 580 : undefined, display: 'grid', gridTemplateColumns: `72px minmax(0, 1fr) 96px 96px 104px${admin ? ' 32px' : ''}`, columnGap: 10, fontVariantNumeric: 'tabular-nums' }}>
             {cab('Fecha', false)}{cab('Movimiento', false)}{cab('Debe', true)}{cab('Haber', true)}{cab('Saldo', true)}{admin && cab('', false)}
             {(desde || s.mayor.anterior !== 0) && (
               <div role="row" style={{ display: 'contents' }}>
@@ -186,15 +184,32 @@ export function FichaCuenta({ marca, fila, prueba, admin, cobrarAlAbrir = false,
                 <span role="cell" style={{ ...celda, textAlign: 'right', fontWeight: weight.semibold }}><MoneyText value={r.saldo} /></span>
                 {admin && (
                   <span role="cell" style={{ ...celda, overflow: 'visible' }}>
-                    {r.tipo === 'pago' && <MenuAcciones acciones={[{ key: 'anular', label: 'Anular con motivo', icono: 'anular', onClick: () => { setHecho(null); setAnulando(r) } }]} etiqueta={`Más acciones del pago del ${fechaCorta(r.fecha)}`} vertical alinear="izquierda" />}
+                    {r.tipo === 'pago' && <MenuAcciones acciones={[{ key: 'anular', label: 'Anular pago', icono: 'anular', onClick: () => { setHecho(null); setAnulando(r) } }]} etiqueta={`Más acciones del pago del ${fechaCorta(r.fecha)}`} vertical alinear="izquierda" />}
                   </span>
                 )}
               </div>
             ))}
-            {!s.mayor.renglones.length && <span style={{ gridColumn: '1 / -1', padding: '8px 0', color: color.mut }}>Sin movimientos entre esas fechas.</span>}
+            {!s.mayor.renglones.length && <span style={{ gridColumn: '1 / -1', padding: '8px 0', color: color.mut }}>Sin movimientos.</span>}
+          </div>
           </div>
         )}
       </section>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[4], minWidth: 0 }}>
+        {(e?.sin_credito ?? fila.sinCredito) && (
+          <Notice tone="warning">Sin crédito: lo que debe cuenta como vencido y la próxima venta a cuenta la autoriza un admin.</Notice>
+        )}
+        <DatosFicha>
+          <DatoFicha titulo="Crédito">{textoCredito(cred, formatMoney)}</DatoFicha>
+          <DatoFicha titulo="Marcado por">{cred?.puesto_por ? `${cred.puesto_por} · ${cred.puesto_en ? cuandoCorto(cred.puesto_en) : ''}` : '—'}</DatoFicha>
+          <DatoFicha titulo="WhatsApp">{waCargado ? (whatsappNuevo ?? fila.whatsapp) : '—'}</DatoFicha>
+          <DatoFicha titulo="Vencido">{formatMoney(e?.vencido ?? fila.vencido)}</DatoFicha>
+          <DatoFicha titulo="Antigüedad">{(e?.debe ?? fila.debe) ? `${e?.dias_mayor ?? fila.diasMayor} días` : '—'}</DatoFicha>
+          {TRAMOS.map((t) => <DatoFicha key={t} titulo={t === 'más de 90' ? '+90 días' : `${t} días`}>{formatMoney((e?.tramos ?? fila.tramos)[t] ?? 0)}</DatoFicha>)}
+        </DatosFicha>
+      </div>
+      </div>
 
       {cobrando && s && (
         <VentanaCobrarCuenta
@@ -213,7 +228,16 @@ export function FichaCuenta({ marca, fila, prueba, admin, cobrarAlAbrir = false,
       {contactando && (
         <VentanaContacto
           marca={marca} fila={fila} actual={whatsappNuevo ?? fila.whatsapp ?? ''} onCerrar={() => setContactando(false)}
-          onHecho={(wa) => { setContactando(false); setWhatsappNuevo(wa); setHecho(`WhatsApp de ${fila.nombre} guardado.`); onCambio() }}
+          onHecho={(wa) => { setContactando(false); setWhatsappNuevo(wa); setHecho('WhatsApp guardado.'); onCambio() }}
+        />
+      )}
+
+      {corrigiendo && s && (
+        <VentanaSaldoInicial
+          marca={marca} fila={fila} prueba={prueba} saldo={saldo}
+          actual={s.mayor.renglones.find((r) => r.ref.startsWith('apertura:')) ?? null}
+          onCerrar={() => setCorrigiendo(false)}
+          onHecho={(aviso) => { setCorrigiendo(false); setHecho(aviso); setVuelta((x) => x + 1); onCambio() }}
         />
       )}
 
@@ -240,7 +264,7 @@ function VentanaAnularPago({ marca, fila, renglon, saldo, onCerrar, onHecho }: {
     setTrabajando(true)
     try {
       await anularPagoCuentaErp(marca, { clienteId: fila.clienteId, linea: fila.linea, ref: renglon.ref, motivo: motivo.trim() })
-      onHecho(`Pago de ${formatMoney(monto)} anulado. La deuda volvió a la cuenta de ${fila.nombre}.`)
+      onHecho(`Pago de ${formatMoney(monto)} anulado.`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo anular el pago.')
     } finally {
@@ -250,10 +274,10 @@ function VentanaAnularPago({ marca, fila, renglon, saldo, onCerrar, onHecho }: {
 
   return (
     <Modal
-      abierto onCerrar={onCerrar} titulo="Anular el pago"
+      abierto onCerrar={onCerrar} titulo="¿Anular este pago?"
       pie={<>
         <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-        <Button tone="danger" disabled={trabajando || !motivo.trim()} onClick={() => void anular()}>Anular el pago de {formatMoney(monto)}</Button>
+        <Button variant="solid" tone="danger" disabled={trabajando || !motivo.trim()} onClick={() => void anular()}>Anular pago</Button>
       </>}
     >
       <p style={{ marginTop: 0, color: color.mut }}>{fila.nombre} · {fechaCorta(renglon.fecha)}{renglon.detalle ? ` · ${renglon.detalle}` : ''}</p>
@@ -262,8 +286,63 @@ function VentanaAnularPago({ marca, fila, renglon, saldo, onCerrar, onHecho }: {
         <Field label="Motivo"><Input value={motivo} onChange={(ev) => setMotivo(ev.target.value)} autoFocus /></Field>
         <div style={{ padding: '10px 12px', borderRadius: 9, background: color.bg, border: `1px solid ${color.line}`, display: 'flex', flexDirection: 'column', gap: 4, fontSize: font.base }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Saldo de la cuenta</span><b>{formatMoney(saldo)} → {formatMoney(saldo + monto)}</b></div>
-          <div style={{ color: color.mut }}>El pago sale de la cuenta y la deuda vuelve. En Cobros queda marcado como anulado. No se puede deshacer.</div>
+          <div style={{ color: color.mut }}>No se deshace.</div>
         </div>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * «Corregir saldo inicial» (sólo Admin; Darío 24-nov): el saldo que vino del corte con GN. Motivo obligatorio. 0 = sin saldo
+ * inicial; otro monto lo reemplaza con la misma fecha. Si el cliente ⛔ tiene saldo inicial, el motor lo dice.
+ * `actual` = el renglón del saldo inicial si está en el período que se ve (si se filtró por fecha puede ⛔ estar).
+ */
+function VentanaSaldoInicial({ marca, fila, prueba, saldo, actual, onCerrar, onHecho }: {
+  marca: MarcaErp; fila: FilaCuenta; prueba: boolean; saldo: number; actual: RenglonMayor | null; onCerrar: () => void; onHecho: (aviso: string) => void
+}) {
+  const [texto, setTexto] = useState('0')
+  const [motivo, setMotivo] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [trabajando, setTrabajando] = useState(false)
+  const monto = parsearMonto(texto)
+  const valido = Number.isFinite(monto) && motivo.trim().length >= 5
+  const antes = actual ? actual.debe - actual.haber : null
+
+  async function corregir() {
+    setTrabajando(true)
+    try {
+      const r = await corregirSaldoInicialErp(marca, { clienteId: fila.clienteId, linea: fila.linea, prueba, monto, motivo: motivo.trim() })
+      onHecho(`Saldo inicial corregido. Saldo de la cuenta: ${formatMoney(r.cuenta)}.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo corregir el saldo inicial.')
+    } finally {
+      setTrabajando(false)
+    }
+  }
+
+  return (
+    <Modal
+      abierto onCerrar={onCerrar} titulo="Corregir saldo inicial"
+      pie={<>
+        <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
+        <Button variant="solid" tone="brand" disabled={trabajando || !valido} onClick={() => void corregir()}>Corregir</Button>
+      </>}
+    >
+      <p style={{ marginTop: 0, color: color.mut }}>
+        {fila.nombre} · {actual ? `saldo inicial ${formatMoney(antes ?? 0)} (${fechaCorta(actual.fecha)})` : 'el saldo que vino del sistema anterior'}
+      </p>
+      {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+        <Field label="Saldo inicial nuevo" hint="0 si no debía nada. En negativo, si tenía a favor.">
+          <Input inputMode="decimal" value={texto} onChange={(ev) => setTexto(ev.target.value)} autoFocus />
+        </Field>
+        <Field label="Motivo"><Input value={motivo} onChange={(ev) => setMotivo(ev.target.value)} placeholder="Ej: anulé la venta 33280, que era de antes del corte" /></Field>
+        {antes != null && Number.isFinite(monto) && (
+          <div style={{ padding: '10px 12px', borderRadius: 9, background: color.bg, border: `1px solid ${color.line}`, display: 'flex', flexDirection: 'column', gap: 4, fontSize: font.base }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Saldo de la cuenta</span><b>{formatMoney(saldo)} → {formatMoney(saldo - antes + monto)}</b></div>
+          </div>
+        )}
       </div>
     </Modal>
   )
@@ -289,7 +368,7 @@ function VentanaContacto({ marca, fila, actual, onCerrar, onHecho }: {
       const r = await ponerContactoCliente(marca, { clienteId: fila.clienteId, whatsapp: texto })
       onHecho(r.contacto.whatsapp ?? texto)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo guardar el WhatsApp.')
+      setError(e instanceof Error ? e.message : 'No se pudo: volvé a intentar.')
     } finally {
       setTrabajando(false)
     }
@@ -300,7 +379,7 @@ function VentanaContacto({ marca, fila, actual, onCerrar, onHecho }: {
       abierto onCerrar={onCerrar} titulo={`WhatsApp de ${fila.nombre}`}
       pie={<>
         <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-        <Button disabled={trabajando || !n} onClick={() => void guardar()}>Guardar el WhatsApp</Button>
+        <Button variant="solid" tone="brand" disabled={trabajando || !n} onClick={() => void guardar()}>Guardar</Button>
       </>}
     >
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
@@ -309,7 +388,7 @@ function VentanaContacto({ marca, fila, actual, onCerrar, onHecho }: {
           <Input inputMode="tel" value={texto} onChange={(ev) => setTexto(ev.target.value)} autoFocus />
         </Field>
         <div style={{ color: mal ? 'var(--mo-danger-ink)' : color.mut, fontSize: font.sm }}>
-          {!texto.trim() ? 'Escribí el número.' : mal ? 'No se entiende como número: falta el código de área o sobran dígitos.' : `Le va a escribir a +${n}.`}
+          {!texto.trim() ? '' : mal ? 'Número incompleto o con dígitos de más.' : `Se va a escribir a +${n}.`}
         </div>
       </div>
     </Modal>
@@ -347,28 +426,25 @@ function VentanaCredito({ marca, fila, credito, onCerrar, onHecho }: {
       abierto onCerrar={onCerrar} titulo={`Crédito de ${fila.nombre}`}
       pie={<>
         <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-        <Button disabled={trabajando || !!mal} onClick={() => void guardar()}>{si ? 'Guardar el crédito' : 'Sacar el crédito'}</Button>
+        <Button variant="solid" tone="brand" disabled={trabajando || !!mal} onClick={() => void guardar()}>{si ? 'Guardar' : 'Sacar crédito'}</Button>
       </>}
     >
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         <Field label="¿Puede comprar a cuenta?">
           <Select value={tiene} onChange={(ev) => setTiene(ev.target.value)}>
-            <option value="si">Sí, tiene crédito</option>
+            <option value="si">Sí</option>
             <option value="no">No</option>
           </Select>
         </Field>
         {si && (
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-            <Field label="Tope" hint="Vacío = sin tope." style={{ flex: '1 1 180px' }}><Input inputMode="decimal" value={tope} onChange={(ev) => setTope(ev.target.value)} placeholder="Sin tope" /></Field>
-            <Field label="Plazo en días" hint="De 1 a 365. Vacío = no se atrasa nunca." style={{ flex: '1 1 160px' }}><Input inputMode="numeric" value={dias} onChange={(ev) => setDias(ev.target.value)} placeholder="Sin plazo" /></Field>
+            <Field label="Tope" style={{ flex: '1 1 180px' }}><Input inputMode="decimal" value={tope} onChange={(ev) => setTope(ev.target.value)} placeholder="Sin tope" /></Field>
+            <Field label="Plazo en días" hint="De 1 a 365." style={{ flex: '1 1 160px' }}><Input inputMode="numeric" value={dias} onChange={(ev) => setDias(ev.target.value)} placeholder="Sin plazo" /></Field>
           </div>
         )}
         <div style={{ color: color.mut, fontSize: font.sm }}>
-          {si
-            ? 'Con crédito, la venta a cuenta se frena sólo si pasa el tope o si debe una compra más vieja que el plazo.'
-            : 'Sin crédito, todo lo que debe cuenta como vencido y cada venta a cuenta pide la autorización de un admin.'}
-          {' '}Queda guardado quién lo cambió y cuándo; no cambia lo que ya debe.
+          {si ? 'Frena la venta a cuenta si pasa el tope o el plazo.' : 'Cada venta a cuenta la autoriza un admin.'} No cambia lo que ya debe.
         </div>
       </div>
     </Modal>
@@ -408,7 +484,7 @@ function VentanaCobrarCuenta({ marca, fila, prueba, saldo, cuentas: todasLasCuen
     setTrabajando(true)
     try {
       const r = await cobrarCuentaErp(marca, { clienteId: fila.clienteId, linea: fila.linea, monto: n, cuenta, ...(pide ? { cuentaReal } : {}), fecha, ref, prueba, ...chq.extra })
-      onHecho(r.yaExistia ? 'Ese cobro ya estaba registrado.' : `Cobro de ${formatMoney(n)} registrado en la cuenta de ${fila.nombre}.`)
+      onHecho(r.yaExistia ? 'Ese cobro ya estaba registrado.' : `Cobro de ${formatMoney(n)} registrado.`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo registrar el cobro.')
     } finally {
@@ -418,10 +494,10 @@ function VentanaCobrarCuenta({ marca, fila, prueba, saldo, cuentas: todasLasCuen
 
   return (
     <Modal
-      abierto onCerrar={onCerrar} titulo="Cobrar a la cuenta"
+      abierto onCerrar={onCerrar} titulo="Cobrar"
       pie={<>
         <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-        <Button disabled={trabajando || n == null || n <= 0 || !cuenta || faltaReal || !!chq.falta} onClick={() => void registrar()}>Cobrar {n != null && n > 0 ? formatMoney(n) : ''}</Button>
+        <Button variant="solid" tone="brand" disabled={trabajando || n == null || n <= 0 || !cuenta || faltaReal || !!chq.falta} onClick={() => void registrar()}>Cobrar {n != null && n > 0 ? formatMoney(n) : ''}</Button>
       </>}
     >
       <p style={{ marginTop: 0, color: color.mut }}>{fila.nombre} · {saldo > 0 ? `debe ${formatMoney(saldo)}` : saldo < 0 ? `a favor ${formatMoney(-saldo)}` : 'sin saldo'}{prueba ? ' · de prueba' : ''}</p>
@@ -429,7 +505,7 @@ function VentanaCobrarCuenta({ marca, fila, prueba, saldo, cuentas: todasLasCuen
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         <Field label="Monto"><Input inputMode="decimal" value={monto} onChange={(e) => setMonto(e.target.value)} /></Field>
         <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
-          <Field label="Cuenta" hint="La forma de pago y la cuenta salen de «¿A qué cuenta va?» del día." style={{ flex: '1 1 220px' }}>
+          <Field label="Cuenta" style={{ flex: '1 1 220px' }}>
             <Select value={cuenta} onChange={(e) => setCuenta(e.target.value)}>
               <option value="">{cuentas.length ? 'Elegí la cuenta' : 'No hay cuentas para cobrar'}</option>
               {cuentas.map((c) => <option key={String(c.id)} value={String(c.id)}>{c.nombre}</option>)}
@@ -442,7 +518,7 @@ function VentanaCobrarCuenta({ marca, fila, prueba, saldo, cuentas: todasLasCuen
         <div style={{ padding: '10px 12px', borderRadius: 9, background: color.bg, border: `1px solid ${color.line}`, display: 'flex', flexDirection: 'column', gap: 4, fontSize: font.base }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Saldo de la cuenta</span><b>{formatMoney(saldo)} → {formatMoney(saldo - (n ?? 0))}</b></div>
           {quedaAFavor > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Queda a favor</span><b>{formatMoney(quedaAFavor)}</b></div>}
-          <div style={{ color: color.mut }}>No elegís la venta: el cobro paga primero la compra más vieja que debe y lo que sobra, la siguiente. Sólo queda a favor si no debe nada.</div>
+          <div style={{ color: color.mut }}>Paga primero la venta más vieja.</div>
         </div>
       </div>
     </Modal>

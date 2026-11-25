@@ -59,8 +59,8 @@ describe('RutasCobro', () => {
     expect(fila('Transferencia').textContent).toContain('Mercado Pago · Caja de Ahorro (Bruno)')
     expect(fila('Transferencia').textContent).toContain('No')
     expect(fila('Efectivo').textContent).toContain('Sin cuenta')
-    expect(host.textContent).toContain('la Caja sigue cobrando como hoy')
-    expect(host.textContent).toContain('A qué cuenta va')
+    expect(host.textContent).not.toContain('la Caja sigue cobrando como hoy')
+    expect(host.textContent).not.toContain('A qué cuenta va') // Darío 23-nov: ⛔ la tira de 4 cuadros
     expect(host.textContent).toMatch(/Sin cuenta\s*23/)
     expect(host.textContent).toMatch(/Cambios\s*1/)
   })

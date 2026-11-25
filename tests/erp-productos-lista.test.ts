@@ -14,7 +14,7 @@ const filas = armarFilasProductos({
   productos: [
     { id: 1, nombre: 'TOP SAHARA', marca: 'zattia', categoria: 'TOPS', proveedor: 'AREBEN' },
     { id: 2, nombre: 'BIKINI SOL', marca: 'stunned', categoria: null, proveedor: null },
-    { id: 3, nombre: 'CINTO CALYPSO', marca: 'zattia', categoria: 'ACCESORIOS', proveedor: 'Taller' },
+    { id: 3, nombre: 'CINTO CALYPSO', marca: 'zattia', categoria: 'ACCESORIOS', proveedor: 'Taller', codigo_proveedor: '26s-039' },
   ],
   stock: [v('1', 'M', 3), v('1', 'S', 2), v('2', 'U', -1, { barcode: null, linea: 'stunned' }), v('9', 'U', 4)],
   precios: [
@@ -58,6 +58,11 @@ describe('vistas, buscador, resumen y orden', () => {
     expect(filtrar(filas, { q: 'SKU-1-S' }).map((f) => f.producto)).toEqual(['1'])
     expect(filtrar(filas, { q: '771M' }).map((f) => f.producto)).toEqual(['1'])
     expect(filtrar(filas, { linea: 'stunned' }).map((f) => f.producto)).toEqual(['2'])
+  })
+  it('el código del proveedor (Darío 23-nov, de Ingresos) viaja en la fila y se busca', () => {
+    expect(de('3').codigoProveedor).toBe('26s-039')
+    expect(de('1').codigoProveedor).toBeNull()
+    expect(filtrar(filas, { q: '26S-039' }).map((f) => f.producto)).toEqual(['3'])
   })
   it('el resumen de lo filtrado', () => {
     expect(resumen(filas)).toEqual({ productos: 4, variantes: 4, disponible: 9, sinCosto: 3, fueraDeTn: 3 })

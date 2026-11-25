@@ -584,7 +584,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     if (!cred) { toast.aviso('Sin la credencial del Monitor no se puede escribir la venta en GN.'); return }
     try {
       const v = await descontarReemplazo(marca, d, { usuario: perfil?.name || '', cred })
-      toast.ok(v.number ? `Stock descontado (venta ${v.number} en GN).` : 'Stock descontado en GN.')
+      toast.ok(String(v.number || '').startsWith('A-') ? `Stock descontado en Areben Gestión (ajuste ${v.number}).` : v.number ? `Stock descontado (venta ${v.number} en GN).` : 'Stock descontado en GN.')
       void recargar()
     } catch (e) {
       toast.error((e as Error).message)

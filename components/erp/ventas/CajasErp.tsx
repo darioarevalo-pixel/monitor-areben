@@ -240,7 +240,7 @@ export function CajasErp() {
           vacio={!cargando && datos ? <div style={{ padding: space[6] }}><EmptyState title={VACIO[vista] ?? 'No hubo cajas en el período.'} /></div> : null}
         />
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo las cajas…' : `${filas.length.toLocaleString('es-AR')} ${filas.length === 1 ? 'caja' : 'cajas'}`} · + sobró, − faltó
+          {cargando && !datos ? 'Leyendo…' : `${filas.length.toLocaleString('es-AR')} ${filas.length === 1 ? 'caja' : 'cajas'}`} · + sobró, − faltó
         </div>
       </div>
 
@@ -259,7 +259,7 @@ export function CajasErp() {
             {fichaFila.efectivo ? (
               <div>
                 <h3 style={{ margin: '0 0 8px', fontSize: font.md }}>El efectivo</h3>
-                {([['Fondo', fichaFila.efectivo.fondo], ['Cobrado en efectivo', fichaFila.efectivo.cobrado], ['Esperando transferencia', fichaFila.efectivo.deEspera], ['Cobrado en Gestión Nube', fichaFila.efectivo.cobradoGN], ['Pedidos web', fichaFila.efectivo.cobradoERP ?? 0], ['Ingresos', fichaFila.efectivo.aportes], ['Salidas', -fichaFila.efectivo.salidas]] as Array<[string, number]>)
+                {([['Fondo', fichaFila.efectivo.fondo], ['Cobrado en efectivo', fichaFila.efectivo.cobrado], ['Esperando transferencia', fichaFila.efectivo.deEspera], ['Cobrado en el sistema anterior', fichaFila.efectivo.cobradoGN], ['Pedidos web', fichaFila.efectivo.cobradoERP ?? 0], ['Ingresos', fichaFila.efectivo.aportes], ['Salidas', -fichaFila.efectivo.salidas]] as Array<[string, number]>)
                   .filter(([, n]) => n).map(([t, n]) => <div key={t} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span style={{ color: color.mut }}>{t}</span><MoneyText value={n} /></div>)}
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: `1px solid ${color.line}`, fontWeight: 700 }}><span>Esperado</span><MoneyText value={fichaFila.efectivo.esperado} /></div>
                 {fichaFila.contado != null && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span>Contado</span><MoneyText value={fichaFila.contado} /></div>}
@@ -315,7 +315,7 @@ function ArqueoDeLaCaja({ f, admin, onRevisar }: { f: FilaCaja; admin: boolean; 
 
 /** Los renglones del efectivo que se comparan al recalcular (los mismos de «El efectivo»). */
 const RENGLONES_EFECTIVO: Array<[string, (e: EfectivoCierre) => number]> = [
-  ['Cobrado en efectivo', (e) => e.cobrado], ['Esperando transferencia', (e) => e.deEspera], ['Cobrado en Gestión Nube', (e) => e.cobradoGN],
+  ['Cobrado en efectivo', (e) => e.cobrado], ['Esperando transferencia', (e) => e.deEspera], ['Cobrado en el sistema anterior', (e) => e.cobradoGN],
   ['Pedidos web', (e) => e.cobradoERP ?? 0], ['Ingresos', (e) => e.aportes], ['Salidas', (e) => -e.salidas],
 ]
 

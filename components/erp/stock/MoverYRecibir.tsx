@@ -47,7 +47,7 @@ const sobranTxt = (n: number) => (n === 1 ? 'sobra 1' : `sobran ${n}`)
 const COLUMNAS: ColumnaLista[] = [
   { key: 'n', titulo: 'Nº', ancho: '70px', ordena: true, movil: 'oculta' },
   { key: 'creada', titulo: 'Fecha', ancho: '110px', ordena: true, movil: 'oculta' },
-  { key: 'ruta', titulo: 'Recorrido', ancho: 'minmax(170px, 1fr)', movil: 'titulo' },
+  { key: 'ruta', titulo: 'Origen y destino', ancho: 'minmax(170px, 1fr)', movil: 'titulo' },
   { key: 'quien', titulo: 'Responsable', ancho: '110px', movil: 'oculta' },
   { key: 'estado', titulo: 'Estado', ancho: 'minmax(300px, 1.6fr)', movil: 'chico' },
   { key: 'unidades', titulo: 'Unidades', ancho: '90px', ordena: true, derecha: true, movil: 'dato' },
@@ -393,7 +393,7 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
   }
 
   async function mover() {
-    if (desde === hacia) { setError('Elegí depósitos distintos.'); return }
+    if (desde === hacia) { setError('Elegí ubicaciones distintas.'); return }
     if (sePasan.length) { setError(`No hay stock suficiente en ${dep(desde)} de ${sePasan.length === 1 ? nombreDe(sePasan[0]) : `${sePasan.length} productos`}.`); return }
     setTrabajando(true); setError(null)
     // crear → armar → enviar: si falla uno, el documento queda en su estado (se ve abajo) y se puede cancelar.
@@ -545,7 +545,7 @@ export function MoverYRecibir({ unificada = false, abrirMover = false }: { unifi
             <Field label="Origen"><Select value={desde} onChange={(e) => cambiarDesde(e.target.value)}>{deps.map((d) => <option key={d} value={d}>{dep(d)}</option>)}</Select></Field>
             <span aria-hidden style={{ alignSelf: 'flex-end', paddingBottom: 8, fontSize: 18, color: color.mut }}>→</span>
             <Field label="Destino"><Select value={hacia} onChange={(e) => setHacia(e.target.value)}>{deps.filter((d) => d !== desde).map((d) => <option key={d} value={d}>{dep(d)}</option>)}</Select></Field>
-            <div style={{ flex: '1 1 240px' }}><Field label="Nota (opcional)"><Input value={nota} maxLength={200} onChange={(e) => setNota(e.target.value)} placeholder="Motivo, quién la lleva…" /></Field></div>
+            <div style={{ flex: '1 1 240px' }}><Field label="Nota"><Input value={nota} maxLength={200} onChange={(e) => setNota(e.target.value)} placeholder="Opcional · motivo, quién la lleva…" /></Field></div>
           </div>
           <div style={{ marginTop: space[3] }}><Escaneo autoFocus={!angosta} linea={linea} local={codigoLocal} hayDe={quedaEnOrigen} origen={dep(desde)} destino={dep(hacia)}
             destinoDe={(p) => (stockDeps ? Math.max(0, stockDeps[`${p.producto}:${p.talle}`]?.[hacia] ?? 0) : null)}

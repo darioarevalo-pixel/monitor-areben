@@ -70,9 +70,11 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   useEffect(() => {
     if (esPedido) return
     let vivo = true
-    Promise.all([leerFichaDeVenta(marca, fila.id), leerExtraDeVenta(marca, fila.id)])
-      .then(([f, x]) => { if (vivo) { setFicha(f); setExtra(x); setError(null) } })
-      .catch((e) => vivo && setError(e instanceof Error ? e.message : 'No se pudo leer la venta.'))
+    // ⚡ 23-nov (Bruno: «la ficha abre muy lento… 5 s»): la ficha se muestra apenas llega la venta; el historial, GN y las
+    // cuentas (`venta-extra`) se completan cuando llegan. Antes esperaba a las DOS: en BDI ~0,9 s la venta y ~2,1 s lo otro.
+    const fallo = (e: unknown) => { if (vivo) setError(e instanceof Error ? e.message : 'No se pudo leer la venta.') }
+    leerFichaDeVenta(marca, fila.id).then((f) => { if (vivo) { setFicha(f); setError(null) } }).catch(fallo)
+    leerExtraDeVenta(marca, fila.id).then((x) => { if (vivo) setExtra(x) }).catch(fallo)
     return () => { vivo = false }
   }, [marca, fila.id, esPedido, version])
 
@@ -126,6 +128,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
     const r = await corregirPrecioDeVenta(marca, fila.id, motivoPrecio, cambian.map((x) => ({ n: x.n, precio: x.precio })))
     setCorrigiendo(false)
     const d = r.correccion.diferencia
+    if (r.correccion.cuenta?.length) { onCambio('Precio corregido y cargado en la cuenta.'); return }
     onCambio(d === 0 ? 'Precio corregido.' : d > 0 ? `Precio corregido: faltan cobrar ${plata(d)}.` : `Precio corregido: sobran ${plata(-d)}.`)
   }, 'No se pudo corregir el precio.')
 
@@ -161,9 +164,10 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const menu: AccionMenu[] = esPedido ? [] : [
     ...(puedeErp('facturar-venta') && ficha?.facturada && v?.estado === 'anulada' && !ficha.acreditadaEntera ? [{ key: 'nc', label: 'Hacer nota de crédito', icono: 'factura' as const, tone: 'danger' as const, onClick: () => void hacerNC() }] : []),
     ...(puedeErp('facturar-venta') && !fila.facturada && !fila.anulada && fila.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura', fila.id) }] : []),
-    ...(puede.corregir && puedeErp('corregir-precio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, onClick: abrirCorregir }] : []),
+    // Corregir precio y forma de pago usan lo de `venta-extra` (correcciones, cuentas reales): esperan a que llegue.
+    ...(puede.corregir && puedeErp('corregir-precio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'precio', label: 'Corregir precio…', icono: 'lapiz' as const, disabled: !extra || !ficha, onClick: abrirCorregir }] : []),
     ...(puede.corregirProductos && puedeErp('corregir-precio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' && !['tn', 'ml', 'mayorista'].includes(fila.origen) ? [{ key: 'productos', label: 'Corregir productos…', icono: 'lapiz' as const, onClick: () => setCorrigiendoProductos(true) }] : []),
-    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir forma de pago…', icono: 'pesos' as const, onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
+    ...(puedeErp('corregir-medio') && !fila.anulada && !fila.facturada && fila.tipo === 'venta' ? [{ key: 'medio', label: 'Corregir forma de pago…', icono: 'pesos' as const, disabled: !extra, onClick: () => { setMedioNuevo(''); setCuentaReal(''); setMotivoMedio(''); setMedioAbierto(true) } }] : []),
     ...(puedeErp('anular') ? [{ key: 'anular', label: 'Anular…', icono: 'anular' as const, tone: 'danger' as const, disabled: !!ficha?.puedeAnular || fila.anulada, hint: ficha?.puedeAnular ?? undefined, onClick: () => setAnulando(true) }] : []),
   ]
   // 📱 En el celular los botones de arriba bajan al pie: la principal es cobrar; lo demás, al «⋯».
@@ -237,7 +241,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           )}
         </>
       ) : !ficha ? (
-        <span style={{ color: color.mut }}>Leyendo la venta…</span>
+        <span style={{ color: color.mut }}>Leyendo…</span>
       ) : (
         <>
           {v?.prueba && <Notice tone="warning">Venta de prueba: no mueve el stock.</Notice>}
@@ -283,8 +287,8 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
 
           {!!corr?.correcciones.length && (
             <Notice tone={corr.diferencia === 0 ? 'neutral' : 'warning'}>
-              <b>Venta corregida</b>: total {plata(corr.total ?? v!.total)}{v?.totalOriginal != null && v.totalOriginal !== (corr.total ?? v.total) ? ` (era ${plata(v.totalOriginal)})` : ''} · cobrado {plata(corr.cobrado ?? 0)}.{' '}
-              {corr.diferencia > 0 ? `Faltan cobrar ${plata(corr.diferencia)}.` : corr.diferencia < 0 ? `Sobran ${plata(-corr.diferencia)}: hay que devolverlos.` : 'Lo cobrado coincide.'}
+              <b>Venta corregida</b>: total {plata(corr.total ?? v!.total)}{v?.totalOriginal != null && v.totalOriginal !== (corr.total ?? v.total) ? ` (era ${plata(v.totalOriginal)})` : ''}{corr.aCuenta ? ' · cargado en la cuenta.' : <> · cobrado {plata(corr.cobrado ?? 0)}.{' '}
+              {corr.diferencia > 0 ? `Faltan cobrar ${plata(corr.diferencia)}.` : corr.diferencia < 0 ? `Sobran ${plata(-corr.diferencia)}: hay que devolverlos.` : 'Lo cobrado coincide.'}</>}
             </Notice>
           )}
 
@@ -303,7 +307,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
             </DatoFicha>
             {extra?.entrega && <DatoFicha titulo="Entrega">{[ENTREGA[extra.entrega.tipo], extra.entrega.direccion].filter(Boolean).join(' · ')}</DatoFicha>}
             {extra?.cobroEnEntrega && <DatoFicha titulo="Contraentrega">{[extra.cobroEnEntrega.formaPago ? COBRO_EN_ENTREGA[extra.cobroEnEntrega.formaPago] : null, extra.cobroEnEntrega.entrego, extra.cobroEnEntrega.fecha ? cuandoCorto(extra.cobroEnEntrega.fecha) : null].filter(Boolean).join(' · ')}</DatoFicha>}
-            {extra?.gnNumero && <DatoFicha titulo="En Gestión Nube">{`venta ${extra.gnNumero}`}</DatoFicha>}
+            {extra?.gnNumero && <DatoFicha titulo="Sistema anterior">{`venta ${extra.gnNumero}`}</DatoFicha>}
           </DatosFicha>
 
           <section style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
@@ -324,7 +328,7 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
           <Button tone="danger" disabled={trabajando || !ficha || motivo.trim().length < MOTIVO_MINIMO || !!ficha?.puedeAnular || faltaClienta} onClick={() => void confirmarAnular()}>Anular venta</Button>
         </>}
       >
-        {ficha?.puedeAnular ? <Notice tone="warning">{ficha.puedeAnular}</Notice> : !dev ? <span style={{ color: color.mut }}>Leyendo la venta…</span> : (
+        {ficha?.puedeAnular ? <Notice tone="warning">{ficha.puedeAnular}</Notice> : !dev ? <span style={{ color: color.mut }}>Leyendo…</span> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: space[3], marginBottom: space[3] }}>
             <DatoFicha titulo="Los productos">{textoDeVuelta(dev.vueltaSiAnula, { deposito: NOMBRE_DEPOSITO[v!.deposito as keyof typeof NOMBRE_DEPOSITO] ?? v!.deposito, prueba: !!v?.prueba })}</DatoFicha>
             {hayQueElegir ? (

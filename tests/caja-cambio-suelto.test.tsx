@@ -132,6 +132,19 @@ describe('cambio suelto · devolver', () => {
     // 1 de 3 a 3.333,33 y se lleva uno a 15.000
     expect(h.diferencia).toBe(11666.67)
   })
+
+  it('🔑 historia de GN con el redondeo adentro: lo devuelto vale la lista (`importeCambio`), ⛔ lo cobrado', async () => {
+    await montar()
+    const f = ventaDeFicha({
+      venta: { id: 'e2', numero: 803, marca: 'stunned', prueba: false, gnSaleId: '9001', total: 15033 },
+      cliente: null,
+      lineas: [{ id: 'l1', producto: '7', talle: '3', sku: 'STU-REM-M', nombre: 'Remera', talleNombre: 'M', cantidad: 1, importe: 15033, importeCambio: 14990, devuelta: false, cambiado: 0 }],
+    } as never)
+    expect(f.vendidas[0].precio).toBe(14990)
+    await hacer(() => h.devolverDeVenta(f, { l1: 1 }))
+    await hacer(() => h.sumarNueva(OTRA_STU))
+    expect(h.diferencia).toBe(15000 - 14990)
+  })
 })
 
 describe('cambio suelto · el pedido al servidor', () => {

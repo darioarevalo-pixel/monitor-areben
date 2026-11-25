@@ -96,24 +96,65 @@ describe('POS (/pos)', () => {
     } finally { disco.delete('caja-puesto') }
   })
 
-  it('🔴 otra cuenta ⇒ «la abrió Sofi», sin escanear ni cobrar', async () => {
+  // 🔑 SÓLO MIRAR (Bruno 22-nov): sin la caja propia el POS se VE entero, pero ⛔ cobra ni toca la caja.
+  const sinAccionesDeCaja = () => {
+    for (const x of ['Cerrar caja', 'Contar billetes', '+ Salida', '+ Ingreso']) expect(boton(x)).toBeFalsy()
+    const cobrar = [...document.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Continuar al cobro')) as HTMLButtonElement
+    expect(cobrar.disabled).toBe(true)
+  }
+
+  it('🔴 otra cuenta ⇒ se mira («la abrió Sofi»), ⛔ cobra ni toca la caja', async () => {
     sesion.perfil = { ...sesion.perfil, name: 'Ana', email: 'ana@zattia.com' }
+    // Con una prenda en el pedido: vacío, «Continuar al cobro» ya está trabado y el test ⛔ probaría nada.
+    disco.set('caja:borrador:zattia', JSON.stringify({ id: 'b-mirar', renglones: [PRENDA], email: '' }))
     const t = await montar(<CajaPOS />)
-    expect(t).toContain('Caja de Sofi: POS sólo para esa cuenta.')
-    expect(t).not.toContain('Escanear o buscar')
+    expect(t).toContain('Vista previa: la caja la abrió Sofi y cobra sólo esa cuenta.')
+    expect(t).toContain('Escanear o buscar')
+    sinAccionesDeCaja()
   })
 
-  it('🔴 ni un admin', async () => {
+  it('🔴 un admin también sólo mira la caja de otra cuenta', async () => {
     sesion.perfil = { ...sesion.perfil, name: 'Bruno', email: 'bruno@arebensrl.com', admin: true }
     const t = await montar(<CajaPOS />)
-    expect(t).not.toContain('Escanear o buscar')
+    expect(t).toContain('Vista previa')
+    expect(t).toContain('Escanear o buscar')
+    sinAccionesDeCaja()
   })
 
-  it('sin turno abierto ⇒ lo dice y manda a la Caja', async () => {
+  it('sin caja abierta ⇒ se mira, lo dice y manda a abrirla en la Caja', async () => {
     turno = null
+    disco.set('caja:borrador:zattia', JSON.stringify({ id: 'b-mirar', renglones: [PRENDA], email: '' }))
     const t = await montar(<CajaPOS />)
-    expect(t).toContain('Sin caja abierta')
+    expect(t).toContain('Vista previa: sin caja abierta, no se puede cobrar.')
+    expect(t).toContain('Escanear o buscar')
     expect(document.querySelector('a[href="/caja"]')).toBeTruthy()
+    sinAccionesDeCaja()
+  })
+
+  it('🔴 sólo mirar ⛔ factura (guardar la clienta y la venta a su nombre escribe en la base real); la dueña sí', async () => {
+    const { leerVentasTurno } = await import('@/lib/caja/cliente')
+    const enErp = { ventas: [{ id: 'a0000000-0000-4000-8000-000000000009', estado: 'en_erp', destino: 'erp', erp_numero: 31, total: 10000, subtotal: 10000, pagos: [{ cuenta: 12921, monto: 10000 }], renglones: [], creada_en: new Date().toISOString(), gn_number: null, usuario: 'Sofi', email: null, paga_con: null }] }
+    const facturarEnVentas = async () => {
+      vi.mocked(leerVentasTurno).mockResolvedValueOnce(enErp as never)
+      await act(async () => [...document.querySelectorAll('button.pos-tbtn')].find((b) => b.textContent?.trim() === 'Ventas')!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+      await hastaQue(() => (document.body.textContent || '').includes('#31'))
+      return [...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Facturar')
+    }
+    await montar(<CajaPOS />)
+    expect(await facturarEnVentas()).toBe(true)
+    act(() => raiz.unmount())
+    document.body.innerHTML = ''
+    const caja = document.createElement('div'); document.body.appendChild(caja); raiz = createRoot(caja)
+    sesion.perfil = { ...sesion.perfil, name: 'Ana', email: 'ana@zattia.com' }
+    const t = await montar(<CajaPOS />)
+    expect(t).toContain('Vista previa')
+    expect(await facturarEnVentas()).toBe(false)
+  })
+
+  it('la dueña de la caja ⛔ ve el cartel y tiene sus acciones', async () => {
+    const t = await montar(<CajaPOS />)
+    expect(t).not.toContain('Vista previa')
+    expect(boton('Cerrar caja')).toBeTruthy()
   })
 
   it('🔑 se dibuja con la lectura LIVIANA del turno, sin esperar la entera (que lee GN: 1 a 10 s)', async () => {
@@ -136,7 +177,7 @@ describe('POS (/pos)', () => {
     try {
       await montar(<CajaPOS />)
       await act(async () => soltar({ turno: TURNO, ultimos: [] }))
-      expect(document.body.textContent).toContain('Sin caja abierta')
+      expect(document.body.textContent).toContain('Vista previa: sin caja abierta, no se puede cobrar.')
     } finally {
       vi.mocked(leerTurno).mockImplementation(async () => ({ turno, ultimos: [] }) as never)
     }
@@ -184,11 +225,23 @@ describe('pestaña Caja', () => {
     document.body.appendChild(caja)
     raiz = createRoot(caja)
     t = await montar(<Caja />)
-    expect(document.querySelector('a[href="/pos?marca=zattia"]')).toBeNull()
+    // La otra cuenta entra a MIRAR (Bruno 23-nov), ⛔ «Abrir POS».
+    expect(document.querySelector('a[href="/pos?marca=zattia"]')?.textContent).toBe('Ver POS')
+    expect(t).not.toContain('Abrir POS')
     expect(t).toContain('POS sólo para esa cuenta')
     // Cerrar la caja, sí: «desde los dos lados». Contar billetes, ⛔ (el servidor da 403).
     expect(t).toContain('Cerrar caja')
     expect(t).not.toContain('Contar billetes')
+  })
+})
+
+describe('pestaña Caja · entrar sin abrir caja (Bruno 23-nov)', () => {
+  it('🔑 sin caja abierta: «Abrir caja» y, al lado, «Ver POS» (la «Vista previa», Bruno 23-nov)', async () => {
+    turno = null
+    const t = await montar(<Caja />)
+    expect(t).toContain('Abrir caja')
+    expect(document.querySelector('a[href="/pos?marca=zattia"]')?.textContent).toBe('Ver POS')
+    expect(t).not.toContain('Abrir POS')
   })
 })
 

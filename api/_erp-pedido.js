@@ -11,6 +11,7 @@
  *     reservaría dos veces. Se prende el día del corte de BDI, junto con apagar esa copia.
  * Sin la sql/064 en la base, las lecturas contestan vacío (`falta064`) en vez de romper.
  */
+import { filtrarPorModelo, separarModelo } from '../lib/erp/buscar-modelo.core.js'
 import { panelAbierto } from './_erp-clientes.js'
 import { cortesDeCaja } from './_caja-corte.js'
 import { cuentaDelPedido, packDe, packsEnRenglones, precioDeTienda, promoDe, renglonGuardado, soloPack } from '../lib/erp/precio-tienda.core.js'
@@ -291,22 +292,24 @@ export async function productosParaElPanel({ pedidoId = '', q = '', usuario = nu
   if (!UUID.test(String(pedidoId))) return { status: 400, error: 'Falta el pedido' }
   const texto = String(q || '').trim().slice(0, 80)
   if (texto.length < 2) return { prendido: true, productos: [] }
+  // «templado premium 16 pro max»: el producto va al motor y el modelo deja sólo ese talle (Darío 24-nov).
+  const { producto, modelo } = separarModelo(texto)
   const reglas = leerReglas(deps)
   return deps.conMotor('bdi', 'Buscar el producto', async (pg) => {
     const { productosParaPedido } = await import('../motor/pedido/venta.mjs')
-    const r = await productosParaPedido(pg, { pedido_id: String(pedidoId), q: texto })
+    const r = await productosParaPedido(pg, { pedido_id: String(pedidoId), q: producto })
     if (!r.ok) return { status: r.error?.codigo === 'NO_ENCONTRADO' ? 404 : 400, error: r.error?.mensaje ?? 'No se pudo buscar.' }
     const R = await reglas
-    if (!R || !r.productos.length) return { prendido: true, productos: r.productos, tienda: !!R }
+    if (!R || !r.productos.length) return { prendido: true, productos: filtrarPorModelo(r.productos, modelo), tienda: !!R }
     // Con los precios de la tienda (Darío 18-nov): cada talle con su precio y qué es; el pack, si tiene.
     const datos = await datosDeProductos(pg, 'bdi', r.productos.map((p) => p.product_id))
     return {
       prendido: true, tienda: true,
-      productos: r.productos.map((p) => {
+      productos: filtrarPorModelo(r.productos.map((p) => {
         const d = datos.get(String(p.product_id))
         const variantes = p.variantes.map((v) => ({ ...v, ...precioDeTienda(R, { product_id: p.product_id, size_id: v.size_id, lista: p.precio, costo: d?.costo ?? null }) }))
         return { ...p, variantes, pack: packDe(R, p.product_id, p.variantes), soloPack: soloPack(R, p.product_id), promo: promoDe(R, p.product_id, d?.categoria ?? null) }
-      }),
+      }), modelo),
     }
   })
 }
@@ -314,12 +317,6 @@ export async function productosParaElPanel({ pedidoId = '', q = '', usuario = nu
 /** El código del motor ⇒ el status de la puerta. */
 const statusDe = (codigo) => (codigo === 'NO_ENCONTRADO' ? 404
   : ['ANULADO', 'VENDIDO_EN_GN', 'EN_PREPARACION', 'DESPACHADO', 'SIN_ENTRAR', 'FALTA_CLIENTE', 'TIENE_PAGOS', 'SIN_PRECIO', 'SIN_TALLE', 'SIN_RENGLONES', 'CAMBIO_DE_LLAVE', 'SIN_CUENTA_CORRIENTE', 'CONFLICTO_IDEMPOTENCIA'].includes(codigo) ? 409 : 400)
-
-/** Darío (admin): el único que pone precio a mano en el pedido (18-nov: «solo yo, soy el único que usa el CRM»). */
-export function esDario(perfil) {
-  const n = String(perfil?.name || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim()
-  return !!perfil?.admin && n === 'DARIO AREVALO'
-}
 
 export const ACCIONES_PEDIDO = ['pedido-entrar', 'pedido-cambiar', 'pedido-a-preparar', 'pedido-anular', 'pedido-envio']
 
@@ -337,8 +334,8 @@ export const ACCIONES_PEDIDO = ['pedido-entrar', 'pedido-cambiar', 'pedido-a-pre
  */
 export async function accionDePedido({ accion, body, usuario, quien = usuario }, deps) {
   if (!ACCIONES_PEDIDO.includes(accion)) return { status: 400, error: 'Acción desconocida' }
-  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está apagada.' }
-  if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Los pedidos se manejan desde acá el día que BDI pasa a Areben Gestión. Hasta entonces, en Gestión Nube.' }
+  if (!(deps.prendido ?? await panelAbierto(quien))) return { status: 409, error: 'La cuenta corriente del panel está inactiva.' }
+  if (!(deps.escribir ?? (await escribirPrendido()))) return { status: 409, error: 'Todavía no disponible.' }
   if (!UUID.test(String(body?.pedidoId || ''))) return { status: 400, error: 'Falta el pedido' }
   if (!usuario) return { status: 400, error: 'Falta quién lo hace' }
   // Anular: sólo Darío y Bruno, con motivo (Darío 15-nov). El que llama dice si el perfil es uno de los dos (`esAprobador`).
@@ -432,7 +429,7 @@ export async function accionDePedido({ accion, body, usuario, quien = usuario },
 /**
  * Los PRECIOS de un cambio del pedido, como en la tienda (Darío 18-nov). Puro (la puerta le pasa reglas y datos).
  *   - Lo que ya estaba: su precio guardado (`renglonGuardado`); si es regular, se recalcula el descuento por monto.
- *   - Lo nuevo: el precio de la tienda; con `precio`, el precio a mano (sólo Darío, sólo en lo nuevo).
+ *   - Lo nuevo: el precio de la tienda; con `precio`, el precio a mano (sólo Darío). También sobre lo que ya estaba (25-nov).
  *   - `packs`: [{ productId, packs }] = cuántos packs en total de ese diseño; se arman con su cantidad por modelo.
  *   - El descuento por monto, sobre TODO el pedido (lo regular), aparece o se va según el subtotal.
  * @param {{ actuales: Array<{ product_id: number|string, size_id: number|string|null, cantidad: number, precio: number }>, lineas: any[], packs?: Array<{ productId: number|string, packs: number }>, reglas: any, datos: Map<string, any>, precioManual?: boolean }} p
@@ -478,8 +475,16 @@ export function preciosDelCambio({ actuales, lineas, packs = [], reglas: R, dato
     if (cantidad === 0) continue
     const g = guardados.get(clave)
     const aMano = l?.precio == null || l.precio === '' ? null : Number(l.precio)
+    if (aMano != null) {
+      if (!precioManual) return { status: 403, error: 'El precio a mano es sólo de Darío.' }
+      if (!(Number.isFinite(aMano) && aMano > 0)) return { status: 400, error: 'El precio es un monto mayor a 0' }
+    }
+    // Precio a mano sobre lo que YA estaba (Darío 25-nov, M-124): también vale; antes se rechazaba y la pantalla lo perdía.
+    if (g && aMano != null && aMano !== g.base) {
+      renglones.push({ product_id: pid, size_id: sid, cantidad, base: aMano, tipo: 'fijo' })
+      continue
+    }
     if (g) {
-      if (aMano != null) return { status: 400, error: 'El precio a mano va sólo en lo que se agrega.' }
       renglones.push({ product_id: pid, size_id: sid, cantidad, base: g.base, tipo: g.tipo, promo: promo(pid) })
       continue
     }

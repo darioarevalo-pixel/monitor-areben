@@ -19,7 +19,7 @@ const NO_ES_PLATA = ['cuenta', 'saldo']
 export function origenDelCambio(c: TicketDeVentaErp['cambioDe'], original: FichaDeVenta['original']): string {
   if (original) return `Venta #${original.numero}`
   if (!c || c.sin_ticket) return 'Sin ticket'
-  return c.gn_venta ? `Venta #${c.numero} de Gestión Nube` : `Venta #${c.numero}`
+  return c.gn_venta ? `Venta #${c.numero} del sistema anterior` : `Venta #${c.numero}`
 }
 
 /**

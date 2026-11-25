@@ -71,7 +71,7 @@ export function CargarPrecio({ marca, ficha, onListo, onError, fijo, onCancelar 
     const esCosto = que === 'costo'
     const lista = esCosto ? undefined : que.slice('precio:'.length)
     const n = parsearMonto(monto)
-    if (!Number.isFinite(n) || n < 0) { onError('Monto inválido.'); return }
+    if (!Number.isFinite(n) || n < 0) { onError('Falta el monto.'); return }
     const nombre = esCosto ? 'Costo' : `Precio ${ficha.listas.find((l) => l.lista === lista)?.nombre ?? lista}`
     const conFicha = esCosto && proveedorId !== '' && proveedorId !== OTRO
     const nombreProveedor = !esCosto ? null : conFicha ? proveedores?.find((p) => p.id === proveedorId)?.nombre ?? null : proveedorId === OTRO ? proveedor.trim() || null : null

@@ -9,7 +9,7 @@
  * 🔑 Botones (diseño §4): íconos A LA IZQUIERDA ($ cobro · lápiz editar · impresora · ⋯). La impresora (Bruno, 29-oct) reemplaza a
  * la factura: reimprime el ticket IDÉNTICO al del POS (`lib/erp/ticket-erp.ts`); facturar sigue en Ventas › Facturación. Desde la FILA, $ y Editar abren
  * SÓLO su ventana (⛔ la ficha detrás). Un botón sólo si la acción VIVE en el ERP: lo de afuera dice «↗».
- * 🔑 Todo lo del motor hoy es «Prueba» (en paralelo con GN, que es el que sirve): se dice arriba, siempre.
+ * 🔑 Las ventas de PRUEBA ⛔ llegan a esta lista (las saca el servidor, Bruno 23-nov): eran la copia de cada venta real de GN.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -22,7 +22,7 @@ import { PanelColumnas } from '@/components/ui/PanelColumnas'
 import { AccionSeleccion, BarraSeleccion } from '@/components/ui/FichaCostado'
 import { BotonActualizar, BuscadorLista, ChipEstado, FiltroOpciones, VistasLista, cuandoCorto } from '@/components/ui/PiezasLista'
 import { usePantallaAngosta } from '@/lib/movil'
-import { leerListaDeVentas, type FilaVentaLista, type MarcaErp, type QueSabeElMotor } from '@/lib/erp/cliente'
+import { leerListaDeVentas, ultimaListaDeVentas, type FilaVentaLista, type MarcaErp, type QueSabeElMotor } from '@/lib/erp/cliente'
 import {
   COBRO, COLUMNAS, ESTADO, PERIODOS, VISTAS, accionesDeFila, alternarColumna, contarVistas, filtrar, moverColumna,
   PEDIDO_VIEJO_DIAS, mismoTramoDelMesPasado, normalizarPrefs, ordenar, plata, rangoDePeriodo, resumen, variacion, vendidoPorDia,
@@ -93,7 +93,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
   const [periodos] = useState(() => conMesesAnteriores(PERIODOS, diaArgentino(Date.now())))
   const abrirRef = useRef({ abrir, alAbrir })
   useEffect(() => { abrirRef.current = { abrir, alAbrir } })
-  const [datos, setDatos] = useState<{ filas: FilaVentaLista[]; puede: QueSabeElMotor; tnLeidaEn: string | null; clave: string } | null>(null)
+  const [leidos, setDatos] = useState<{ filas: FilaVentaLista[]; puede: QueSabeElMotor; tnLeidaEn: string | null; clave: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const [vista, setVista] = useState('todas')
@@ -159,6 +159,14 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
     leerListaDeVentas(marca, r.desde, r.hasta, linea).then((d) => { if (vivo) setMesPasado({ filas: d.filas, clave: claveAntes }) }).catch(() => {})
     return () => { vivo = false }
   }, [esAdmin, periodo, marca, linea, hoy, claveAntes, mesPasado?.clave])
+  // ⚡ Mientras se lee, la última lista de este período (en memoria) se muestra YA, con ↻ girando (Bruno 23-nov: «que se vea
+  // lo más rápido posible»). Sin una en memoria queda la de antes, como siempre.
+  const datos = useMemo(() => {
+    if (leidos?.clave === clave) return leidos
+    const r = rangoDePeriodo(periodo, hoy)
+    const previa = ultimaListaDeVentas(marca, r.desde, r.hasta, linea)
+    return previa ? { filas: previa.filas, puede: previa.puede, tnLeidaEn: previa.tnLeidaEn ?? null, clave: `previa|${clave}` } : leidos
+  }, [leidos, clave, periodo, marca, linea, hoy])
   const cargando = datos?.clave !== clave
 
   const puede = datos?.puede ?? { editar: false, notas: false, cobrar: false }
@@ -193,7 +201,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
   const setHoja = (n: number) => setHojaDe({ filtro, n })
   const deLaHoja = useMemo(() => filas.slice((hoja - 1) * POR_HOJA, hoja * POR_HOJA), [filas, hoja])
   const elegidas = filas.filter((f) => seleccion.has(f.id))
-  const vendedores = useMemo(() => [...new Set((datos?.filas ?? []).map((f) => f.vendio).filter((x) => x && x !== '—' && x !== 'Tienda Nube' && x !== 'Desde Gestión Nube'))].sort(), [datos])
+  const vendedores = useMemo(() => [...new Set((datos?.filas ?? []).map((f) => f.vendio).filter((x) => x && x !== '—' && x !== 'Tienda Nube' && x !== 'Sistema anterior'))].sort(), [datos])
   const nombrePeriodo = periodos.find(([k]) => k === periodo)?.[1] ?? ''
 
   const irACobranzas = () => window.open('/cobranzas', '_blank', 'noopener')
@@ -238,7 +246,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
     }
     if (k === 'p') return <ChipEstado mapa={COBRO} k={f.cobroKey} />
     if (k === 'total') return <b>{plata(f.total)}</b>
-    if (k === 'fac') return f.factura ? <span style={{ color: color.ink2 }}>{f.factura.numero}{f.factura.de === 'gn' && <span style={{ marginLeft: 4, fontSize: font.xs, color: color.mut2 }}>Gestión Nube</span>}</span> : <span style={{ color: color.mut2 }}>—</span>
+    if (k === 'fac') return f.factura ? <span style={{ color: color.ink2 }}>{f.factura.numero}{f.factura.de === 'gn' && <span style={{ marginLeft: 4, fontSize: font.xs, color: color.mut2 }}>Sistema anterior</span>}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'ven') return <span style={{ color: color.ink2 }}>{f.vendio}</span>
     if (k === 'nota') return f.nota ? <span style={{ color: 'var(--mo-warning-ink)' }} title={`Nota · ${f.nota.de}`}>{f.nota.texto}</span> : <span style={{ color: color.mut2 }}>—</span>
     if (k === 'linea') return <span style={{ color: color.ink2 }}>{{ bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }[f.linea] ?? f.linea}</span>
@@ -264,6 +272,9 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
           { key: 'ficha', label: 'Ver venta', icono: 'abrir', onClick: () => abrirFicha(f) },
           ...(cobra ? [{ key: 'cobro', label: 'Registrar cobro', icono: 'pesos' as const, onClick: () => abrirVentana('cobro', f, false), disabled: !(f.saldo > 0), hint: f.saldo > 0 ? undefined : 'No tiene saldo.' }] : []),
           ...(edita ? [{ key: 'editar', label: 'Editar', icono: 'lapiz' as const, onClick: () => abrirVentana('editar', f, false), disabled: f.anulada }] : []),
+          // Bruno 23-nov: «que esté en los 3 puntitos como opción facturar… si alguien me pide facturar una venta x». Lo mismo
+          // que el ⋯ de la ficha: el flujo de la Caja (A/B, la clienta en el momento) con esa venta elegida.
+          ...(rol('facturar-venta') && !f.facturada && !f.anulada && f.tipo === 'venta' ? [{ key: 'fac', label: 'Facturar', icono: 'factura' as const, onClick: () => irACaja('factura', f.id) }] : []),
           { key: 'imprimir', label: 'Imprimir ticket', icono: 'impresora', onClick: () => imprimir(f) },
           ...(rol('cambiar') ? [{ key: 'cambio', label: 'Cambiar producto', icono: 'cambios' as const, onClick: () => irACaja('cambio'), disabled: f.anulada }] : []),
           ...(f.link ? [{ key: 'tn', label: 'Ver el pedido en Tienda Nube ↗', icono: 'abrir' as const, onClick: () => window.open(f.link!, '_blank', 'noopener') }] : []),
@@ -342,7 +353,7 @@ export function VentasErp({ irACaja, abrir, alAbrir }: {
           </div>
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo las ventas…' : `${filas.length.toLocaleString('es-AR')} de ${(conteo.todas ?? 0).toLocaleString('es-AR')}`}
+          {cargando && !datos ? 'Leyendo…' : `${filas.length.toLocaleString('es-AR')} de ${(conteo.todas ?? 0).toLocaleString('es-AR')}`}
           {filas.some((f) => f.kind === 'pedido') && ' · Pedidos sin pagar: todos los abiertos, de cualquier fecha.'}
         </div>
       </div>

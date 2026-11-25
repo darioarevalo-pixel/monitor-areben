@@ -37,11 +37,11 @@ const COLUMNAS: ColumnaLista[] = [
   { key: 'vale', titulo: 'Redondea', ancho: 'minmax(220px, 1.4fr)', movil: 'chico' },
   { key: 'ejemplo', titulo: `Ejemplo (${plata(EJEMPLO)})`, ancho: '170px', movil: 'oculta' },
   { key: 'desde', titulo: 'Desde', ancho: 'minmax(160px, 1fr)', movil: 'chico' },
-  { key: 'viene', titulo: 'Lo que viene', ancho: 'minmax(200px, 1fr)', movil: 'oculta' },
+  { key: 'viene', titulo: 'Próximo cambio', ancho: 'minmax(200px, 1fr)', movil: 'oculta' },
 ]
 const COLUMNAS_CAMBIOS: ColumnaLista[] = [
-  { key: 'puesta', titulo: 'Cuándo', ancho: '104px', movil: 'chico' },
-  { key: 'por', titulo: 'Quién', ancho: '130px', movil: 'oculta' },
+  { key: 'puesta', titulo: 'Fecha', ancho: '104px', movil: 'chico' },
+  { key: 'por', titulo: 'Responsable', ancho: '130px', movil: 'oculta' },
   { key: 'canal', titulo: 'Canal', ancho: '140px', movil: 'titulo' },
   { key: 'vale', titulo: 'Redondea', ancho: 'minmax(220px, 1.4fr)', movil: 'chico' },
   { key: 'desdeCambio', titulo: 'Vale desde', ancho: '104px', movil: 'chico' },
@@ -90,7 +90,7 @@ export function Redondeo() {
     if (!editando) return
     const e = editando
     const hoy = hoyAR()
-    if (e.dia < hoy) { setError('Un redondeo vale desde ahora en adelante: el pasado no se cambia.'); return }
+    if (e.dia < hoy) { setError('Elegí hoy o un día que viene.'); return }
     const nuevo = { paso: Number(e.paso), modo: e.modo }
     const cuando = e.dia === hoy ? 'desde ahora' : `desde el ${e.dia.slice(8, 10)}/${e.dia.slice(5, 7)}`
     const ok = await confirmar({
@@ -143,20 +143,16 @@ export function Redondeo() {
   const previo = editando ? ejemploDeRedondeo(EJEMPLO, { paso: Number(editando.paso), modo: editando.modo }) : null
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <p style={{ margin: 0, color: color.mut }}>
-        A cuánto se redondea el precio de cada canal. Un cambio vale desde ese momento: lo vendido antes no se toca.
-        Un canal sin redondeo deja el monto como está.
-      </p>
-      <Notice tone="neutral">Hoy lo usa el pedido mayorista; la Caja sigue redondeando como hasta ahora.</Notice>
+      <Notice tone="neutral">Por ahora solo se usa en el pedido mayorista.</Notice>
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
 
-      {!datos && !error && <EmptyState title="Leyendo el redondeo…" />}
+      {!datos && !error && <EmptyState title="Leyendo…" />}
       {datos && (
         <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
           <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', padding: 12 }}>
-            <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en el redondeo" placeholder="Canal o quién lo puso" />
+            <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en el redondeo" placeholder="Canal o persona" />
           </div>
           {enCambios
             ? <ListaTrabajo columnas={COLUMNAS_CAMBIOS} filas={cambios} claveDe={(h) => h.id} celda={celdaCambio} etiquetaFila={(h) => `el cambio de redondeo en ${nombreCanal(h.canal)}`} vacio={<div style={{ padding: space[6] }}><EmptyState title="Ningún cambio todavía." /></div>} />
@@ -164,10 +160,10 @@ export function Redondeo() {
                 columnas={COLUMNAS} filas={buscadas} claveDe={(f) => f.canal} celda={celda} acciones={acciones} anchoAcciones={40}
                 activa={editando ? editando.fila.canal : null}
                 onAbrir={configura ? empezar : undefined} etiquetaFila={(f) => `el redondeo en ${nombreCanal(f.canal)}`}
-                vacio={<div style={{ padding: space[6] }}><EmptyState title="Nada con esa búsqueda." /></div>}
+                vacio={<div style={{ padding: space[6] }}><EmptyState title={`Nada coincide con «${q}».`} /></div>}
               />}
           <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-            {nombreLinea(deLinea)} · {todas.filter((f) => f.vigente).length} de {todas.length} canales con redondeo · cada cambio queda con quién, cuándo y desde cuándo vale
+            {todas.filter((f) => f.vigente).length} de {todas.length} con redondeo
           </div>
         </div>
       )}

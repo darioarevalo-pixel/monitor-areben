@@ -55,7 +55,7 @@ export function vinculosPendientes({ variantes, indice }) {
   const sin_par = []
   const porVariante = new Map()
   for (const tv of variantes) {
-    // Un CONJUNTO armado (la bikini, sql/092) ⛔ falta vincular: sus piezas se ven aparte (`leerVinculos` › `conjuntos`).
+    // Un CONJUNTO armado (la bikini, sql/093) ⛔ falta vincular: sus piezas se ven aparte (`leerVinculos` › `conjuntos`).
     if (Array.isArray(indice.piezasTN?.(tv.id))) continue
     const v = indice.porVarianteTN?.(tv.id) ?? indice.porBarcode?.(tv.barcode) ?? indice.porSku?.(tv.sku)
     if (!v) { sin_par.push(tv); continue }

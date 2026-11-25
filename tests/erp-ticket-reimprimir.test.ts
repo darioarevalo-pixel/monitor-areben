@@ -34,7 +34,7 @@ describe('piezasDeFicha', () => {
 describe('origenDelCambio (como useCambio.comprobanteDe)', () => {
   it('del ERP, de Gestión Nube o sin ticket', () => {
     expect(origenDelCambio(null, { numero: 25 } as never)).toBe('Venta #25')
-    expect(origenDelCambio({ fecha: '2026-10-27', numero: '30970', gn_venta: '1551664' } as never, null)).toBe('Venta #30970 de Gestión Nube')
+    expect(origenDelCambio({ fecha: '2026-10-27', numero: '30970', gn_venta: '1551664' } as never, null)).toBe('Venta #30970 del sistema anterior')
     expect(origenDelCambio({ sin_ticket: true }, null)).toBe('Sin ticket')
     expect(origenDelCambio(null, null)).toBe('Sin ticket')
   })

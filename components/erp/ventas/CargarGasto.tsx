@@ -121,7 +121,7 @@ export function CargarGasto({ marca }: { marca: MarcaErp }) {
         {!enOficina && caja === undefined && !errorLectura && <span style={{ color: color.mut }}>Leyendo…</span>}
         {sinCaja && (
           <Notice tone="warning">
-            No hay una caja abierta. <Link href="/pos">Abrir la Caja ↗</Link>
+            No hay una caja abierta. <Link href="/pos">Caja ↗</Link>
           </Notice>
         )}
         {deOtro && <Notice tone="warning">Lo carga {caja?.abierto_por || 'quien abrió la caja'} o un admin.</Notice>}

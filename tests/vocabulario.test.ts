@@ -551,10 +551,10 @@ describe('§3 · los botones de post-venta están en infinitivo — VOCABULARIO.
 })
 
 describe('el glosario es el MISMO archivo en los dos repos', () => {
-  it('VOCABULARIO.md existe y declara su versión', () => {
+  it('AREBEN-COMUN.md (con el VOCABULARIO adentro, Parte 2) existe y declara su versión', () => {
     // 🔴 Es una COPIA de la de `areben-marketing`: si allá cambia y acá no, las dos se creen la
     // fuente de verdad. La línea de versión es lo que hace visible que quedó vieja.
-    const doc = readFileSync('VOCABULARIO.md', 'utf8')
+    const doc = readFileSync('AREBEN-COMUN.md', 'utf8')
     expect(doc).toMatch(/^Versión: \d{4}-\d{2}-\d{2}[a-z]?$/m)
     // Las cuatro palabras de la familia, para que nadie vacíe el archivo y lo deje pasar.
     for (const p of ['Eliminar', 'Sacar', 'Archivar', 'Descartar']) expect(doc).toContain(`**${p}**`)
@@ -563,7 +563,7 @@ describe('el glosario es el MISMO archivo en los dos repos', () => {
   it('🔑 y las seis familias siguen estando: el bloque de arriba se lee del documento', () => {
     // Sin esto, alguien que borra una familia entera del glosario deja seis tests vigilando una
     // regla que ya no está escrita en ningún lado — o al revés, la escribe y nadie la clava.
-    const doc = readFileSync('VOCABULARIO.md', 'utf8')
+    const doc = readFileSync('AREBEN-COMUN.md', 'utf8')
     for (const x of ['1.1 ·', '1.2 ·', '1.3 ·', '1.4 ·', '1.5 ·', '1.6 ·']) expect(doc).toContain(x)
   })
 })

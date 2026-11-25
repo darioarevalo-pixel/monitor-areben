@@ -13,7 +13,7 @@ import { filasDeRedondeo, leerRedondeoDePantalla } from '../lib/erp/redondeo.cor
 import { marcasDe } from '../lib/erp/reglas.core.js'
 
 const MARCAS = ['bdi', 'zattia']
-const SIN_TABLA = 'El redondeo todavía no está disponible: falta actualizar la base (029).'
+const SIN_TABLA = 'Todavía no disponible.' // sin la migración: ver el historial (E.3: el detalle, sólo para Bruno)
 const STATUS = { DESDE_PASADO: 400, ENTRADA_INVALIDA: 400, CANAL_DESCONOCIDO: 400, MARCA_DESCONOCIDA: 400, REDONDEO_REPETIDO: 409 }
 const motor = () => import('../motor/venta/redondeo-db.mjs')
 const hayRedondeo = async (pg) => (await pg.query(`select to_regclass('public.redondeo') is not null as hay`)).rows[0].hay

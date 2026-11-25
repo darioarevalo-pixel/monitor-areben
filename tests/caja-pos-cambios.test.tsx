@@ -35,6 +35,7 @@ vi.mock('@/lib/erp/cliente', async (orig) => ({
   ...(await orig<typeof import('@/lib/erp/cliente')>()),
   leerPines: vi.fn(async () => ({ marca: 'zattia', pines: [{ usuario: 'ana', pin: '1234', cambiado_por: 'x', cambiado_en: '', bloqueado: false, bloqueado_hasta: null }] })),
   verificarPin: vi.fn(async () => ({ ok: true, persona: 'ana' })),
+  leerEncargadas: vi.fn(async () => ({ encargadas: [] })),
 }))
 vi.mock('@/lib/caja/cliente', async (orig) => ({
   ...(await orig<typeof import('@/lib/caja/cliente')>()),
@@ -135,6 +136,48 @@ describe('POS · modo «Cambios»', () => {
     expect(boton('Autorizar')!.disabled).toBe(true)
     // Sigue en el paso 1: lo que se lleva ⛔ se muestra.
     expect(texto()).not.toContain('SE LLEVA')
+  })
+
+  // 🔴 SÓLO MIRAR (Bruno 22-nov): el cambio se registra SIN caja abierta (erp › Caja › Cambio lo hace) ⇒ el servidor ⛔ lo frena por
+  // la caja; lo frena la pantalla. La dueña llega al cobro del cambio; otra cuenta arma el cambio entero pero ⛔ lo cobra.
+  async function armarCambioSinVenta() {
+    await montar()
+    await act(async () => boton('Cambios')!.click())
+    await escanear('STU-REM-M')
+    const poner = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+    const escribir = async (sel: string, v: string) => {
+      const el = document.querySelector(sel) as HTMLInputElement
+      await act(async () => { poner.call(el, v); el.dispatchEvent(new Event('input', { bubbles: true })) })
+    }
+    await escribir('input[placeholder="Lo que pagó"]', '12000')
+    await act(async () => boton('Siguiente')!.click())
+    await act(async () => {})
+    await escribir('input[placeholder="Su usuario del monitor"]', 'ana')
+    await escribir('input[type="password"]', '1234')
+    await act(async () => boton('Autorizar')!.click())
+    await act(async () => {})
+    await escanear('STU-REM-M')
+    // Lo que se lleva ⛔ tiene precio acá (sin Tienda Nube): la cajera lo escribe en su renglón, el último campo del pedido.
+    const precio = [...document.querySelectorAll('.pos-grid input')].pop() as HTMLInputElement
+    await act(async () => { poner.call(precio, '15000'); precio.dispatchEvent(new Event('input', { bubbles: true })) })
+    return [...document.querySelectorAll('button')].filter((b) => (b.textContent || '').startsWith('Continuar al cobro')).pop() as HTMLButtonElement
+  }
+
+  it('🔑 la dueña de la caja llega al cobro del cambio', async () => {
+    const cobrar = await armarCambioSinVenta()
+    expect(texto()).toContain('Se lleva')
+    expect(cobrar.disabled).toBe(false)
+  })
+
+  it('🔴 otra cuenta (sólo mirar) arma el cambio pero ⛔ lo cobra', async () => {
+    const antes = sesion.perfil
+    sesion.perfil = { ...antes, name: 'Ana', email: 'ana@zattia.com' }
+    try {
+      const cobrar = await armarCambioSinVenta()
+      expect(texto()).toContain('Vista previa')
+      expect(texto()).toContain('Se lleva')
+      expect(cobrar.disabled).toBe(true)
+    } finally { sesion.perfil = antes }
   })
 
   it('«Salir del cambio» vuelve al pedido de venta', async () => {

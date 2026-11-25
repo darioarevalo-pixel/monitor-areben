@@ -21,7 +21,7 @@ vi.mock('@/lib/permisos', () => ({ puedeVer: (_p: unknown, m: string) => admin |
 let negados: string[] = []
 vi.mock('@/lib/erp/usePuedeErp', () => ({ usePuedeErp: () => (p: string) => !negados.includes(p) }))
 const LOCAL_NO = ['configurar', 'facturacion', 'proveedores', 'costos']
-for (const [archivo, nombre] of [['CambioCaja', 'CambioCaja'], ['FacturaCaja', 'FacturaCaja'], ['Facturacion', 'Facturacion'], ['stock/StockErp', 'StockErp'], ['DiferenciasDia', 'DiferenciasDia'], ['ConciliacionDia', 'ConciliacionDia'], ['AjustesStock', 'AjustesStock'], ['PedidosSinPagar', 'PedidosSinPagar'], ['PreciosProducto', 'PreciosProducto'], ['ReglasComerciales', 'ReglasComerciales'], ['RutasCobro', 'RutasCobro'], ['ventas/VentasErp', 'VentasErp'], ['ventas/CargarGasto', 'CargarGasto']]) {
+for (const [archivo, nombre] of [['CambioCaja', 'CambioCaja'], ['FacturaCaja', 'FacturaCaja'], ['Facturacion', 'Facturacion'], ['stock/StockErp', 'StockErp'], ['ConciliacionDia', 'ConciliacionDia'], ['AjustesStock', 'AjustesStock'], ['PedidosSinPagar', 'PedidosSinPagar'], ['PreciosProducto', 'PreciosProducto'], ['ReglasComerciales', 'ReglasComerciales'], ['RutasCobro', 'RutasCobro'], ['ventas/VentasErp', 'VentasErp'], ['ventas/CargarGasto', 'CargarGasto']]) {
   vi.doMock(`@/components/erp/${archivo}`, () => ({ [nombre]: () => <div data-pantalla={nombre} /> }))
 }
 
@@ -46,7 +46,7 @@ describe('Areben Gestión › el armazón propio', () => {
     await montar(['ventas', 'cobros'])
     const textos = () => [...div.querySelectorAll('nav.erp-menu a')].map((a) => a.textContent)
     // «Cargar un gasto» (caja chica, Bruno 30-oct): el local SÍ; la lista de Gastos ⛔.
-    expect(textos()).toEqual(['Inicio', 'Ventas', 'Ventas', 'Cobros', 'Cajas', 'Facturación', 'Cargar un gasto', 'Abrir la Caja↗', 'Stock', 'Productos', 'Clientes', 'Volver al monitor'])
+    expect(textos()).toEqual(['Inicio', 'Ventas', 'Ventas', 'Cobros', 'Cajas', 'Facturación', 'Cargar un gasto', 'Caja↗', 'Stock', 'Productos', 'Clientes', 'Volver al monitor'])
     act(() => root?.unmount()); root = null
     await montar(['ventas', 'cargar-gasto'])
     expect(replace).not.toHaveBeenCalled()
@@ -104,7 +104,7 @@ describe('Areben Gestión › el armazón propio', () => {
     const cartel = () => div.querySelector('.erp-aviso-compu')?.textContent ?? null
     for (const ruta of [['configuracion', 'reglas'], ['ventas', 'facturacion'], ['productos', 'redondeo']]) {
       await montar(ruta)
-      expect(cartel(), ruta.join('/')).toContain('se cambia en la compu')
+      expect(cartel(), ruta.join('/')).toContain('usá la compu')
       act(() => root?.unmount()); root = null
     }
     await montar(['ventas'])
@@ -131,12 +131,12 @@ describe('Areben Gestión › el armazón propio', () => {
     expect(setMarca).toHaveBeenCalledWith('zattia')
     expect(radios().find((b) => b.textContent === 'Stunned')!.getAttribute('aria-checked')).toBe('false') // la marca de este test sigue siendo bdi
   })
-  it('el local (⛔ admin) ve SÓLO Stunned: la línea Zattia queda oculta hasta que Zattia pase a Areben Gestión (Bruno, 30-oct)', async () => {
+  it('el local (⛔ admin) ve Zattia y Stunned: Zattia se cortó el 22-nov (Bruno 24-nov; antes quedaba oculta, 30-oct)', async () => {
     sesion = { marca: 'zattia', perfil: { name: 'local', admin: false } }; admin = false
     await montar([])
-    expect(div.querySelectorAll('[aria-label="Marca"] [role="radio"]')).toHaveLength(0) // una sola opción ⇒ sin selector
-    expect(div.querySelector('.erp-movil-marca')?.textContent).toContain('Stunned')
-    expect(div.querySelector('.erp-movil-marca')?.textContent).not.toContain('Zattia')
+    const opciones = [...div.querySelectorAll('[aria-label="Marca"] [role="radio"]')].map((b) => b.textContent)
+    expect(opciones).toContain('Zattia')
+    expect(opciones).toContain('Stunned')
   })
   it('⌘K y el botón «Buscar» abren el buscador global; «?» los atajos; Esc cierra (🎨 26-oct)', async () => {
     await montar(['ventas', 'ventas'])

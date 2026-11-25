@@ -276,6 +276,7 @@ export function FichaProducto({ marca, producto, fila, cargarAbierto, onCerrar, 
                 ? <>{f.proveedor.nombre}{f.proveedor.oc && <div style={{ fontSize: font.sm, color: color.mut }}>{`${f.proveedor.oc.label ?? 'Orden de compra'} · ${f.proveedor.oc.fecha.slice(8, 10)}/${f.proveedor.oc.fecha.slice(5, 7)}`}</div>}</>
                 : 'Sin proveedor'}
             </DatoFicha>
+            <DatoFicha titulo="Código del proveedor">{fila?.codigoProveedor ?? '—'}</DatoFicha>
             <DatoFicha titulo="Categoría">{fila?.categoria ?? '—'}</DatoFicha>
             <DatoFicha titulo="Marca">{linea ? LINEA[linea] ?? linea : '—'}</DatoFicha>
             {f?.feria != null && <DatoFicha titulo="Liquidación">{plata(f.feria)}</DatoFicha>}

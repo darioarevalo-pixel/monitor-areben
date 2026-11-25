@@ -136,7 +136,7 @@ export function VentanaEditar(p: PropsEditar) {
   if (!extra) {
     return (
       <Modal abierto onCerrar={p.onCerrar} titulo={`Editar la venta ${p.fila.ref}`} pie={<Button variant="outline" onClick={p.onCerrar}>Cancelar</Button>}>
-        {error ? <Notice tone="danger">{error}</Notice> : <span style={{ color: color.mut }}>Leyendo la venta…</span>}
+        {error ? <Notice tone="danger">{error}</Notice> : <span style={{ color: color.mut }}>Leyendo…</span>}
       </Modal>
     )
   }

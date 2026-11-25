@@ -49,8 +49,8 @@ describe('la puerta', () => {
   const conMotor = (pg: unknown) => async (_base: string, _que: string, fn: (pg: unknown) => unknown) => fn(pg)
   it('sin la migración 037 dice cuál falta (⛔ lanza)', async () => {
     const body = { accion: 'producto-editar', marca: 'bdi', productId: 1, cambios: { nombre: 'a' } }
-    expect(await accionDeCatalogo({ body, usuario: 'ana' }, { conMotor: conMotor(pgSinTabla) })).toEqual({ status: 409, error: expect.stringMatching(/037/) })
-    expect(await historialDeProducto({ marca: 'bdi', productId: 1 }, { conMotor: conMotor(pgSinTabla) })).toEqual({ status: 409, error: expect.stringMatching(/037/) })
+    expect(await accionDeCatalogo({ body, usuario: 'ana' }, { conMotor: conMotor(pgSinTabla) })).toEqual({ status: 409, error: 'Todavía no disponible.' })
+    expect(await historialDeProducto({ marca: 'bdi', productId: 1 }, { conMotor: conMotor(pgSinTabla) })).toEqual({ status: 409, error: 'Todavía no disponible.' })
   })
   it('sin usuario o con pedido mal armado ⛔ llega a la base', async () => {
     const pg = { query: async () => { throw new Error('no debería consultar') } }

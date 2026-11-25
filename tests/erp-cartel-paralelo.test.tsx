@@ -29,7 +29,7 @@ async function montar() {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   act(() => { root = createRoot(div); root.render(<Erp ruta={['ventas']} />) })
 }
-const hayCartel = () => div.textContent?.includes('modo paralelo') ?? false
+const hayCartel = () => div.textContent?.includes('todavía no está en Areben Gestión') ?? false
 
 describe('ERP › el cartel «modo paralelo»', () => {
   it('⛔ sale mientras se lee el corte, ni después si la línea ya pasó al ERP', async () => {
@@ -39,7 +39,7 @@ describe('ERP › el cartel «modo paralelo»', () => {
     expect(hayCartel()).toBe(false)
   })
 
-  it('sale recién leído si la línea sigue con Gestión Nube, y si la lectura falla (el prudente)', async () => {
+  it('sale recién leído si la línea todavía no está en Areben Gestión, y si la lectura falla (el prudente)', async () => {
     await montar()
     await act(async () => { responder?.({ en_erp: false }) })
     expect(hayCartel()).toBe(true)

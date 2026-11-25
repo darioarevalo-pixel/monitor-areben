@@ -81,6 +81,8 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
     SKU o código, con el stock del depósito del pedido y el precio de la lista **mayorista** — el MISMO que cobra el cambio.
     🔴 Sin precio mayorista cargado se ve pero ⛔ se agrega (el motor contesta SIN_PRECIO). El agregado viaja en el mismo
     «Guardar» (`tests/pedido-agregar-producto.test.tsx`). ⛔ el buscador de la Caja: lee el espejo de GN y no trae ese precio.
+    Entiende el MODELO (Darío 24-nov): «templado premium 16 pro max» / «16pm» ⇒ el producto va al motor y sólo queda ese
+    talle (exacto primero; sin coincidencia, todo). Sin número ⛔ hay modelo («airpods pro»). `lib/erp/buscar-modelo.core.js`.
   - **Número desconocido** (Darío §1): con pedidos «sin entrar» y el chat sin cliente, la tarjeta pregunta «¿Es de un cliente
     que ya tenés?» — buscar (`clientes-panel`, fichas CON id) y elegir anota el número con quién es (`anotar-whatsapp`).
     «Es nuevo» = **nombre; el CUIT/DNI es OPCIONAL** (Darío/Bruno 15-nov; era obligatorio desde el 31-oct) y se completa al
@@ -97,7 +99,7 @@ con saldo / últimos pagos / «Enviar saldo» / «Quién compra», la hoja de ca
     `cyber.json`, `lotes.json`; la cuenta pura en `lib/erp/precio-tienda.core.js`, COPIA de `index.html` del catálogo): pack
     (se cambia por packs enteros; ⛔ pack y suelta del mismo diseño), oferta (Cyber o margen < `ofertaMargen`), precio por
     modelo, y descuento por monto sobre TODO el pedido (sólo a lo regular; aparece o se va). Lo que ya estaba conserva su
-    precio salvo lo regular, que recalcula el %. Precio a mano: sólo Darío (`esDario`), sólo en lo nuevo. El motor respeta
+    precio salvo lo regular, que recalcula el %. Precio a mano: quien cambia el pedido (24-nov: con `esDario` el panel de WhatsApp lo escondía; el panel es sólo de Darío), en lo nuevo y también en lo que ya estaba (25-nov, M-124: antes se perdía sin avisar). «Corregir precio» de la venta (ERP) reescribe el pedido y carga la diferencia en la cuenta (`motor/venta/correccion.mjs`). ⚠️ Una funda al 5% guardada se lee como regular: el próximo cambio le recalcula el % por monto. El motor respeta
     el `precio` que le llega (areben-motor 804c692). Packs vendidos ⇒ `lotes:vendidos` del catálogo por
     `POST /api/config?accion=packs-panel` con `PANEL_LLAVE_CATALOGO` (en los DOS proyectos de Vercel); sin llave guarda y
     avisa. Promos por cantidad (`descuentos.promos`, por `producto.categoria`) también: 🔴 sin ellas, el 18-nov un cambio le

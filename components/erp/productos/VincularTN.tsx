@@ -27,7 +27,7 @@ const BASE: ColumnaLista[] = [
 const COLUMNAS: Record<string, ColumnaLista[]> = {
   sin_par: BASE,
   trabados: [...BASE, { key: 'grupo', titulo: 'Vinculadas a', ancho: 'minmax(200px, 1.2fr)', movil: 'chico' }],
-  elegidas: [...BASE.filter((c) => c.key !== 'stock'), { key: 'grupo', titulo: 'Vinculada a', ancho: 'minmax(200px, 1.2fr)', movil: 'chico' }, { key: 'por', titulo: 'Quién', ancho: '120px', movil: 'oculta' }, { key: 'cuando', titulo: 'Cuándo', ancho: '104px', movil: 'chico' }],
+  elegidas: [...BASE.filter((c) => c.key !== 'stock'), { key: 'grupo', titulo: 'Vinculada a', ancho: 'minmax(200px, 1.2fr)', movil: 'chico' }, { key: 'por', titulo: 'Responsable', ancho: '120px', movil: 'oculta' }, { key: 'cuando', titulo: 'Fecha', ancho: '104px', movil: 'chico' }],
 }
 const VISTAS = [['sin_par', 'Sin vincular'] as const, ['trabados', 'Repetidas'] as const, ['elegidas', 'Vinculadas'] as const]
 
@@ -122,7 +122,7 @@ export function VincularTN() {
       {vista === 'trabados' && <p style={{ margin: 0, color: color.mut }}>No reciben stock hasta resolverlas.</p>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {hecho && <Notice tone="success" onClose={() => setHecho(null)}>{hecho}</Notice>}
-      {!datos && !error && <EmptyState title="Leyendo los vínculos…" />}
+      {!datos && !error && <EmptyState title="Leyendo…" />}
       {datos && (
         <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 14, overflow: 'hidden' }}>
           <VistasLista vistas={VISTAS} valor={vista} conteo={conteo} onCambio={setVista} />

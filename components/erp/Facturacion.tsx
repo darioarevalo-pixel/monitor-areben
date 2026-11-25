@@ -129,7 +129,7 @@ export function Facturacion() {
   const prueba = datos?.ambiente !== 'produccion'
   const pv = datos?.puntosDeVenta[tienda] ?? null
   // Por qué ⛔ se puede facturar lo elegido (null = se puede). Lo vuelve a frenar el servidor: esto es para decirlo antes.
-  const freno = !datos ? 'Leyendo el mes…'
+  const freno = !datos ? 'Leyendo…'
     : !datos.ambiente ? 'Facturación no disponible.'
       : sumaElegidas > datos.pendiente + 0.005 ? `Pasa lo pendiente del mes (${pesosCortos(datos.pendiente)}).`
         : elegidasDeMarca.length > datos.porPedido ? `Hasta ${datos.porPedido} ventas por vez.`
@@ -210,7 +210,7 @@ export function Facturacion() {
     const texto = await pedirTexto('Importe con IVA', '', { titulo: 'Nota de débito', placeholder: 'Ej.: 1500', ok: 'Seguir' })
     if (texto === null) return
     const monto = Math.round(Number(texto.replace(/\./g, '').replace(',', '.')) * 100) / 100
-    if (!(monto > 0)) { setError('Importe inválido.'); return }
+    if (!(monto > 0)) { setError('Falta el importe.'); return }
     const deVerdad = f.ambiente === 'produccion'
     const ok = await confirmar({
       titulo: deVerdad ? 'Nota de débito con ARCA' : 'Nota de débito en el modo de prueba de ARCA',
@@ -293,7 +293,7 @@ export function Facturacion() {
     if (k === 'comp') return <b style={{ color: color.ink }} title={f.comprobante}>{f.comprobante}</b>
     if (k === 'cae') return <span style={{ color: color.mut, fontVariantNumeric: 'tabular-nums' }}>{f.cae || '—'}</span>
     if (k === 'de') {
-      if (f.de === 'gn') return <ChipEstado mapa={{ x: [f.estado && f.estado !== 'APROBADO' ? 'warning' : 'neutral', `Gestión Nube${f.estado && f.estado !== 'APROBADO' ? ` · ${f.estado.toLowerCase()}` : ''}`] }} k="x" />
+      if (f.de === 'gn') return <ChipEstado mapa={{ x: [f.estado && f.estado !== 'APROBADO' ? 'warning' : 'neutral', `Sistema anterior${f.estado && f.estado !== 'APROBADO' ? ` · ${f.estado.toLowerCase()}` : ''}`] }} k="x" />
       const anulada = f.vista === 'facturas' && conNC.has(`${marca}:${f.ventaId}`)
       return <ChipEstado mapa={{ x: anulada ? ['danger', 'Areben Gestión · anulada con nota de crédito'] : ['success', f.emitida?.ambiente === 'produccion' ? 'Areben Gestión' : 'Areben Gestión · de prueba'] }} k="x" />
     }
@@ -345,12 +345,12 @@ export function Facturacion() {
         </Notice>
       )}
 
-      {!datos && !error && <EmptyState title="Leyendo el mes…" />}
+      {!datos && !error && <EmptyState title="Leyendo…" />}
       {datos && (
         <>
           <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
             <TileResumen oscuro titulo="Tope del mes de Areben" valor={pesosCortos(datos.techo)} nota={datos.estado === 'cerrado' ? 'Fijo desde el cierre' : 'Cambia hasta cerrar el mes'} />
-            <TileResumen titulo="Facturado" valor={pesosCortos(datos.facturado)} nota={`${pctTope != null ? `${pctTope} % del tope · ` : ''}Gestión Nube ${pesosCortos(datos.facturadoGN)} · Areben Gestión ${pesosCortos(datos.facturadoMonitor)}`} />
+            <TileResumen titulo="Facturado" valor={pesosCortos(datos.facturado)} nota={`${pctTope != null ? `${pctTope} % del tope · ` : ''}${datos.facturadoGN ? `Sistema anterior ${pesosCortos(datos.facturadoGN)} · ` : ''}Areben Gestión ${pesosCortos(datos.facturadoMonitor)}`} />
             <TileResumen titulo="Pendiente de facturar" valor={pesosCortos(datos.pendiente)} nota={datos.pendiente < 0 ? 'se facturó de más' : 'las dos marcas'} />
             <TileResumen tono={tonoDeConteo(grupos.sin.length)} titulo={`Sin factura en ${NOMBRE_MARCA[tienda]}`} valor={grupos.sin.length.toLocaleString('es-AR')} nota={`ventas · ${pesosCortos(sumaSin)}`} />
           </div>
@@ -387,7 +387,7 @@ export function Facturacion() {
               </div>
             )}
             <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-              Punto de venta {pv ?? 'sin cargar'}
+              Punto de venta {pv ?? '—'}
             </div>
           </div>
 

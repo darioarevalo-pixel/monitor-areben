@@ -31,7 +31,7 @@ import { BarraPasos } from './Barritas'
 
 type Prefs = { orden: string[]; visibles: string[] }
 /** 📱 Qué es cada columna en la tarjeta del celular; la que no está, `oculta`. */
-const MOVIL: Record<string, MovilColumna> = { ruta: 'titulo', prendas: 'dato', estado: 'chico' }
+const MOVIL: Record<string, MovilColumna> = { desde: 'titulo', hacia: 'chico', prendas: 'dato', estado: 'chico' }
 
 const ANCHO_SELECT: React.CSSProperties = { cursor: 'pointer', width: 'auto', flex: '0 0 auto' }
 const ORIGEN = NOMBRE_ORIGEN as Record<string, string>
@@ -49,7 +49,7 @@ function enElErp(f: FilaTransferencia, libroDesde: string | null) {
 
 function bajarCsv(filas: FilaTransferencia[], marca: MarcaErp) {
   const c = (x: unknown) => `"${String(x ?? '').replace(/"/g, '""')}"`
-  const renglones = [['Nº', 'Creada', 'De', 'A', 'Origen', 'Quién', 'Estado', 'Pedidas', 'Preparadas', 'Enviadas', 'Faltan', 'En Areben Gestión'].map(c).join(';')]
+  const renglones = [['Nº', 'Creada', 'Origen', 'Destino', 'Tipo', 'Responsable', 'Estado', 'Pedidas', 'Preparadas', 'Enviadas', 'Faltan', 'En Areben Gestión'].map(c).join(';')]
   for (const f of filas) renglones.push([f.numero ?? '', cuandoCorto(f.creada), f.desdeTexto, f.haciaTexto, f.origenTexto, f.persona ?? '', f.estadoTexto, f.pedidas, f.armadas, f.enviadas, f.faltan, f.enLibro ?? ''].map(c).join(';'))
   const url = URL.createObjectURL(new Blob(['﻿' + renglones.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
@@ -112,17 +112,12 @@ export function TransferenciasStock() {
   })
 
   const celda = (f: FilaTransferencia, k: string): React.ReactNode => {
-    if (k === 'n') return f.numero ? <b style={{ color: color.ink }} title="El número de la transferencia en Gestión Nube">{f.numero}</b> : <span style={{ color: color.mut2 }}>sin número</span>
+    if (k === 'n') return f.numero ? <b style={{ color: color.ink }}>{f.numero}</b> : <span style={{ color: color.mut2 }}>sin número</span>
     if (k === 'creada') return <span style={{ color: color.mut }}>{cuandoCorto(f.creada)}</span>
-    if (k === 'ruta') return (
-      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: weight.semibold, whiteSpace: 'nowrap', color: color.ink }}>
-        {f.desdeTexto}
-        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#98a2b3" strokeWidth={2} strokeLinecap="round" aria-hidden><path d="M5 12h14 M13 6l6 6-6 6" /></svg>
-        {f.haciaTexto}
-      </span>
-    )
+    if (k === 'desde') return <span style={{ fontWeight: weight.semibold, whiteSpace: 'nowrap', color: color.ink }}>{f.desdeTexto}</span>
+    if (k === 'hacia') return <span style={{ fontWeight: weight.semibold, whiteSpace: 'nowrap', color: color.ink }}>{f.haciaTexto}</span>
     if (k === 'origen') return <span style={{ color: color.mut }}>{f.origenTexto}</span>
-    if (k === 'quien') return f.persona ? <span style={{ color: color.ink2 }}>{f.persona}</span> : <span style={{ color: color.mut2, fontStyle: 'italic' }}>{f.origen === 'gn' ? 'Gestión Nube' : '—'}</span>
+    if (k === 'quien') return f.persona ? <span style={{ color: color.ink2 }}>{f.persona}</span> : <span style={{ color: color.mut2, fontStyle: 'italic' }}>{f.origen === 'gn' ? 'Sistema anterior' : '—'}</span>
     if (k === 'estado') return <BarraPasos paso={f.paso} fin={f.fin} texto={f.faltan > 0 && f.estado === 'transferido' ? 'Transferida con faltantes' : f.estadoTexto} />
     if (k === 'prendas') return <span style={{ fontVariantNumeric: 'tabular-nums', color: f.faltan > 0 && f.estado !== 'cancelado' ? 'var(--mo-danger-ink)' : color.ink }}>{prendasTexto(f)}</span>
     if (k === 'libro') {
@@ -135,7 +130,7 @@ export function TransferenciasStock() {
   const acciones = (f: FilaTransferencia) => {
     const menu: AccionMenu[] = [
       { key: 'ficha', label: 'Abrir la transferencia', icono: 'abrir', onClick: () => setFicha(f) },
-      { key: 'repo', label: 'Abrir Reposición en el monitor ↗', icono: 'abrir', onClick: abrirReposicion, hint: 'Las transferencias se preparan y se mandan escaneando en Reposición.' },
+      { key: 'repo', label: 'Reposición ↗', icono: 'abrir', onClick: abrirReposicion, hint: 'Las transferencias se preparan y se mandan escaneando en Reposición.' },
     ]
     return <MenuAcciones acciones={menu} etiqueta={`Más acciones de la transferencia ${f.numero ?? ''}`} vertical alinear="izquierda" />
   }
@@ -145,15 +140,10 @@ export function TransferenciasStock() {
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
         <p style={{ margin: 0, color: color.mut, flex: '1 1 320px' }}>Cada transferencia entre el depósito y el local, con el paso en que está. Se preparan y se mandan en Reposición.</p>
         <Button disabled={!filas.length} onClick={() => bajarCsv(filas, marca)}>Exportar</Button>
-        <Button variant="outline" onClick={abrirReposicion}>Abrir Reposición en el monitor ↗</Button>
+        <Button variant="outline" onClick={abrirReposicion}>Reposición ↗</Button>
       </div>
       {/* Stunned ya vive en el ERP (corte del 28-oct): la transferencia se mueve y se recibe acá, con sus faltantes (Bruno, 28-oct). */}
-      {tienda === 'stunned'
-        ? <Notice tone="neutral">Stunned ya vive en Areben Gestión: la transferencia se mueve y se recibe acá. Lo que no llega al local queda como faltante («Transferida con faltantes»).</Notice>
-        : <Notice tone="warning">
-          <b>«Recibida» todavía no se controla</b>: Gestión Nube mueve el stock de un golpe y nadie la escanea al llegar al local (el último paso va rayado).
-          Tampoco hay transferencias hechas a mano fuera de Reposición: las que se hacen en la pantalla de Gestión Nube aparecen como «A mano en Gestión Nube».
-        </Notice>}
+      {tienda === 'stunned' && <Notice tone="neutral">Stunned ya vive en Areben Gestión: la transferencia se mueve y se recibe acá. Lo que no llega al local queda como faltante («Transferida con faltantes»).</Notice>}
       {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
       {datos?.cortado && <Notice tone="warning">Se ven las {datos.filas.length.toLocaleString('es-AR')} más nuevas.</Notice>}
 
@@ -171,8 +161,8 @@ export function TransferenciasStock() {
           <Select aria-label="Período" style={ANCHO_SELECT} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
             <option value="todo">Desde el principio</option><option value="mes">Este mes</option><option value="30d">Últimos 30 días</option>
           </Select>
-          <Select aria-label="Origen" style={ANCHO_SELECT} value={origen} onChange={(e) => setOrigen(e.target.value)}>
-            <option value="">Todos los orígenes</option>
+          <Select aria-label="Tipo" style={ANCHO_SELECT} value={origen} onChange={(e) => setOrigen(e.target.value)}>
+            <option value="">Todos los tipos</option>
             {Object.entries(ORIGEN).map(([k, t]) => <option key={k} value={k}>{t}</option>)}
           </Select>
           <PanelColumnas
@@ -189,7 +179,7 @@ export function TransferenciasStock() {
           activa={ficha?.id ?? null} onAbrir={setFicha} etiquetaFila={(f) => `la transferencia ${f.numero ?? ''} de ${f.desdeTexto} a ${f.haciaTexto}`}
           vacio={!cargando && datos ? (
             <div style={{ padding: space[6] }}>
-              <EmptyState title={q ? 'No hay transferencias con ese número, producto o persona.' : vista === 'abiertas' ? 'No hay transferencias abiertas.' : 'No hay transferencias en esta vista.'} />
+              <EmptyState title={q ? `Ninguna transferencia coincide con «${q}».` : vista === 'abiertas' ? 'No hay transferencias abiertas.' : 'No hay transferencias en esta vista.'} />
             </div>
           ) : null}
         />
@@ -199,7 +189,7 @@ export function TransferenciasStock() {
           </div>
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
-          {cargando && !datos ? 'Leyendo las transferencias…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
+          {cargando && !datos ? 'Leyendo…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
           {libroDesde && <> · Areben Gestión arranca el {cuandoCorto(libroDesde)}</>}
         </div>
       </div>
@@ -223,8 +213,8 @@ function FichaTransferencia({ f, libroDesde, onCerrar }: { f: FilaTransferencia;
       </div>
       {f.error && <Notice tone="danger">{f.error}</Notice>}
       <DatosFicha>
-        <DatoFicha titulo="Origen">{f.origenTexto}</DatoFicha>
-        <DatoFicha titulo="Quién">{f.persona ?? '—'}</DatoFicha>
+        <DatoFicha titulo="Tipo">{f.origenTexto}</DatoFicha>
+        <DatoFicha titulo="Responsable">{f.persona ?? '—'}</DatoFicha>
         {f.origen !== 'gn' && <DatoFicha titulo="Pedidas">{u(f.pedidas)}</DatoFicha>}
         {f.origen !== 'gn' && <DatoFicha titulo="Preparadas">{u(f.armadas)}</DatoFicha>}
         <DatoFicha titulo="Enviadas">{u(f.enviadas)}</DatoFicha>
@@ -266,7 +256,7 @@ function FichaTransferencia({ f, libroDesde, onCerrar }: { f: FilaTransferencia;
           </tbody>
         </table></div>
       </div>
-      <div><Button variant="outline" onClick={abrirReposicion}>Abrir Reposición en el monitor ↗</Button></div>
+      <div><Button variant="outline" onClick={abrirReposicion}>Reposición ↗</Button></div>
     </FichaCostado>
   )
 }
