@@ -622,7 +622,7 @@ export type FilaStock = {
   estanteria: number; enPedidos: number; enBolsas: number; disponible: number; gn: number | null; negativo: boolean
   ultimo: { tipo: string; origen: string; ref: string | null; cuando: string } | null
 }
-export type ListaDeStock = { filas: FilaStock[]; libroHasta: string | null; pedidosLeidosEn: string | null; pedidos: number; sinVariante: number; sinVariantePorTienda?: Record<string, number> }
+export type ListaDeStock = { filas: FilaStock[]; /** Las ubicaciones ACTIVAS de la base, en orden (`depositosALaVista`): una desactivada ⛔ es columna. */ depositos: string[]; libroHasta: string | null; pedidosLeidosEn: string | null; pedidos: number; sinVariante: number; sinVariantePorTienda?: Record<string, number> }
 export const leerListaDeStock = (marca: MarcaErp, { reusar = false } = {}) =>
   compartida(`&vista=stock-lista&marca=${marca}`, reusar, () => pedir<ListaDeStock>(null, `&vista=stock-lista&marca=${marca}&nc=${Date.now()}`, 'No se pudo leer el stock.'))
 

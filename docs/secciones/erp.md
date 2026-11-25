@@ -44,8 +44,10 @@ botones crudos y `select`). Tests: `tests/erp-navegacion*.test.ts*`. El registro
 porque el test de registro lo exige: el shell ya ⛔ lo monta.
 
 **Stock** (14-oct, sólo lectura; 🎨 **19-oct, Diseño: rehecha con el molde de Ventas**): UNA lista con cada prenda
-(variante) y lo que hay por depósito, vistas con número (Con stock · Sin stock en el Local · Negativos · Con pedidos ·
-Todo), resumen ARRIBA, buscador (nombre, SKU, código entero), columnas por usuario (`erp-stock-<marca>`) y la ficha AL
+(variante) y lo que hay por depósito, vistas con número (🆕 25-nov, Bruno: **abre en Todo**, después Con stock · Sin stock ·
+Sin stock en el Local · Negativos · Con reservado · En bolsas; las columnas de depósito son SÓLO las ubicaciones ACTIVAS
+del motor —`depositosDe`, la misma regla de Mover y recibir—: el Evento desactivado ⛔ aparece, tampoco en la ficha del
+producto), resumen ARRIBA, buscador (nombre, SKU, código entero), columnas por usuario (`erp-stock-<marca>`) y la ficha AL
 COSTADO (por depósito ERP contra GN + «Ver movimientos»). 🆕 18-nov (Darío): «Ver movimientos» abre la VENTANA grande
 (`HistorialPrenda`, vista `historial-prenda`, núcleo `lib/erp/historial-prenda.core.js`): tabla Fecha · Movimiento · Entrada ·
 Salida · Saldo · Descripción, por depósito o Todos, filtro por tipo (con filtro ⛔ Saldo). 🔑 Regla de Darío: UN renglón por

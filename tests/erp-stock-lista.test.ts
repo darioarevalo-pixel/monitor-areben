@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 import {
-  armarFilasStock, columnasDe, contarVistas, filtrar, normalizarPrefs, alternarColumna, ordenar, reservaDePedidos, resumen,
+  armarFilasStock, columnasDe, depositosALaVista, VISTA_INICIAL, VISTAS, contarVistas, filtrar, normalizarPrefs, alternarColumna, ordenar, reservaDePedidos, resumen,
 } from '../lib/erp/stock-lista.core.js'
 import { listaDeStock } from '../api/_erp-stock.js'
 
@@ -23,7 +23,7 @@ const NIVELES = [niv(1, 1, 'local', 2), niv(1, 1, 'deposito', 5), niv(2, 1, 'dep
 
 describe('armarFilasStock', () => {
   const filas = armarFilasStock({
-    marca: 'zattia', niveles: NIVELES, inventario: INVENTARIO,
+    marca: 'zattia', depositos: ['local', 'deposito', 'evento'], niveles: NIVELES, inventario: INVENTARIO,
     ultimos: [{ product_id: 1, size_id: 1, tipo: 'venta', origen: 'caja', origen_ref: 'venta:296', ocurrido_en: '2026-10-19T13:25:00Z' }],
     reservado: new Map([['1/1', 3]]),
   })
@@ -44,7 +44,8 @@ describe('armarFilasStock', () => {
     expect(resumen(filas)).toMatchObject({ disponible: 4 + 3 + 4, estanteria: 7 + 3 + 4, enPedidos: 3, negativos: 1, prendas: 4 })
   })
   it('vistas con su número, y el buscador por nombre, código o código entero', () => {
-    expect(contarVistas(filas)).toEqual({ constock: 3, local0: 1, neg: 1, ped: 1, bol: 0, todo: 4 })
+    expect(contarVistas(filas)).toEqual({ todo: 4, constock: 3, sinstock: 1, local0: 1, neg: 1, ped: 1, bol: 0 })
+    expect(filtrar(filas, { vista: 'sinstock' }).map((f) => f.id)).toEqual(['3/1'])
     expect(filtrar(filas, { vista: 'local0' }).map((f) => f.id)).toEqual(['2/1'])
     expect(filtrar(filas, { q: 'sahara' }).map((f) => f.id)).toEqual(['1/1'])
     expect(filtrar(filas, { q: 'stu-0042' }).map((f) => f.id)).toEqual(['2/1'])
@@ -91,7 +92,7 @@ describe('reservaDePedidos (la regla del motor, Bruno 16-nov)', () => {
     expect(() => reservaDePedidos({ ordenes: [], lineas: [], netos: [], cortes: undefined as never, inventario: [] })).toThrow(/cortes/)
   })
   it('armarFilasStock: Disponible = Físico + En bolsas − Reservado', () => {
-    const f = armarFilasStock({ marca: 'bdi', niveles: [niv(9, 90, 'deposito_minorista', 1, 'bdi')], ultimos: [], inventario: [], reservado: new Map([['9/90', 1]]), enBolsas: new Map([['9/90', 2]]) })[0]
+    const f = armarFilasStock({ marca: 'bdi', depositos: ['local', 'deposito_minorista'], niveles: [niv(9, 90, 'deposito_minorista', 1, 'bdi')], ultimos: [], inventario: [], reservado: new Map([['9/90', 1]]), enBolsas: new Map([['9/90', 2]]) })[0]
     expect(f).toMatchObject({ estanteria: 1, enPedidos: 1, enBolsas: 2, disponible: 2 })
     expect(resumen([f])).toMatchObject({ enBolsas: 2 })
     expect(contarVistas([f])).toMatchObject({ bol: 1 })
@@ -100,7 +101,7 @@ describe('reservaDePedidos (la regla del motor, Bruno 16-nov)', () => {
 
 describe('el depósito mayorista apagado (Darío 18-nov)', () => {
   it('sus negativos viejos ⛔ suman ni marcan la fila', () => {
-    const [f] = armarFilasStock({ marca: 'bdi', niveles: [niv(9, 90, 'deposito_minorista', 3, 'bdi'), niv(9, 90, 'deposito_mayorista', -1, 'bdi')], ultimos: [], inventario: [] })
+    const [f] = armarFilasStock({ marca: 'bdi', depositos: ['local', 'deposito_minorista'], niveles: [niv(9, 90, 'deposito_minorista', 3, 'bdi'), niv(9, 90, 'deposito_mayorista', -1, 'bdi')], ultimos: [], inventario: [] })
     expect(f).toMatchObject({ estanteria: 3, disponible: 3, negativo: false })
     expect(Object.keys(f.deps)).toEqual(['local', 'deposito_minorista'])
   })
@@ -119,10 +120,42 @@ describe('las columnas', () => {
   })
 })
 
+describe('Bruno 25-nov: abre con TODO; «Con stock» y «Sin stock» son filtros', () => {
+  it('«Todo» es la primera vista y con la que abre; después Con stock y Sin stock', () => {
+    expect(VISTA_INICIAL).toBe('todo')
+    expect(VISTAS.slice(0, 3).map(([k, n]) => [k, n])).toEqual([['todo', 'Todo'], ['constock', 'Con stock'], ['sinstock', 'Sin stock']])
+    expect(filtrar([{ disponible: 0 }, { disponible: 2 }] as never).length).toBe(2) // sin vista = todo
+  })
+})
+
+describe('Bruno 25-nov: «si se desactiva deja de aparecer» (la regla del motor, `depositosDe`)', () => {
+  const ub = (id: string, activo: boolean) => ({ id, activo })
+  it('una ubicación desactivada ⛔ es columna; activa en alguna línea de la base, sí', () => {
+    expect(depositosALaVista('zattia', [ub('local', true), ub('deposito', true), ub('local', true), ub('deposito', true), ub('evento', false)])).toEqual(['local', 'deposito'])
+    expect(depositosALaVista('zattia', [ub('local', true), ub('deposito', true), ub('evento', true)])).toEqual(['local', 'deposito', 'evento'])
+    // el mayorista de BDI sigue apagado aunque el motor lo tenga activo
+    expect(depositosALaVista('bdi', [ub('local', true), ub('deposito_minorista', true), ub('deposito_mayorista', true)])).toEqual(['local', 'deposito_minorista'])
+    expect(() => depositosALaVista('zattia', undefined as never)).toThrow()
+  })
+  it('armarFilasStock ⛔ arma sin las ubicaciones (se pide, ⛔ se adivina)', () => {
+    expect(() => armarFilasStock({ marca: 'zattia', niveles: [], ultimos: [], inventario: [] } as never)).toThrow(/ubicaciones activas/)
+  })
+  it('las columnas y las de siempre salen de las activas', () => {
+    expect(Object.keys(columnasDe('zattia', ['local', 'deposito']))).not.toContain('dep:evento')
+    expect(normalizarPrefs('zattia', { orden: ['p', 'dep:evento'], visibles: ['p', 'dep:evento'] }, ['local', 'deposito']).visibles).not.toContain('dep:evento')
+  })
+})
+
 describe('listaDeStock (el servidor)', () => {
+  const DEPOSITO_FILAS: Record<string, Array<Record<string, unknown>>> = {
+    zattia: [{ id: 'local', nombre: 'Local', gn_store_id: 1, activo: true, unidades: 0 }, { id: 'deposito', nombre: 'Deposito', gn_store_id: 2, activo: true, unidades: 0 }],
+    stunned: [{ id: 'local', nombre: 'Local', gn_store_id: 1, activo: true, unidades: 0 }, { id: 'deposito', nombre: 'Deposito', gn_store_id: 2, activo: true, unidades: 0 }, { id: 'evento', nombre: 'Evento', gn_store_id: null, activo: false, unidades: 0 }],
+    bdi: [{ id: 'local', nombre: 'Local', gn_store_id: 1, activo: true, unidades: 0 }, { id: 'deposito_minorista', nombre: 'Deposito Minorista', gn_store_id: 2, activo: true, unidades: 0 }],
+  }
   const pg = {
-    query: vi.fn(async (sql: string) => ({
-      rows: /group by/.test(sql) ? NIVELES : /distinct on/.test(sql) ? [] : [{ hasta: new Date('2026-10-19T16:00:00Z') }],
+    query: vi.fn(async (sql: string, p: unknown[] = []) => ({
+      rows: /information_schema/.test(sql) ? [{ hay: true }] : /from deposito d/.test(sql) ? DEPOSITO_FILAS[String(p[0])] ?? []
+        : /group by/.test(sql) ? NIVELES : /distinct on/.test(sql) ? [] : [{ hasta: new Date('2026-10-19T16:00:00Z') }],
     })),
   }
   const deps = {
@@ -138,6 +171,11 @@ describe('listaDeStock (el servidor)', () => {
     const r = await listaDeStock({ marca: 'zattia' }, deps) as { filas: Array<{ id: string; disponible: number }>; libroHasta: string; pedidos: number }
     expect(r.filas.find((f) => f.id === '1/1')!.disponible).toBe(6)
     expect(r).toMatchObject({ libroHasta: '2026-10-19T16:00:00.000Z', pedidos: 1 })
+  })
+  it('el Evento desactivado (Stunned) ⛔ viene como ubicación ni en las filas', async () => {
+    const r = await listaDeStock({ marca: 'zattia' }, deps) as { depositos: string[]; filas: Array<{ deps: Record<string, number> }> }
+    expect(r.depositos).toEqual(['local', 'deposito'])
+    expect(r.filas.every((f) => !('evento' in f.deps))).toBe(true)
   })
   it('sin la conexión del motor contesta 409 (⛔ una lista vacía que parece «sin stock»)', async () => {
     const r = await listaDeStock({ marca: 'bdi' }, { ...deps, conMotor: async () => ({ status: 409, error: 'falta la conexión' }) })

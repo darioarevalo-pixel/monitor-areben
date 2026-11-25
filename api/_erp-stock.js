@@ -15,7 +15,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
-import { armarFilasStock, reservaDePedidos } from '../lib/erp/stock-lista.core.js'
+import { armarFilasStock, depositosALaVista, reservaDePedidos } from '../lib/erp/stock-lista.core.js'
+import { depositosDe } from '../motor/stock/deposito.mjs'
 import { armarComparacion } from '../lib/erp/comparacion.core.js'
 import { SQL_CORTES, cortesDeFilas } from '../lib/erp/corte.core.js'
 import { armarMovimiento } from '../lib/erp/movimientos.core.js'
@@ -23,15 +24,19 @@ import { deArmado, deLibro } from '../lib/erp/transferencias.core.js'
 import { rangoDeDias } from '../lib/erp/venta.core.js'
 
 const MARCAS = ['bdi', 'zattia']
+/** Las líneas de cada base (la de Zattia trae también Stunned, dueña del Evento). */
+const LINEAS_DE = { bdi: ['bdi'], zattia: ['zattia', 'stunned'] }
 
 /** Lo que dice el libro hoy: el nivel por variante y depósito, el último movimiento de cada variante y hasta cuándo llega. */
-async function libroSumado(pg) {
+async function libroSumado(pg, marca) {
   const niveles = (await pg.query(`select linea, product_id, size_id, deposito, sum(cantidad)::int as nivel
     from stock_movimiento group by 1, 2, 3, 4`)).rows
   const ultimos = (await pg.query(`select distinct on (product_id, size_id) product_id, size_id, tipo, origen, origen_ref, ocurrido_en
     from stock_movimiento order by product_id, size_id, ocurrido_en desc, id desc`)).rows
   const [{ hasta } = {}] = (await pg.query('select max(ocurrido_en) as hasta from stock_movimiento')).rows
-  return { niveles, ultimos, hasta: hasta ? new Date(hasta).toISOString() : null }
+  // Bruno 25-nov: «si se desactiva deja de aparecer». La regla es la del motor (`depositosDe`, sql/058), la misma de Mover y recibir.
+  const ubicaciones = (await Promise.all(LINEAS_DE[marca].map((linea) => depositosDe(pg, { linea })))).flat()
+  return { niveles, ultimos, hasta: hasta ? new Date(hasta).toISOString() : null, ubicaciones }
 }
 
 /** El espejo de GN de la marca: nombre, SKU, código y lo que dice GN por depósito. */
@@ -85,14 +90,16 @@ export async function pedidosParaStock({ marca }) {
 export async function listaDeStock({ marca }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
   const [libro, inventario, pedidos] = await Promise.all([
-    deps.conMotor(marca, 'El stock de Areben Gestión', (pg) => libroSumado(pg)),
+    deps.conMotor(marca, 'El stock de Areben Gestión', (pg) => libroSumado(pg, marca)),
     (deps.leerInventario ?? leerInventario)(marca),
     deps.pedidosParaStock({ marca }),
   ])
   if (libro.status) return libro
   const { reservado, enBolsas, sinVariante, sinVariantePorTienda } = reservaDePedidos({ ...pedidos, inventario })
+  const depositos = depositosALaVista(marca, libro.ubicaciones)
   return {
-    filas: armarFilasStock({ marca, niveles: libro.niveles, ultimos: libro.ultimos, inventario, reservado, enBolsas }),
+    filas: armarFilasStock({ marca, depositos, niveles: libro.niveles, ultimos: libro.ultimos, inventario, reservado, enBolsas }),
+    depositos,
     libroHasta: libro.hasta,
     pedidosLeidosEn: pedidos.leidaEn ?? null,
     pedidos: pedidos.ordenes.length,
@@ -232,7 +239,7 @@ async function tiendaNube(pg) {
 export async function comparacionConTiendas({ marca }, deps) {
   if (!MARCAS.includes(marca)) return { status: 400, error: 'Todavía no disponible.' }
   const [libro, tienda, inventario, pedidos] = await Promise.all([
-    deps.conMotor(marca, 'El stock de Areben Gestión', (pg) => libroSumado(pg)),
+    deps.conMotor(marca, 'El stock de Areben Gestión', (pg) => libroSumado(pg, marca)),
     deps.conMotor(marca, 'Lo publicado en Tienda Nube', (pg) => tiendaNube(pg)),
     (deps.leerInventario ?? leerInventario)(marca),
     deps.pedidosParaStock({ marca }),
@@ -240,7 +247,7 @@ export async function comparacionConTiendas({ marca }, deps) {
   if (libro.status) return libro
   if (tienda.status) return tienda
   const { reservado, enBolsas } = reservaDePedidos({ ...pedidos, inventario })
-  const filas = armarFilasStock({ marca, niveles: libro.niveles, ultimos: libro.ultimos, inventario, reservado, enBolsas })
+  const filas = armarFilasStock({ marca, depositos: depositosALaVista(marca, libro.ubicaciones), niveles: libro.niveles, ultimos: libro.ultimos, inventario, reservado, enBolsas })
   const r = armarComparacion({ marca, filas, inventario, tn: tienda.tn, cortes: tienda.cortes })
   return { filas: r.filas, sinLimite: r.sinLimite, tnLeidas: tienda.leidas, ml: tienda.ml, libroHasta: libro.hasta, pedidosLeidosEn: pedidos.leidaEn ?? null }
 }

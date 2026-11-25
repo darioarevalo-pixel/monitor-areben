@@ -24,7 +24,7 @@ import { leerListaDeProductos, leerListaDeStock, type FilaStock, type ListaDeSto
 import { stockACosto } from '@/lib/erp/inicio-panel.core.js'
 import { filtrar as filtrarProductos } from '@/lib/erp/productos-lista.core.js'
 import {
-  VISTAS, alternarColumna, columnasDe, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
+  VISTAS, VISTA_INICIAL, alternarColumna, columnasDe, contarVistas, filtrar, moverColumna, normalizarPrefs, ordenar, resumen,
 } from '@/lib/erp/stock-lista.core.js'
 import { NOMBRE_TIPO } from '@/lib/erp/stock.core.js'
 import { guardarPrefsDeLista, leerPrefsDeLista } from '@/lib/erp/lista-prefs'
@@ -70,10 +70,10 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
   const ajusta = usePuedeErp(marca)('ajustar')
   const usuario = perfil?.name ?? null
   const lista = `erp-stock-${marca}`
-  const COLUMNAS = useMemo(() => columnasDe(marca), [marca])
   const [datos, setDatos] = useState<(ListaDeStock & { clave: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [vista, setVista] = useState('constock')
+  // Bruno 25-nov: abre con TODO el stock; «Con stock» y «Sin stock» son filtros.
+  const [vista, setVista] = useState<string>(VISTA_INICIAL)
   const [q, setQ] = useState('')
   const linea = useLineaErp()
   // Stock a costo (Bruno, 9-nov): el servidor saca el costo a quien no lo puede ver y la tarjeta ⛔ aparece.
@@ -87,7 +87,7 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
   const [orden, setOrden] = useState<OrdenLista>(null)
   // Cuántas se dibujan: vuelve a la primera tanda cuando cambia lo que se mira (la tanda es de ESA mirada).
   const [tanda, setTanda] = useState({ de: '', n: DE_A })
-  const [prefs, setPrefsState] = useState<Prefs>(() => normalizarPrefs(marca, typeof window === 'undefined' ? null : leerPrefsDeLista(lista, usuario)))
+  const [prefsGuardadas, setPrefsState] = useState<unknown>(() => (typeof window === 'undefined' ? null : leerPrefsDeLista(lista, usuario)))
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   // La de otra pestaña se abre sola (con o sin la fila: el libro de la prenda lo lee la ficha).
   const [ficha, setFicha] = useState<{ marca: MarcaErp; prenda: PrendaAbierta } | null>(() => (pedida ? { marca: pedida.marca, prenda: { producto: pedida.producto, talle: pedida.talle, fila: null } } : null))
@@ -105,6 +105,10 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
     return () => { vivo = false }
   }, [marca, clave])
   const cargando = datos?.clave !== clave
+  // Las columnas de depósito son las ubicaciones ACTIVAS que manda el servidor (Bruno 25-nov: «si se desactiva deja de aparecer»).
+  const depositos = datos?.depositos
+  const COLUMNAS = useMemo(() => columnasDe(marca, depositos), [marca, depositos])
+  const prefs: Prefs = useMemo(() => normalizarPrefs(marca, prefsGuardadas, depositos), [marca, prefsGuardadas, depositos])
 
   const base = useMemo(() => filtrar(datos?.filas ?? [], { q, linea }), [datos, q, linea])
   const conteo = useMemo(() => contarVistas(base), [base])
@@ -179,9 +183,9 @@ export function StockErp({ pedida = null, ajustar, irA }: { pedida?: PrendaPedid
           <BuscadorLista valor={q} onCambio={setQ} etiqueta="Buscar en el stock" placeholder="Nombre, SKU o código de barras" />
           {!angosta && <PanelColumnas
             columnas={prefs.orden.map((k) => ({ key: k, titulo: COLUMNAS[k][0], visible: prefs.visibles.includes(k), fija: COLUMNAS[k][3] }))}
-            onAlternar={(k) => setPrefs(alternarColumna(marca, prefs, k))}
+            onAlternar={(k) => setPrefs(alternarColumna(marca, prefs, k, depositos))}
             onMover={(k, d) => setPrefs(moverColumna(prefs, k, d))}
-            onRestablecer={() => setPrefs({ ...normalizarPrefs(marca, null) })}
+            onRestablecer={() => setPrefs({ ...normalizarPrefs(marca, null, depositos) })}
           />}
           <Button variant="outline" disabled={cargando} onClick={() => setVuelta((n) => n + 1)}>{cargando ? 'Leyendo…' : 'Actualizar'}</Button>
           {irA && ajusta && (
