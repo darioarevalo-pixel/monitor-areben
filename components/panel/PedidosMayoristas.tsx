@@ -32,6 +32,7 @@ import { usePerfilOpcional } from '@/components/SesionProvider'
 import { copiarAlPortapapeles } from '@/lib/portapapeles'
 import { Bloque, BotonLink, BotonPaso, Cuando, Paso, Renglon } from './pasos-pedido'
 import { linksDePedidos, type LinkPedido } from '@/lib/crm/pedidos-catalogo'
+import { Pliegue } from './Pliegue'
 
 const plata = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 const diaMes = (iso: string) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}` }
@@ -94,6 +95,10 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
   // Sólo lo que pide algo (Darío 17-nov: «es molesto»): ⛔ los vendidos por GN ni los ya pagos y enviados a preparar —eso
   // ya lo dice «Última compra»—. Queda lo que falta entrar, pagar o enviar a preparación.
   const conAlgo = pedidos.pedidos.filter((p) => p.etapa !== 'anulado' && ((!!p.pago && p.pago.falta > 0) || (p.etapa === 'pedido' && pedidos.escribir)))
+  // 🧾 Los ya pagos, plegados (Darío 25-nov: «no me permite ver sus últimos pedidos para facturarle», caso Camila #118): tocar
+  // uno abre su hoja, que tiene «Facturar».
+  const anteriores = pedidos.pedidos.filter((p) => p.etapa !== 'anulado' && !conAlgo.includes(p))
+  const [verAnteriores, setVerAnteriores] = useState(false)
   // ⚡ Los pedidos sin terminar se traen ya: al tocarlo, la hoja abre al instante (Darío 18-nov: tardaba 3 s).
   const abiertos = conAlgo.slice(0, 3).map((p) => p.id).join(',')
   useEffect(() => {
@@ -109,7 +114,7 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
     linksDePedidos(numeros.split(',')).then((l) => vivo && setLinks(l))
     return () => { vivo = false }
   }, [numeros])
-  if (!conAlgo.length && !pedidos.sinEntrar.length) return null
+  if (!conAlgo.length && !pedidos.sinEntrar.length && !anteriores.length) return null
   const aPreparacion = async (p: PedidoDelCliente) => {
     setEnviando(p.id)
     try { await mandarAPrepararPanel(p.id); decir('Enviado a preparación.'); onCambio() } catch (e) { decir(e instanceof Error ? e.message : 'No se pudo enviar a preparación.', true) } finally { setEnviando(null) }
@@ -175,6 +180,16 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
           </div>
         )
       })}
+      {anteriores.length > 0 && (
+        <Pliegue titulo="Anteriores" cantidad={String(anteriores.length)} abierto={verAnteriores} onTocar={() => setVerAnteriores((v) => !v)}>
+          {anteriores.slice(0, 10).map((p) => (
+            <button key={p.id} type="button" onClick={() => setAbierto(p.id)} title={`Ver el pedido ${codigoPedido(p.numero)}`}
+              style={{ display: 'block', width: '100%', height: 'auto', textAlign: 'left', background: 'none', border: 0, padding: '4px 0', cursor: 'pointer', fontSize: font.sm, color: 'inherit' }}>
+              <b>Pedido {codigoPedido(p.numero)}</b> <span style={{ color: color.mut2 }}>· {diaMes(p.recibido_en)} · {p.unidades} u · {plata(p.total)}</span>
+            </button>
+          ))}
+        </Pliegue>
+      )}
       {!pedidos.escribir && <div style={{ fontSize: 11, color: color.mut2, marginTop: 6 }}>{APAGADO}</div>}
       {abierto && <HojaPedido pedidoId={abierto} cuenta={cuenta} onCerrar={() => setAbierto(null)} onHecho={(t) => { decir(t); onCambio() }} />}
       {pagando && cuenta && (
