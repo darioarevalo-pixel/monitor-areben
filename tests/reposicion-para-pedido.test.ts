@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparLista, grupoDe, paraPedidoDe, separarNegativos, soloEnDeposito, unidadesEnPedidos } from '@/lib/reposicion/paraPedido'
+import { agruparLista, descontarReservas, grupoDe, paraPedidoDe, reservadasEnPedidos, separarNegativos, soloEnDeposito, unidadesEnPedidos } from '@/lib/reposicion/paraPedido'
 import { decidir, cfgVentas } from '@/lib/reposicion/porVentas'
 import { repoCfgDefault, type RepoItem } from '@/lib/reposicion/tipos'
 import type { FilaVentas } from '@/lib/reposicion/porVentas'
@@ -95,5 +95,43 @@ describe('separarNegativos: negativo sin pedido = a revisar, ⛔ se repone (Dar�
     // Lo que se lleva ya no cuenta la prenda que debía el negativo: con pedido, sí.
     expect(sinPedido.llevar).toBeLessThanOrEqual(antes.llevar)
     expect(conPedido.llevar).toBe(antes.llevar)
+  })
+})
+
+describe('después del corte el pedido RESERVA y el Local ⛔ queda en negativo (25-nov-2026)', () => {
+  const I = (vid: string, local: number) => ({ vid, local, deposito: 5 })
+  it('el pedido #7569 (NYA violeta L): Local 0 y 10 en el depósito ⇒ 1 a la bolsa', () => {
+    const inv = separarNegativos(descontarReservas([I('nya', 0)], { nya: 1 }), { nya: 1 })
+    expect(inv.inv[0].local).toBe(-1)
+    expect(inv.revisar).toEqual([])
+    expect(paraPedidoDe(inv.inv[0].local, 1, 3)).toBe(1)
+  })
+  it('con el Local alcanzando, ⛔ va nada a la bolsa (se arma del local)', () => {
+    const inv = descontarReservas([I('a', 2)], { a: 1 })
+    expect(paraPedidoDe(inv[0].local, 1, 2)).toBe(0)
+  })
+  it('Local 1 y dos pedidos: falta 1', () => {
+    const inv = descontarReservas([I('a', 1)], { a: 2 })
+    expect(paraPedidoDe(inv[0].local, 2, 5)).toBe(1)
+  })
+  it('un pedido de antes del corte ya pagado (⛔ reserva) ⛔ se resta: ya bajó el libro', () => {
+    const todas = [{ vid: 'a', sku: 'X-1', name: 'TOP', size: 'S', local: -1 }]
+    const prendas = [{ sku: 'X-1', nombre: 'TOP (S)', cantidad: 1, reserva: false }]
+    expect(reservadasEnPedidos(todas, prendas)).toEqual({})
+    expect(unidadesEnPedidos(todas, prendas)).toEqual({ a: 1 })
+  })
+  it('negativo físico + reserva: el pedido queda cubierto y el negativo viejo va a revisar', () => {
+    const r = separarNegativos(descontarReservas([I('a', -1)], { a: 1 }), { a: 1 })
+    expect(r.inv[0].local).toBe(-1)
+    expect(r.revisar[0].sinPedido).toBe(1)
+  })
+  it('exclusivo online con Local 0 y una reserva: decidir lleva exactamente 1', () => {
+    const it0 = { vid: 'n', pid: '1', sid: '1', name: 'CORPIÑO NYA', size: 'L', sku: 'BKC-0003-VI-L', barcode: '', local: 0, deposito: 10, cats: [], catFallback: '', cat: '', subcat: null, modelo: null, s7: 0, ubic: '', vv: 0 } as unknown as RepoItem
+    const cfg = repoCfgDefault()
+    cfg.ventas = { ...(cfg.ventas || {}), modosProd: { '1': { modo: 'online' } } } as typeof cfg.ventas
+    const cv = cfgVentas(cfg, 'zattia')
+    expect(decidir(it0, cfg, cv, '2026-11-25').llevar).toBe(0)
+    const conReserva = separarNegativos(descontarReservas([it0], { n: 1 }), { n: 1 }).inv[0]
+    expect(decidir(conReserva, cfg, cv, '2026-11-25').llevar).toBe(1)
   })
 })
