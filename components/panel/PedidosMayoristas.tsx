@@ -99,6 +99,7 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
   // uno abre su hoja, que tiene «Facturar».
   const anteriores = pedidos.pedidos.filter((p) => p.etapa !== 'anulado' && !conAlgo.includes(p))
   const [verAnteriores, setVerAnteriores] = useState(false)
+  const [cuantosAnteriores, setCuantosAnteriores] = useState(10)
   // ⚡ Los pedidos sin terminar se traen ya: al tocarlo, la hoja abre al instante (Darío 18-nov: tardaba 3 s).
   const abiertos = conAlgo.slice(0, 3).map((p) => p.id).join(',')
   useEffect(() => {
@@ -182,12 +183,15 @@ export function TarjetaPedidos({ pedidos, clienteId, personaId, tel, cuenta = nu
       })}
       {anteriores.length > 0 && (
         <Pliegue titulo="Anteriores" cantidad={String(anteriores.length)} abierto={verAnteriores} onTocar={() => setVerAnteriores((v) => !v)}>
-          {anteriores.slice(0, 10).map((p) => (
+          {anteriores.slice(0, cuantosAnteriores).map((p) => (
             <button key={p.id} type="button" onClick={() => setAbierto(p.id)} title={`Ver el pedido ${codigoPedido(p.numero)}`}
               style={{ display: 'block', width: '100%', height: 'auto', textAlign: 'left', background: 'none', border: 0, padding: '4px 0', cursor: 'pointer', fontSize: font.sm, color: 'inherit' }}>
               <b>Pedido {codigoPedido(p.numero)}</b> <span style={{ color: color.mut2 }}>· {diaMes(p.recibido_en)} · {p.unidades} u · {plata(p.total)}</span>
             </button>
           ))}
+          {anteriores.length > cuantosAnteriores && (
+            <Button size="sm" variant="ghost" onClick={() => setCuantosAnteriores((n) => n + 10)}>Ver más</Button>
+          )}
         </Pliegue>
       )}
       {!pedidos.escribir && <div style={{ fontSize: 11, color: color.mut2, marginTop: 6 }}>{APAGADO}</div>}
