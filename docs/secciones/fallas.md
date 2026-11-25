@@ -64,6 +64,14 @@ reclamo**, armado en un toque:
 - ⛔ Todavía no: lo que vuelve de la clienta, el motivo detallado, la decisión de Administración. El caso queda en
   Reclamos (`gn_venta_reemplazo_*` = `A-<ajuste>`) para seguirlo desde ahí.
 
+## 🧾 La Falla del POS (25-nov-2026)
+
+> «estado de falla: escanea normal, total venta 0, registrar falla» — Bruno
+
+El local carga la falla desde el POS de la Caja (estado «Falla»): cada renglón llama a `crearFalla` + `registrarVentaGN`, el MISMO camino
+que «+Cargar falla», con motivo «Cargada en el POS» y la ubicación por `ubicacionDeFalla` (`lib/caja/falla-pos.ts`). Se ve igual en
+Fallas del local. El detalle, en `docs/secciones/caja.md`.
+
 ## Reglas que el código no dice
 
 - 🔑 **La falla de una línea que YA ESTÁ EN EL ERP ⛔ va a GN** (Bruno 30-oct-2026): «está en el ERP» = fila en `erp_corte` y el

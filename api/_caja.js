@@ -32,6 +32,7 @@
 //   POST ?recurso=caja  { action: 'confirmar-transferencia', id, comprobante } → sólo admin: la transferencia que el cruce ⛔ ve (B3)
 //   POST ?recurso=caja  { action: 'resolver', id, como: 'a_mano' | 'descartar', nota, gn_number? } → la venta que GN RECHAZÓ (B2)
 //   POST ?recurso=caja  { action: 'abrir-turno', fondo, conteo? }   → abre el turno (uno solo abierto por marca)
+//   GET  ?recurso=caja&action=publicidad → las ventas con publicidad a las que les sobró algo a favor (últimos 120 días)
 //   GET  ?recurso=caja&action=mis-gastos → los gastos (caja chica + oficina) que cargó ESTA cuenta (admin: todos + lo PARA REVISAR), últimos DIAS_MIS_GASTOS días
 //   POST action=gasto-oficina   { monto, categoria, detalle, fecha? } → un gasto de la oficina (⛔ sale de la caja), PARA REVISAR
 //   POST action=revisar-gasto   { origen, id, decision: aprobar|rechazar, categoria?, negocio?, motivo? } → sólo admin; aprobar lo escribe en el dashboard
@@ -121,6 +122,9 @@ import { billetesDe, limpiarConteo, totalDeConteo } from '../lib/caja/conteo.cor
 import { anotarAnuladasDelCierre } from '../lib/caja/anuladas.js'
 import { FALTA_ARQUEO, armarArqueo, billetesDelSobre, faltaColumnaArqueo, leerCodigo, sobreEsperado } from '../lib/caja/arqueo.core.js'
 import { aplicarPromos, normalizarPromos } from '../lib/caja/promos.core.js'
+import { cobroConPublicidad, conSaldo, cubreTodo, descuentoDePublicidad, limpiarPublicidad, resumenDePublicidad } from '../lib/caja/publicidad.core.js'
+/** «Publicidad con saldo»: cuántos días para atrás se miran. */
+const DIAS_PUBLICIDAD = 120
 import { MAX_LOTE, csvDeLote, generarCodigos } from '../lib/caja/gift.core.js'
 
 // 🔑 La marca es CONFIGURACIÓN (rediseño, fase 5 + V4): el nombre, el local, el depósito, el modo Local,
@@ -765,6 +769,15 @@ export default async function handler(req, res) {
         if (error) throw new Error(error.message)
         return res.status(200).json({ ventas: (data || []).map(sinPayload) })
       }
+      if (accion === 'publicidad') {
+        // «Publicidad con saldo» (Bruno, 25-nov): las ventas con publicidad a las que les SOBRÓ algo, para que lo organice quien
+        // acordó el monto (`conSaldo`, `lib/caja/publicidad.core.js`). Últimos DIAS_PUBLICIDAD días.
+        const desde = new Date(Date.now() - DIAS_PUBLICIDAD * 86_400_000).toISOString()
+        const { data, error } = await sb.from('caja_venta').select('id, estado, subtotal, total, a_mano, anulada, gn_number, erp_numero, usuario, creada_en')
+          .eq('store', store).gte('creada_en', desde).not('a_mano->publicidad', 'is', null).order('creada_en', { ascending: false }).limit(500)
+        if (error) throw new Error(error.message)
+        return res.status(200).json({ ventas: conSaldo(data || []), dias: DIAS_PUBLICIDAD })
+      }
       if (accion === 'pedidos-web') {
         try {
           return res.status(200).json(await leerPedidosWeb(req.headers && req.headers['x-monitor-auth'], Date.now(), store))
@@ -1346,8 +1359,12 @@ export default async function handler(req, res) {
         // 🔑 Fase C (Bruno, 5-oct): cobra sólo la cuenta que abrió la caja. Cerrarla queda abierto a todos.
         if (!puedeUsarPOS(turno, perfil)) return res.status(403).json({ error: `La caja la abrió ${turno.abierto_por || 'otra cuenta'}: sólo esa cuenta puede cobrar.`, otraCuenta: true })
         const reglas = await reglasDeHoy((await leerConfig()).reglas)
-        let filas, c, payload, espera, conPromo, descuentoVenta
+        let filas, c, payload, espera, conPromo, descuentoVenta, publicidad, publicidadCubre = false
         try {
+          // 🔑 «Publicidad» (Bruno, 25-nov, `lib/caja/publicidad.core.js`): la persona y lo que tiene a favor, descontado del total. Reemplaza
+          // al descuento a mano a la venta y a la promo de compra.
+          publicidad = limpiarPublicidad(b.publicidad)
+          if (publicidad && b.descuentoVenta != null) throw new Error('Con publicidad no va un descuento a mano a la venta: lo a favor ya es el descuento.')
           // 🔑 W5: las promos se aplican ACÁ también, con las de la base y la fecha argentina: la
           // pantalla manda los renglones con el descuento A MANO nada más. Las categorías de TN las
           // manda la pantalla (el servidor ⛔ tiene el catálogo de TN): mentirlas da, a lo sumo, una
@@ -1363,22 +1380,24 @@ export default async function handler(req, res) {
           if (reglas.medios) for (const p of b.pagos || []) {
             if (!medioDeCuenta(p.cuenta, reglas)) throw new Error(`La cuenta ${p.cuenta} no es una forma de pago de la Caja.`)
           }
+          publicidadCubre = !!publicidad && cubreTodo(publicidad, filas)
           // 🔴 Productos de feria trabados (Bruno, 5-oct): sólo efectivo o transferencia, la parte de
           // feria a la cuenta de feria. La pantalla ya los arma así; acá se EXIGE (si no, `curl`).
-          if (reglas.medios) exigirFeria({ filas, pagos: b.pagos || [], reglas })
+          if (reglas.medios && !publicidadCubre) exigirFeria({ filas, pagos: b.pagos || [], reglas })
           // El descuento a mano a la venta REEMPLAZA a la promo de compra (Bruno, 5-oct). La de la pantalla
           // viaja como `{ tipo, valor }` y nada más; la promo, SIN la feria (A9).
           const aManoVenta = b.descuentoVenta == null ? null : { tipo: b.descuentoVenta.tipo, valor: b.descuentoVenta.valor }
-          descuentoVenta = aManoVenta ?? (conPromo.venta ? { tipo: 'pesos', valor: conPromo.venta.pesos, sinFeria: true } : null)
+          descuentoVenta = publicidad ? null : aManoVenta ?? (conPromo.venta ? { tipo: 'pesos', valor: conPromo.venta.pesos, sinFeria: true } : null)
           // 🔴 A6 (11-oct): cada pago a la cuenta que corresponde HOY (modo feria, la de transferencias, la
           // promo de crédito de la Agenda, el mínimo de 6 cuotas). La Agenda se lee sólo si hace falta.
-          if (reglas.medios) {
+          if (reglas.medios && !publicidadCubre) {
             const usaPromo = (b.pagos || []).some((p) => Number(p && p.cuenta) === reglas.medios.credito.promo)
-            exigirCuentas({ filas, pagos: b.pagos || [], reglas, descuentoVenta, promoCreditoHoy: usaPromo ? await promoCreditoHoy() : false })
+            exigirCuentas({ filas, pagos: b.pagos || [], reglas, descuentoVenta: publicidad ? descuentoDePublicidad(publicidad, filas.reduce((t, f) => t + f.importe, 0)) : descuentoVenta, promoCreditoHoy: usaPromo ? await promoCreditoHoy() : false })
           }
-          c = cobro({ filas, pagos: b.pagos, reglas, descuentoVenta })
+          c = publicidad ? cobroConPublicidad({ filas, pagos: b.pagos || [], reglas, publicidad }) : cobro({ filas, pagos: b.pagos, reglas, descuentoVenta })
           espera = montoAEsperar(c.pagos, reglas)
-          payload = armarVentaGN({ filas, pagos: c.pagos, modoLocal: marca.modoLocal, integrationId: id, fecha: fechaLocal(new Date()), email, cajera: perfil.name || null })
+          // Con todo a favor ⛔ hay pagos y GN ⛔ toma una venta sin pagos: ésa va SÓLO al ERP (se frena abajo si fuera a GN). `payload` es NOT NULL.
+          payload = publicidadCubre ? { publicidad: true } : armarVentaGN({ filas, pagos: c.pagos, modoLocal: marca.modoLocal, integrationId: id, fecha: fechaLocal(new Date()), email, cajera: perfil.name || null })
         } catch (e) {
           return res.status(400).json({ error: e.message })
         }
@@ -1404,9 +1423,11 @@ export default async function handler(req, res) {
         // 🔑 B5 (Bruno, 11-oct): el descuento a mano y el cambio de precio son LIBRES, pero A LA VISTA: la
         // fila guarda cuánto se rebajó a mano (a la venta, a las prendas, bajando el precio) y el turno lo suma.
         const aMano = {
-          venta: b.descuentoVenta == null ? 0 : c.aVenta,
+          venta: b.descuentoVenta == null || publicidad ? 0 : c.aVenta,
           prendas: centavosJs(filas.reduce((s, f, i) => s + (conPromo.items[i].promos ? 0 : f.cantidad * f.precio - f.importe), 0)),
           precios: centavosJs(conNombre.reduce((s, f) => s + (f.precio_lista ? Math.max(0, f.precio_lista - f.precio) * f.cantidad : 0), 0)),
+          // Publicidad (25-nov): ⛔ es descuento a mano (el turno ⛔ lo suma así); la persona, lo que tenía, lo que usó y lo que sobra.
+          ...(publicidad ? { publicidad: resumenDePublicidad(publicidad, c.aVenta) } : {}),
         }
         // 🔑 Un ticket es de UNA marca (Bruno, 26-oct), y va al ERP si su línea ya cortó (`erp_corte`: Stunned 28-oct, BDI
         // 15/16-nov, Zattia 23-nov), ⛔ por una llave. La línea sale del PRODUCTO, ⛔ de la pantalla. Sin saber los cortes ⇒ 503.
@@ -1420,6 +1441,7 @@ export default async function handler(req, res) {
           return res.status(503).json({ error: 'No se pudo saber si esta marca ya vende por Areben Gestión: la venta NO se guardó. Probá de nuevo en un momento.' })
         }
         if (aDonde.error) return res.status(400).json({ error: aDonde.error, mixto: true })
+        if (publicidadCubre && aDonde.destino !== 'erp') return res.status(400).json({ error: 'Lo que tiene a favor cubre toda la compra: eso se registra sólo en Areben Gestión, y esta marca todavía vende por Gestión Nube.' })
         // Lo que va a GN sin su token ⛔ se guarda: la venta quedaría cobrada y sin salir.
         if (aDonde.destino !== 'erp' && !token) return res.status(500).json({ error: FALTA_TOKEN_GN })
         const malPuesto = errorDelPuesto(turno, aDonde.destino)

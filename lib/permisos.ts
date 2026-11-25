@@ -23,6 +23,7 @@ import {
   marcasConAcceso as marcasConAccesoJs,
   puedeContar as puedeContarJs,
   SECCIONES_CONTEO as SECCIONES_CONTEO_JS,
+  SECCIONES_POSTVENTA as SECCIONES_POSTVENTA_JS,
   puedeAtenderRetiroLocal as puedeAtenderRetiroLocalJs,
   puedeSub as puedeSubJs,
   puedeVer as puedeVerJs,
@@ -194,6 +195,8 @@ export const marcaDePermisos: (store: string) => Marca | null = marcaDePermisosJ
 
 /** Las cuatro pantallas de conteo físico, que comparten los endpoints de stock vivo. */
 export const SECCIONES_CONTEO: readonly string[] = SECCIONES_CONTEO_JS
+/** Las tres de Post-venta: cargar una falla pide alguna (`api/_fallas.js`). La Falla del POS (25-nov) se muestra con la misma. */
+export const SECCIONES_POSTVENTA: readonly string[] = SECCIONES_POSTVENTA_JS
 
 /**
  * Las tres pantallas de Análisis que muestran ventas: la llave de la marca de «vendido en sale»

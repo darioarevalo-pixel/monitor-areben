@@ -70,7 +70,7 @@ import { ConfirmDetalle, useConfirmar } from '@/components/ui/Confirm'
 
 
 /** Un renglón del pedido. `precioLista`: el de la etiqueta al escanear (B5: si la cajera lo cambia, queda a la vista). */
-export type Renglon = { variante: Variante; stock: Stock; cantidad: number; precio: number | null; fueraDeTn: boolean; foto: string | null; rebaja?: Rebaja | null; precioLista?: number | null; /** Qué contestó la cajera cuando se escaneó de nuevo (14-oct, `repetida.core.js`). */ repetida?: { si: number; no: number; en: string[] } | null }
+export type Renglon = { variante: Variante; stock: Stock; cantidad: number; precio: number | null; fueraDeTn: boolean; foto: string | null; rebaja?: Rebaja | null; precioLista?: number | null; /** Qué contestó la cajera cuando se escaneó de nuevo (14-oct, `repetida.core.js`). */ repetida?: { si: number; no: number; en: string[] } | null; /** Falla del POS (25-nov): ya está en el ledger de Post-venta y falta descontar ⇒ el reintento ⛔ la carga de nuevo. */ fallaId?: number | null; fallaBarcode?: string | null }
 /** La cajera elige la FORMA de pago; la cuenta de GN la resuelve `cuentaDeMedio` (Bruno, 4-oct). `base`: con «Varios pagos», lo que PAGA con ella (texto). */
 /** `oferta`: el pago es del reparto de la OFERTA (varios pagos con productos en oferta, 13-oct); van primero. */
 export type PagoUI = { medio: Medio | null; base: string; oferta?: boolean }

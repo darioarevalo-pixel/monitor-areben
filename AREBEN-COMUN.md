@@ -1,6 +1,6 @@
 # AREBEN — LO COMÚN: las palabras y la forma de trabajo de todos los sistemas
 
-Versión: 2026-11-23e (en el repo `monitor-areben` desde el 23-nov; reemplaza a `VOCABULARIO.md`)
+Versión: 2026-11-25 (en el repo `monitor-areben` desde el 23-nov; reemplaza a `VOCABULARIO.md`)
 Dueño: **Areben Gestión** (el ERP; repo `monitor-areben`). Decidido por Bruno el 23-nov-2026: *«ordenar todo desde ERP para
 el resto de los sistemas, y que sea uniforme la forma de trabajo»*.
 
@@ -535,6 +535,8 @@ para lo que no es del producto (cupón, seguimiento, caja) y para lo que se esca
 
 | se dice | ⛔ no se dice | app | dónde | por qué / desde |
 |---|---|---|---|---|
+| `Publicidad` (el estado del POS: la persona y lo que tiene a favor, descontado del total) | `Canje` | monitor | `components/caja` · `lib/caja` | Bruno, 25-nov-2026: «una sesion de fotos que te pago en ropa no es canje». «Canje» sigue siendo la sección de las creadoras (Marketing, Cupones › Canjes) |
+| `Registrar falla` (el estado «Falla» del POS: total $0, ⛔ cobro) | `Cargar falla` | monitor | `components/caja` | Bruno, 25-nov-2026: «estado de falla: escanea normal, total venta 0, registrar falla». En Post-venta sigue «+ Cargar falla» |
 | `caja` (abrir, cerrar, cajas anteriores) | `turno` · `turnos` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` · `components/erp` · `lib/erp` · `lib/nav.ts` · `lib/nav.datos.ts` | Bruno, 12-oct-2026: la cajera abre y cierra **la caja** |
 | `Vista previa` · `Ver POS` (el POS sin caja propia: se ve entero y ⛔ cobra) | `Sólo para mirar` · `sólo mirar` · `Entrar a mirar` | monitor | `components/caja` · `lib/caja` | Bruno, 23-nov-2026: «sólo para mirar no me gusta nada, está recontra fuera de los vocabularios» |
 | `oferta` · `productos en oferta` | `feria` · `ferias` | monitor | `components/caja` · `lib/caja` · `api/_caja.js` | Bruno, 12-oct: «feria» es un nombre COMERCIAL de una campaña, ⛔ una regla de la caja |
