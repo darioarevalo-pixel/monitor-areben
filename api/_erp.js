@@ -123,6 +123,8 @@ import { NC_DESDE_LA_VENTA, envioDeVenta, totalAFacturar, armarFacturaDelCambio,
 import { cruzarTransferencia, pagosRecientes } from '../lib/pagos-recibidos/core.core.js'
 import { feriaDeCampanias, reglasDeHoy, reglasGuardadas } from './_caja-reglas.js'
 import { cortesDeCaja } from './_caja-corte.js'
+import { conjuntosDeCaja } from './_caja-motor.js'
+import { detalleDeConjuntos, exigirConjuntos, piezasSueltas } from '../lib/caja/conjuntos.core.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
 import { ANTES_MANUAL_MS, RECIENTES_CAJA, diasDelCruce } from '../lib/caja/cruce.core.js'
 import { guardarReglaErp, prenderCajaErp, reglasDeMarca, sembrarReglasErp, simularReglasErp } from './_erp-reglas.js'
@@ -794,8 +796,11 @@ export async function fichaDeVenta({ marca, id, deCaja = false }) {
   }
   // «GN la vendió sin crédito» (A, 20-oct): la mayorista en sombra que el ERP habría frenado. Aviso, ⛔ error.
   const sinCreditoGN = f.detalle?.cuenta_autoriza?.motivo === 'gn'
+  // 🩱 Las bikinis de la venta (de TN o de la Caja): el cambio las necesita para saber qué renglones van juntos (regla del motor).
+  const { conjuntosDe } = await import('../motor/venta/conjuntos.mjs')
+  const conjuntos = conjuntosDe(f).map((c) => ({ variant_id: c.variant_id ?? null, nombre: c.nombre ?? null, cantidad: Number(c.cantidad) || 1, piezas: (c.piezas || []).map((pz) => ({ product_id: Number(pz.product_id), size_id: Number(pz.size_id), cantidad: Number(pz.cantidad) || 1 })) }))
   const ficha = armarFicha(f, { nombres, cambios: cambios.data || [], original: original.data, cambiadas: cambiadasDe(devueltas.data), montos, devolucion })
-  return { ...ficha, lineas: conImporteDelCambio(ficha.lineas, await renglonesDeLaCaja(sb, f)), sinCreditoGN }
+  return { ...ficha, lineas: conImporteDelCambio(ficha.lineas, await renglonesDeLaCaja(sb, f)), sinCreditoGN, conjuntos }
 }
 
 /**
@@ -1038,6 +1043,32 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
       prueba = false
       diferencia = diferenciaDeCambioSuelto({ devueltas, nuevas: c.nuevas })
     }
+    // 🩱 Lo que se lleva de una bikini (Bruno 21/22-nov): la bikini entera y a su precio, o la parte que vuelve sola en OTRO talle, a
+    // lo que vale la parte. Lo que vuelve lo frena el motor (`CONJUNTO_INCOMPLETO`). Sin poder leer las bikinis, un cambio que se
+    // lleva una ⛔ se registra.
+    const conMarca = c.nuevas.some((n) => n.conjunto)
+    const kits = await conjuntosDeCaja(marca).catch((e) => ({ error: e && e.message }))
+    if (kits.conjuntos) {
+      let delOriginal = null
+      let vuelven = devueltas
+      if (c.modo === 'erp') {
+        const [v] = (await db.query('select detalle from venta where id = $1', [c.ventaId])).rows
+        const { conjuntosDe } = await import('../motor/venta/conjuntos.mjs')
+        delOriginal = conjuntosDe(v)
+        const porLinea = new Map((await db.query('select id, product_id, size_id from venta_linea where venta_id = $1', [c.ventaId])).rows.map((l) => [l.id, l]))
+        vuelven = c.devueltas.map((d) => ({ product_id: Number(porLinea.get(d.linea_id)?.product_id), size_id: Number(porLinea.get(d.linea_id)?.size_id), cantidad: d.cantidad }))
+      }
+      try {
+        exigirConjuntos(c.nuevas, kits.conjuntos, { sueltas: piezasSueltas(delOriginal, vuelven, kits.conjuntos) })
+      } catch (e) {
+        return { status: 400, error: e.message }
+      }
+    } else if (conMarca) {
+      console.error('[erp] cambio: conjuntos', kits.error || 'sin conexión')
+      return { status: 503, error: 'No se pudieron leer las bikinis de Areben Gestión: el cambio NO se guardó. Probá de nuevo en un momento.' }
+    }
+    // Qué renglones de lo que se lleva forman cada bikini (como la venta de la Caja): el ticket y un próximo cambio los leen de ahí.
+    const conjuntosNuevos = conMarca ? detalleDeConjuntos(c.nuevas) : []
     // El cobro con las reglas de HOY de la Caja: el descuento de la forma de pago lo pone el servidor.
     /** @type {{ pagos: any[], total: number, espera: number }} */
     let cobrado
@@ -1075,7 +1106,7 @@ export async function cambiarVentaPropia({ marca, body, usuario }) {
       ...(c.desestimar ? { devolucion: { forma: 'desestima' } } : {}),
       devueltas, nuevas: c.nuevas, pagos: cobrado.pagos,
       ...(c.cliente ? { cliente: c.cliente } : {}),
-      ...(mp ? { detalle: { mp } } : {}),
+      ...(mp || conjuntosNuevos.length ? { detalle: { ...(mp ? { mp } : {}), ...(conjuntosNuevos.length ? { conjuntos: conjuntosNuevos } : {}) } } : {}),
     })
     if (!r.ok) return errorDelMotor(r)
     return { ok: true, venta: r.venta, total: cobrado.total, aFavor: r.a_favor, desestimado: r.desestimado ?? 0, saldo: r.saldo ?? null, ncPendiente: r.nc_pendiente, yaExistia: !!r.ya_existia }

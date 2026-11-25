@@ -30,7 +30,7 @@ import { marcaParaPOS, usarMarcaCaja } from '@/lib/caja/marca'
 import type { MarcaErp } from '@/lib/erp/cliente'
 import { NOMBRE_MARCA } from '@/lib/erp/venta.core.js'
 import { MEDIOS_CAMBIO, buscarVentasDelCambio, useCambio, type FilaVenta } from '@/components/caja/useCambio'
-import { DesestimarSaldo } from '@/components/caja/partesCambio'
+import { DesestimarSaldo, PreguntaBikiniCambio } from '@/components/caja/partesCambio'
 
 /** Cómo se lee la forma de pago en pantalla, como en Cobros. */
 const NOMBRE_MEDIO_CAMBIO: Record<string, string> = { efectivo: 'Efectivo', transferencia: 'Transferencia', debito: 'Débito', credito: 'Crédito' }
@@ -137,6 +137,7 @@ export function CambioCaja() {
       </SectionCard>
 
       {error && <Notice tone="danger" onClose={() => c.setError(null)}>{error}</Notice>}
+      <PreguntaBikiniCambio c={c} />
       {hecho && (
         <Notice tone="success" onClose={() => c.setHecho(null)}>
           Cambio #{hecho.numero} registrado.{' '}
@@ -205,7 +206,7 @@ export function CambioCaja() {
                       const actual = devueltas.find((d) => d.clave === l.clave)?.cantidad ?? 0
                       return (
                         <Tr key={l.clave}>
-                          <Td>{l.nombre}{l.cambiado > 0 && <> <Badge tone="neutral">{l.cambiado} ya cambiada{l.cambiado > 1 ? 's' : ''}</Badge></>}</Td>
+                          <Td>{l.nombre}{l.bikini && <> <Badge tone="brand">{l.bikini.nombre ?? 'Bikini'}</Badge></>}{l.cambiado > 0 && <> <Badge tone="neutral">{l.cambiado} ya cambiada{l.cambiado > 1 ? 's' : ''}</Badge></>}</Td>
                           <Td>{l.talle}</Td>
                           <Td style={{ textAlign: 'right' }}>{l.cantidad}</Td>
                           <Td style={{ textAlign: 'right' }}><MoneyText value={l.precio} /></Td>
@@ -236,11 +237,11 @@ export function CambioCaja() {
                   <THead><Tr><Th>Producto</Th><Th>Variante</Th><Th>Cantidad</Th><Th>Precio</Th></Tr></THead>
                   <TBody>
                     {nuevas.map((n, i) => (
-                      <Tr key={`${n.variante.product_id}/${n.variante.size_id}`}>
-                        <Td>{n.variante.product_name}</Td>
+                      <Tr key={`${n.variante.product_id}/${n.variante.size_id}/${n.conjunto?.variant_id ?? (n.parte ? 'p' : '')}`}>
+                        <Td>{n.variante.product_name}{n.conjunto && <> <Badge tone="brand">{n.conjunto.nombre}</Badge></>}{n.parte && <> <Badge tone="brand">Otra variante</Badge></>}</Td>
                         <Td>{n.variante.size_name}</Td>
                         <Td><PasoCantidad valor={n.cantidad} onCambio={(x) => c.cambiarCantidadNueva(i, x)} etiqueta="producto" etiquetaPlural="productos" /></Td>
-                        <Td><NumberField value={n.precio} prefix="$" onChange={(p) => c.cambiarNueva(i, { precio: p })} invalid={!(Number(n.precio) > 0)} width={120} /></Td>
+                        <Td>{n.conjunto || n.parte ? <MoneyText value={Number(n.precio)} /> : <NumberField value={n.precio} prefix="$" onChange={(p) => c.cambiarNueva(i, { precio: p })} invalid={!(Number(n.precio) > 0)} width={120} />}</Td>
                       </Tr>
                     ))}
                   </TBody>
@@ -298,6 +299,7 @@ export function CambioCaja() {
             )}
             {c.faltaClienta && <Notice tone="action">El saldo a favor va a nombre de la clienta: cargá su DNI y su nombre.</Notice>}
             {c.sinPrecio && <Notice tone="warning">Falta el precio de un producto nuevo.</Notice>}
+            {c.problemaBikini && <Notice tone="action">{c.problemaBikini}</Notice>}
             {c.sinPrecioDevuelta && <Notice tone="warning">Falta lo que pagó la clienta por un producto que devuelve.</Notice>}
             {c.errorCobro && <Notice tone="warning">{c.errorCobro}</Notice>}
             {espera && (

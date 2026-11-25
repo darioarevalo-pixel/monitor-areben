@@ -241,7 +241,11 @@ export type VentaPropia = {
   origen: string; canal: string; deposito: string; total: number; prueba: boolean; ocurridaEn: string; cliente: string | null
 }
 
+/** 🩱 Una bikini de la venta (motor `detalle.tn.conjuntos` / `detalle.conjuntos`): qué partes, en qué talle, van juntas. */
+export type ConjuntoDeVenta = { variant_id: number | null; nombre: string | null; cantidad: number; piezas: Array<{ product_id: number; size_id: number; cantidad: number }> }
 export type FichaDeVenta = {
+  /** Las bikinis de la venta (el cambio sabe qué renglones van juntos). Vacío en el servidor viejo. */
+  conjuntos?: ConjuntoDeVenta[]
   /** La compra a cuenta la cargó GN a un cliente sin crédito (`detalle.cuenta_autoriza.motivo = 'gn'`). */
   sinCreditoGN?: boolean
   venta: VentaPropia & { totalOriginal?: number | null; subtotal: number; usuario: string; registradaEn: string; origenRef: string; gnSaleId: string | null; ventaOriginalId: string | null }

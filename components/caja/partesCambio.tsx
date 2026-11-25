@@ -239,6 +239,52 @@ export function DesestimarSaldo({ c }: { c: Cambio }) {
   )
 }
 
+/**
+ * 🩱 Lo que el cambio pregunta de una bikini (Bruno 21/22-nov, `reglas-vigentes.md`): una parte sola vuelve SÓLO por otro talle de la
+ * misma parte; si no, vuelve la bikini completa. Y lo que se lleva de una bikini sale entero: se elige el talle de la otra parte. Lo usan
+ * el POS y la pantalla del ERP; el estado es de `useCambio`.
+ */
+export function PreguntaBikiniCambio({ c, onListo }: { c: Cambio; onListo?: () => void }) {
+  const p = c.preguntaBikini
+  if (!p) return null
+  const cerrar = () => { c.setPreguntaBikini(null); onListo?.() }
+  const hacer = (fn: () => void) => { try { fn(); c.setError(null) } catch (e) { c.setError(e instanceof Error ? e.message : 'No se pudo.') } onListo?.() }
+  if (p.tipo === 'devuelve') {
+    return (
+      <Modal abierto onCerrar={cerrar} titulo="Es parte de una bikini" cerrarConFondo={false}>
+        <div style={{ display: 'grid', gap: space[3] }}>
+          <div style={{ fontSize: font.lg, fontWeight: weight.semibold }}>{p.parte}</div>
+          <div>Es parte de {p.nombre}. ¿Qué cambia la clienta?</div>
+          <div style={{ display: 'grid', gap: space[2] }}>
+            <Button variant="solid" tone="brand" data-foco onClick={() => hacer(c.devolverBikiniCompleta)}>Devuelve la bikini completa</Button>
+            <Button variant="outline" tone="brand" onClick={() => hacer(c.devolverSoloLaParte)}>Cambia el talle de esta parte</Button>
+          </div>
+          <div style={{ color: color.mut, fontSize: font.sm }}>Una parte sola se cambia sólo por la misma parte en otro talle.</div>
+        </div>
+      </Modal>
+    )
+  }
+  return (
+    <Modal abierto onCerrar={cerrar} titulo="Es parte de una bikini" cerrarConFondo={false}>
+      <div style={{ display: 'grid', gap: space[3] }}>
+        <div style={{ fontSize: font.lg, fontWeight: weight.semibold }}>{p.variante.product_name} · {p.variante.size_name}</div>
+        <div>Se lleva con la otra parte. Elegí el talle de la otra parte:</div>
+        <div style={{ display: 'grid', gap: space[2] }}>
+          {p.opciones.map((k, i) => {
+            const otras = k.piezas.filter((pz) => !(pz.product_id === p.variante.product_id && pz.size_id === p.variante.size_id))
+            return (
+              <Button key={k.variant_id} variant={i === 0 ? 'solid' : 'outline'} tone="brand" {...(i === 0 ? { 'data-foco': true } : {})} onClick={() => hacer(() => c.llevarBikini(k))}>
+                {otras.map((pz) => pz.nombre ?? 'Otra parte').join(' + ')} · {plata(k.precio)}
+              </Button>
+            )
+          })}
+        </div>
+        <div style={{ color: color.mut, fontSize: font.sm }}>{p.opciones[0].nombre}: el precio es el de la bikini en Tienda Nube.</div>
+      </div>
+    </Modal>
+  )
+}
+
 /** El pedido del cambio (la tarjeta fija de la derecha): lo que devuelve, lo que se lleva y el total siempre abajo. */
 export function PedidoCambio({ paso, c, onCobro, puedeCobrar }: { paso: 1 | 2; c: Cambio; onCobro: () => void; puedeCobrar: boolean }) {
   const fila = (izq: React.ReactNode, der: React.ReactNode, fuerte = false) => (
@@ -248,6 +294,8 @@ export function PedidoCambio({ paso, c, onCobro, puedeCobrar }: { paso: 1 | 2; c
   )
   const sinVenta = c.tipo === 'suelto'
   const seguro = c.diferencia
+  /** La bikini de la que es parte lo que vuelve (venta del ERP). */
+  const bikiniDe = (clave: string) => { const b = c.vendidas.find((l) => l.clave === clave)?.bikini; return b ? b.nombre ?? 'Bikini' : null }
   return (
     <Card style={{ padding: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
       <div style={{ padding: `${space[3]}px ${space[4]}px`, borderBottom: `1px solid ${color.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[2] }}>
@@ -262,7 +310,7 @@ export function PedidoCambio({ paso, c, onCobro, puedeCobrar }: { paso: 1 | 2; c
           : c.devueltas.map((d) => (
             <div key={d.clave} style={{ display: 'grid', gap: space[1], padding: `${space[2]}px 0`, borderBottom: `1px solid ${color.line}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[2] }}>
-                <span style={{ fontWeight: weight.semibold, minWidth: 0 }}>{d.nombre} · {d.talle}</span>
+                <span style={{ fontWeight: weight.semibold, minWidth: 0 }}>{d.nombre} · {d.talle} {bikiniDe(d.clave) && <Badge tone="brand">{bikiniDe(d.clave)}</Badge>}</span>
                 <span style={{ color: color.danger, ...tabular }}>− {plata(Number(d.precio || 0) * d.cantidad)}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
@@ -281,11 +329,13 @@ export function PedidoCambio({ paso, c, onCobro, puedeCobrar }: { paso: 1 | 2; c
             {!c.nuevas.length
               ? <div style={{ color: color.mut, fontSize: font.base, padding: `${space[2]}px 0` }}>Tocá o escaneá lo que se lleva.</div>
               : c.nuevas.map((n, i) => (
-                <div key={`${n.variante.product_id}/${n.variante.size_id}`} style={{ display: 'grid', gap: space[1], padding: `${space[2]}px 0`, borderBottom: `1px solid ${color.line}` }}>
-                  <span style={{ fontWeight: weight.semibold }}>{n.variante.product_name} · {n.variante.size_name}</span>
+                <div key={`${n.variante.product_id}/${n.variante.size_id}/${n.conjunto?.variant_id ?? (n.parte ? 'p' : '')}`} style={{ display: 'grid', gap: space[1], padding: `${space[2]}px 0`, borderBottom: `1px solid ${color.line}` }}>
+                  <span style={{ fontWeight: weight.semibold }}>{n.variante.product_name}{n.variante.size_name ? ` · ${n.variante.size_name}` : ''} {n.conjunto && <Badge tone="brand">{n.conjunto.nombre}</Badge>}{n.parte && <Badge tone="brand">Otro talle</Badge>}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
                     <PasoCantidad valor={n.cantidad} onCambio={(x) => c.cambiarCantidadNueva(i, x)} etiqueta="producto" etiquetaPlural="productos" />
-                    <NumberField value={n.precio} prefix="$" onChange={(p) => c.cambiarNueva(i, { precio: p })} invalid={!(Number(n.precio) > 0)} width={120} />
+                    {n.conjunto || n.parte
+                      ? <span style={tabular}>{plata(Number(n.precio))} c/u</span>
+                      : <NumberField value={n.precio} prefix="$" onChange={(p) => c.cambiarNueva(i, { precio: p })} invalid={!(Number(n.precio) > 0)} width={120} />}
                   </div>
                 </div>
               ))}
@@ -313,6 +363,7 @@ export function PedidoCambio({ paso, c, onCobro, puedeCobrar }: { paso: 1 | 2; c
             </>
           )}
         {c.sinPrecio && <Notice tone="warning">Falta el precio de un producto que se lleva.</Notice>}
+        {paso === 2 && c.problemaBikini && <Notice tone="action">{c.problemaBikini}</Notice>}
       </div>
     </Card>
   )

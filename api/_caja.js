@@ -110,7 +110,8 @@ import { lineaDe } from '../lib/lineas.core.js'
 import { cortesDeCaja } from './_caja-corte.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { MARCA_POR_DEFECTO, ladoDelEspejo, marcaDeCaja, tokenDe } from '../lib/caja/marcas.core.js'
-import { anotarEnMotor, autorizarPinDeVenta, avisoDelMotor, eventoActivo, faltanEnElLibro, preciosLocalStunned, registrarEnErp, repasarMotor, stockDelProductoLibro, stockDelLibro } from './_caja-motor.js'
+import { exigirConjuntos, marcaDe as marcaDeConjunto } from '../lib/caja/conjuntos.core.js'
+import { anotarEnMotor, autorizarPinDeVenta, avisoDelMotor, conjuntosDeCaja, eventoActivo, faltanEnElLibro, preciosLocalStunned, registrarEnErp, repasarMotor, stockDelProductoLibro, stockDelLibro } from './_caja-motor.js'
 import { pidePinDeVenta } from '../lib/caja/pin-venta.core.js'
 import { errorDelPuesto, faltaColumnaDeposito, puestoDe } from '../lib/caja/puesto.core.js'
 import { ANTES_MANUAL_MS, COMPETIDORAS_MS, RECIENTES_CAJA, RECIENTES_SUMAR, diasDelCruce } from '../lib/caja/cruce.core.js'
@@ -604,7 +605,12 @@ export default async function handler(req, res) {
         const erpLineas = await cortesDeCaja(store).then((c) => lineasErpDeStore(c, store)).catch((e) => { console.error('[caja] erp_corte:', e && e.message); return null })
         // ¿Se ofrece la «Caja del evento»? Sólo con el depósito Evento PRENDIDO en el ERP. Si el ERP ⛔ contesta, ⛔ se ofrece.
         const ev = erpLineas && erpLineas.includes('stunned') ? await eventoActivo(store).catch(() => ({ activo: false })) : { activo: false }
-        return res.status(200).json({ ...conf, versiones, evento_activo: ev.activo === true, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), ...stunnedLocal, erp_lineas: erpLineas, stunned_erp: !!erpLineas && erpLineas.includes('stunned'), stunned_prueba: !(erpLineas && erpLineas.includes('stunned')), marca: { store, nombre: marca.nombre, tienda: marca.tienda, ...(marca.tiendaStunned ? { tiendaStunned: marca.tiendaStunned } : {}) } })
+        // 🩱 Las bikinis (Bruno 21/22-nov): cada una con sus partes y lo que vale cada parte. Si ⛔ se pueden leer, la Caja carga igual
+        // y una parte escaneada ⛔ se cobra (la pantalla lo dice): ⛔ se vende suelta.
+        const kits = await conjuntosDeCaja(store).catch((e) => ({ error: e && e.message }))
+        if (!kits.conjuntos) console.error('[caja] conjuntos:', kits.error || 'sin conexión al motor')
+        const conjuntos = kits.conjuntos ? { conjuntos: kits.conjuntos } : { conjuntos: null, conjuntos_error: 'No se pudieron leer las bikinis de Areben Gestión: recargá la Caja antes de cobrar una.' }
+        return res.status(200).json({ ...conf, versiones, ...conjuntos, evento_activo: ev.activo === true, ...logosDeFila(logo.error ? null : logo.data && logo.data.ticket_logo), ...stunnedLocal, erp_lineas: erpLineas, stunned_erp: !!erpLineas && erpLineas.includes('stunned'), stunned_prueba: !(erpLineas && erpLineas.includes('stunned')), marca: { store, nombre: marca.nombre, tienda: marca.tienda, ...(marca.tiendaStunned ? { tiendaStunned: marca.tiendaStunned } : {}) } })
       }
 
       if (accion === 'logo-tn') {
@@ -1373,6 +1379,14 @@ export default async function handler(req, res) {
             ...it,
             categorias: Array.isArray(it && it.categorias) ? it.categorias.slice(0, 30).map((x) => String(x).slice(0, 80)) : [],
           }))
+          // 🩱 Cada bikini entera y a su precio (`exigirConjuntos`). Sin poder leer las bikinis, una venta que trae una ⛔ se cobra; una
+          // sin ninguna sigue (una parte sin marcar ⛔ tiene precio en la pantalla: ⛔ llega acá por la Caja).
+          const kits = await conjuntosDeCaja(store).catch((e) => ({ error: e && e.message }))
+          if (kits.conjuntos) exigirConjuntos(crudos, kits.conjuntos)
+          else if (crudos.some((it) => marcaDeConjunto(it))) {
+            console.error('[caja] conjuntos al cobrar:', kits.error || 'sin conexión al motor')
+            return res.status(503).json({ error: 'No se pudieron leer las bikinis de Areben Gestión: la venta NO se guardó. Probá de nuevo en un momento.' })
+          }
           conPromo = aplicarPromos({ items: crudos, promos: reglas.promos, feriaIds: idsDeFeria(reglas), hoy: fechaLocal(new Date()) })
           filas = renglones(conPromo.items)
           // 🔑 La cajera elige una forma de pago; detrás va una cuenta. Una cuenta que ⛔ está detrás de

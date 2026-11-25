@@ -70,7 +70,7 @@ import { ConfirmDetalle, useConfirmar } from '@/components/ui/Confirm'
 
 
 /** Un renglón del pedido. `precioLista`: el de la etiqueta al escanear (B5: si la cajera lo cambia, queda a la vista). */
-export type Renglon = { variante: Variante; stock: Stock; cantidad: number; precio: number | null; fueraDeTn: boolean; foto: string | null; rebaja?: Rebaja | null; precioLista?: number | null; /** Qué contestó la cajera cuando se escaneó de nuevo (14-oct, `repetida.core.js`). */ repetida?: { si: number; no: number; en: string[] } | null; /** Falla del POS (25-nov): ya está en el ledger de Post-venta y falta descontar ⇒ el reintento ⛔ la carga de nuevo. */ fallaId?: number | null; fallaBarcode?: string | null }
+export type Renglon = { variante: Variante; stock: Stock; cantidad: number; precio: number | null; fueraDeTn: boolean; foto: string | null; rebaja?: Rebaja | null; precioLista?: number | null; /** Qué contestó la cajera cuando se escaneó de nuevo (14-oct, `repetida.core.js`). */ repetida?: { si: number; no: number; en: string[] } | null; /** Falla del POS (25-nov): ya está en el ledger de Post-venta y falta descontar ⇒ el reintento ⛔ la carga de nuevo. */ fallaId?: number | null; fallaBarcode?: string | null; /** La parte de una bikini (Bruno 22-nov, `lib/caja/conjuntos.core.js`): las partes van juntas y su precio es el de TN. */ conjunto?: { variant_id: number; n: number; nombre: string } | null }
 /** La cajera elige la FORMA de pago; la cuenta de GN la resuelve `cuentaDeMedio` (Bruno, 4-oct). `base`: con «Varios pagos», lo que PAGA con ella (texto). */
 /** `oferta`: el pago es del reparto de la OFERTA (varios pagos con productos en oferta, 13-oct); van primero. */
 export type PagoUI = { medio: Medio | null; base: string; oferta?: boolean }
@@ -78,6 +78,8 @@ export type PagoUI = { medio: Medio | null; base: string; oferta?: boolean }
 /** Las cuatro formas de pago que ve la cajera, en el orden del mostrador. */
 export const MEDIOS: Medio[] = ['efectivo', 'transferencia', 'debito', 'credito']
 export const claveDe = (v: Variante) => `${v.product_id}_${v.size_id}`
+/** La clave del RENGLÓN: la parte de una bikini es su propio renglón (corpiño S de la S/M y de la S/L son dos). */
+export const claveDeRenglon = (r: Pick<Renglon, 'variante' | 'conjunto'>) => (r.conjunto ? `${claveDe(r.variante)}_k${r.conjunto.variant_id}` : claveDe(r.variante))
 
 export const aNumero = aNumeroTxt
 
@@ -475,6 +477,7 @@ export function FilaRenglon({
       </div>
       <div style={{ minWidth: 0, fontWeight: weight.semibold, color: color.ink, fontSize: font.base, lineHeight: 1.25 }}>
         {r.variante.product_name} {feria && <Badge tone="warning">Oferta</Badge>}{' '}
+        {r.conjunto && <Badge tone="brand">{r.conjunto.nombre}</Badge>}{' '}
         {!!promos?.length && <Badge tone="success">{promos.join(' + ')}</Badge>}
       </div>
       <div style={{ gridRow: 'span 2', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
@@ -485,8 +488,8 @@ export function FilaRenglon({
         type="button"
         onClick={onSacar}
         className="caja-sacar"
-        aria-label={`Sacar ${r.variante.product_name} · ${r.variante.size_name} del pedido`}
-        title="Sacar del pedido"
+        aria-label={r.conjunto ? `Sacar ${r.conjunto.nombre} del pedido (las dos partes)` : `Sacar ${r.variante.product_name} · ${r.variante.size_name} del pedido`}
+        title={r.conjunto ? 'Sacar la bikini del pedido (las dos partes)' : 'Sacar del pedido'}
         // La cruz en ROJO siempre (Bruno, 12-oct), ⛔ sólo al pasar el mouse.
         style={{ gridRow: 'span 2', alignSelf: 'start', height: tactil ? 40 : 24, width: tactil ? 40 : 24, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', borderRadius: radius.md, color: color.danger, cursor: 'pointer', padding: 0 }}
       >
@@ -531,6 +534,9 @@ export function FilaRenglon({
           autoComplete="off"
           value={texto ?? (r.precio != null ? String(r.precio) : '')}
           invalid={!(r.precio && r.precio > 0)}
+          // La parte de una bikini va al precio de TN de la bikini (el servidor lo exige): se hace un descuento, ⛔ se cambia.
+          readOnly={!!r.conjunto}
+          title={r.conjunto ? 'El precio de la bikini es el de Tienda Nube: para rebajarla, un descuento.' : undefined}
           placeholder={cargandoPrecios ? 'cargando…' : 'precio'}
           onChange={(e) => setTexto(e.target.value)}
           onBlur={() => {
