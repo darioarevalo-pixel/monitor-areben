@@ -69,6 +69,8 @@ describe('listaDeProductos (el servidor)', () => {
         sqls.push(sql)
         if (/from costo_vigente/.test(sql)) return { rows: [{ product_id: 1, marca: 'zattia', costo: 9000 }] }
         if (/from producto p/.test(sql)) return { rows: [{ id: 1, nombre: 'Remera', marca: 'zattia' }] }
+        // Las ubicaciones del motor (`depositosDe`): la lista de Stock sólo arma las activas (Bruno 25-nov).
+        if (/information_schema/.test(sql)) return { rows: [{ hay: true }] }
         return { rows: [] }
       },
     }),
