@@ -63,7 +63,9 @@ export type EstadoVenta = 'borrador' | 'enviando' | 'en_gn' | 'en_erp' | 'error'
 /** B2: cómo se resolvió una venta que GN rechazó. */
 export type Resolucion = { tipo: 'a_mano' | 'descartada'; por: string | null; en: string; nota: string; gn_number?: number }
 /** B5: lo hecho a mano en la venta, en pesos (a la venta, a las prendas, bajando el precio). */
-export type AMano = { venta: number; prendas: number; precios: number }
+/** `publicidad` (25-nov): lo a favor de la persona; ⛔ es descuento a mano (`lib/caja/publicidad.core.js`). */
+export type PublicidadGuardada = { persona: string; a_favor: number; usado: number; sobra: number }
+export type AMano = { venta: number; prendas: number; precios: number; publicidad?: PublicidadGuardada }
 /** Un renglón como quedó guardado: con lo que necesita el ticket. */
 export type RenglonGuardado = { product_id: number; size_id: number; cantidad: number; precio: number; importe?: number; nombre: string | null; talle: string | null; /** Para el logo de la marca (12-oct); las ventas anteriores ⛔ lo tienen. */ sku?: string | null; promos?: string[]; /** B5: el de la etiqueta, si la cajera lo cambió. */ precio_lista?: number; /** 14-oct: qué contestó la cajera al escanearla de nuevo. */ repetida?: { si: number; no: number; en: string[] } }
 export type PagoGuardado = { cuenta: number; base: number; rebaja?: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
@@ -163,6 +165,9 @@ export const stockEnVivo = (productId: number) =>
 export const elegirVariante = (v: Variante) =>
   get<Producto>(`action=producto&product_id=${v.product_id}&size_id=${v.size_id}`, 'No se pudo traer el producto.')
 export const leerPendientes = () => get<{ ventas: Venta[] }>('action=pendientes', 'No se pudieron leer las ventas pendientes.')
+/** «Publicidad con saldo» (25-nov): las ventas con publicidad a las que les sobró algo a favor, de la más nueva a la más vieja. */
+export type VentaConPublicidad = { id: string; estado: string; subtotal: number; total: number; a_mano: AMano & { publicidad: PublicidadGuardada }; anulada?: boolean | null; gn_number: number | null; erp_numero: number | null; usuario: string | null; creada_en: string }
+export const leerPublicidadConSaldo = () => get<{ ventas: VentaConPublicidad[]; dias: number }>('action=publicidad', 'No se pudo leer la publicidad con saldo.')
 /** B1: las ventas del turno (sin id, el abierto), de la más nueva a la más vieja: para reimprimir. */
 export const leerVentasTurno = (turnoId?: string) =>
   get<{ ventas: Venta[] }>(`action=ventas${turnoId ? `&turno=${encodeURIComponent(turnoId)}` : ''}`, 'No se pudieron leer las ventas de la caja.')
@@ -266,7 +271,7 @@ export type PagoConfirmar = { cuenta: number; base?: number }
 /** `reintentable` sólo importa si la venta quedó en `error`. */
 export type Resultado = { venta: Venta; reintentable?: boolean }
 
-export const confirmarVenta = (v: { id: string; items: ItemConfirmar[]; pagos: PagoConfirmar[]; total: number; descuentoVenta: Rebaja | null; email: string | null; pagaCon: number | null; encargada?: { persona: string; pin: string } }) =>
+export const confirmarVenta = (v: { id: string; items: ItemConfirmar[]; pagos: PagoConfirmar[]; total: number; descuentoVenta: Rebaja | null; email: string | null; pagaCon: number | null; encargada?: { persona: string; pin: string }; publicidad?: { persona: string; aFavor: number } | null }) =>
   post<Resultado>({ action: 'confirmar', ...v }, 'No se pudo confirmar la venta.')
 
 /** Un pago de MP que puede ser el de la venta. ⛔ Trae datos de quien pagó. */
