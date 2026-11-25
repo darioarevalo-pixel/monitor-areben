@@ -799,6 +799,54 @@ describe('caja · a dónde va el ticket: por el CORTE de su línea (`erp_corte`)
     expect((enviada.renglones as Fila[])[0].linea).toBe('stunned')
   })
 
+  // 🔑 «Publicidad» (Bruno, 25-nov, `lib/caja/publicidad.core.js`): lo a favor es el descuento a la venta, ⛔ descuento a mano.
+  it('🔑 publicidad: lo a favor se descuenta, la diferencia se cobra como venta y queda guardado aparte del descuento a mano', async () => {
+    conSesion(CAJERA)
+    base.productos = [ZAT]
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z' }
+    const publicidad = { persona: '  @sofi  ', aFavor: 10000 }
+    const mal = await correr(req('POST', {}, { ...VENTA, publicidad }))
+    expect(mal.code).toBe(409)
+    const total = (mal.body as { total: number }).total
+    expect(total).toBeLessThan(21700)
+    const r = await correr(req('POST', {}, { ...VENTA, publicidad, total, pagaCon: null }))
+    expect(r.code).toBe(200)
+    const fila = base.ventas.get(ID) as Fila
+    expect(fila).toMatchObject({ subtotal: 25490, total })
+    expect(fila.a_mano).toMatchObject({ venta: 0, publicidad: { persona: '@sofi', a_favor: 10000, usado: 10000, sobra: 0 } })
+    expect((fila.pagos as Fila[])[0]).toMatchObject({ cuenta: 12921, rebaja: 10000 })
+  })
+
+  it('🔑 publicidad que cubre TODA la compra: total $0, sin forma de pago, al ERP, y lo que sobra queda a favor', async () => {
+    conSesion(CAJERA)
+    base.productos = [STU]
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z' }
+    const r = await correr(req('POST', {}, { ...VENTA, pagos: [], total: 0, pagaCon: null, publicidad: { persona: 'Sesión de fotos Mica', aFavor: 30000 } }))
+    expect(r.code).toBe(200)
+    const fila = base.ventas.get(ID) as Fila
+    expect(fila).toMatchObject({ destino: 'erp', estado: 'en_erp', subtotal: 25490, total: 0, pagos: [] })
+    expect(fila.a_mano).toMatchObject({ venta: 0, publicidad: { persona: 'Sesión de fotos Mica', a_favor: 30000, usado: 25490, sobra: 4510 } })
+    expect(registrarEnErp).toHaveBeenCalled()
+    expect(gn.posts).toHaveLength(0)
+  })
+
+  it('🔴 publicidad: con todo a favor ⛔ se cobra con una forma de pago, ⛔ va a GN, y ⛔ se suma un descuento a mano', async () => {
+    conSesion(CAJERA)
+    corte.cortes = { stunned: '2026-10-28T23:40:27Z' }
+    base.productos = [STU]
+    const conPago = await correr(req('POST', {}, { ...VENTA, total: 0, pagaCon: null, publicidad: { persona: 'Mica', aFavor: 30000 } }))
+    expect(conPago.code).toBe(400)
+    base.productos = [ZAT]
+    const aGN = await correr(req('POST', {}, { ...VENTA, pagos: [], total: 0, pagaCon: null, publicidad: { persona: 'Mica', aFavor: 30000 } }))
+    expect(aGN.code).toBe(400)
+    const doble = await correr(req('POST', {}, { ...VENTA, publicidad: { persona: 'Mica', aFavor: 1000 }, descuentoVenta: { tipo: 'pct', valor: 10 } }))
+    expect(doble.code).toBe(400)
+    const sinPersona = await correr(req('POST', {}, { ...VENTA, publicidad: { persona: ' ', aFavor: 1000 } }))
+    expect(sinPersona.code).toBe(400)
+    expect(base.ventas.has(ID)).toBe(false)
+    expect(gn.posts).toHaveLength(0)
+  })
+
   it('🔴 la línea sale del PRODUCTO, ⛔ de la pantalla: el renglón que dice `zattia` con un producto de Stunned va a Areben Gestión', async () => {
     conSesion(CAJERA)
     base.productos = [{ id: 7, sku: null, proveedor: 'STUNNED' }]

@@ -94,6 +94,12 @@ import {
   puestoCaja,
 } from '@/lib/caja/cliente'
 import { BandaCambio, ModalCobroCambio, ModalEncargada, ModalVentaOriginal, PedidoCambio, PreguntaBikiniCambio } from '@/components/caja/partesCambio'
+import { BandaFalla, PedidoFalla, RenglonesFalla } from '@/components/caja/partesFalla'
+import { BandaPublicidad, LineasPublicidad, type PublicidadUI } from '@/components/caja/partesPublicidad'
+import { cubreTodo, descuentoDePublicidad, MAX_PERSONA } from '@/lib/caja/publicidad.core.js'
+import { registrarFallaPOS } from '@/lib/caja/falla-pos'
+import { puedeVerAlguna, SECCIONES_POSTVENTA } from '@/lib/permisos'
+import { credencialConPrompt } from '@/lib/sesion'
 import { useCambio } from '@/components/caja/useCambio'
 import { FranjaPuesto } from '@/components/caja/FranjaPuesto'
 import { ModalSinStock } from '@/components/caja/ModalSinStock'
@@ -133,7 +139,9 @@ import {
  * `enviado`: con este id ya se pidió `confirmar` (auditoría A1). Si la respuesta se perdió, la venta
  * puede estar cobrada: «Vaciar pedido» ⛔ renueva el id, y un pedido distinto con él da 409 `yaCobrada`.
  */
-type Borrador = { id: string; renglones: Renglon[]; email: string; descuentoVenta?: Rebaja | null; enviado?: boolean }
+/** `falla`: el pedido está en el estado «Falla» (Bruno, 25-nov): viaja con el carrito para que, al recargar, ⛔ vuelva como una venta. */
+/** `publicidad`: el estado «Publicidad» (Bruno, 25-nov), con la persona y lo que tiene a favor tal como lo escribió la cajera. */
+type Borrador = { id: string; renglones: Renglon[]; email: string; descuentoVenta?: Rebaja | null; enviado?: boolean; falla?: boolean; publicidad?: PublicidadUI | null }
 
 /** V4: el borrador es de la marca de la pestaña (`storeCaja`). */
 const claveCarrito = () => `caja:borrador:${storeCaja()}`
@@ -159,7 +167,7 @@ const ahora = () => Date.now()
 function leerBorrador(): Borrador {
   try {
     const d = JSON.parse(localStorage.getItem(claveCarrito()) || 'null') as Borrador | null
-    if (d && typeof d.id === 'string' && Array.isArray(d.renglones)) return { id: d.id, renglones: d.renglones, email: d.email || '', descuentoVenta: d.descuentoVenta ?? null, enviado: d.enviado === true }
+    if (d && typeof d.id === 'string' && Array.isArray(d.renglones)) return { id: d.id, renglones: d.renglones, email: d.email || '', descuentoVenta: d.descuentoVenta ?? null, enviado: d.enviado === true, falla: d.falla === true, publicidad: d.publicidad && typeof d.publicidad === 'object' ? { persona: String(d.publicidad.persona ?? ''), aFavor: String(d.publicidad.aFavor ?? '') } : null }
   } catch {
     /* sin localStorage: el carrito vive en memoria */
   }
@@ -265,7 +273,7 @@ function POS() {
   // Cuántas búsquedas hay en vuelo. 🔴 El campo ⛔ se deshabilita mientras busca: el lector tipea el
   // código siguiente enseguida, y con el campo bloqueado ese escaneo se PERDÍA (visto en prod, 4-oct).
   const [buscando, setBuscando] = useState(0)
-  const [aviso, setAviso] = useState<{ tono: 'danger' | 'warning'; texto: string } | null>(null)
+  const [aviso, setAviso] = useState<{ tono: 'danger' | 'warning' | 'success'; texto: string } | null>(null)
   // Paso «Validar transferencia» (Bruno, 12-oct; 13-oct: ⛔ «Confirmar», que se lee como el final): la venta guardada que espera el pago, en su modal.
   const [validando, setValidando] = useState<Venta | null>(null)
   const [candidatos, setCandidatos] = useState<{ lista: Candidato[]; mas: number } | null>(null)
@@ -480,6 +488,13 @@ function POS() {
   // dibujaba. El cobro lo sigue frenando el SERVIDOR (`confirmar`: 409 sinTurno / 403 otraCuenta); el cambio ⛔ pide caja allá
   // (erp › Caja › Cambio cobra sin ella) ⇒ acá se traba el botón. `undefined` = todavía ⛔ se leyó (⛔ se dibuja).
   const soloMirar = turno !== undefined && !puedeUsarPOS(turno, perfil)
+  // ── El estado «Falla» (Bruno, 25-nov): la MISMA venta, en otro estado (`lib/caja/falla-pos.ts`). Se escanea normal, el total da
+  // $0 y «Registrar falla» reemplaza a «Continuar al cobro»: ⛔ cobro, ⛔ comprobante, ⛔ mail, ⛔ descuento. Se ve con el permiso que
+  // pide cargar una falla (`api/_fallas.js`: alguna de Post-venta). ──
+  const enFalla = bor.falla === true
+  const puedeFalla = puedeVerAlguna(perfil, storeCaja(), SECCIONES_POSTVENTA)
+  const [registrandoFalla, setRegistrandoFalla] = useState(false)
+  const [errorFalla, setErrorFalla] = useState<string | null>(null)
   const cambioListoParaCobrar = !soloMirar && enCambio && pasoCambio === 2 && cambio.unidadesNuevas > 0 && !cambio.sinPrecio && cambio.devueltas.length > 0 && !cambio.problemaBikini
   /** «Siguiente →»: sin venta pide el PIN de la encargada; con venta pasa directo a lo que se lleva. */
   const siguienteDelCambio = () => {
@@ -754,8 +769,6 @@ function POS() {
     }
   })()
   const descuentoManual = bor.descuentoVenta ?? null
-  // La promo de compra va SIN la feria (A9): la prenda de feria tiene precio final. La a mano, sobre todo.
-  const descuentoVenta: (Rebaja & { sinFeria?: boolean }) | null = descuentoManual ?? (conPromo.venta ? { tipo: 'pesos', valor: conPromo.venta.pesos, sinFeria: true } : null)
   const armado = (() => {
     try {
       if (!bor.renglones.length || sinPrecio) return { filas: null, error: null as string | null }
@@ -765,6 +778,19 @@ function POS() {
     }
   })()
   const filas = armado.filas
+  // 🔑 «Publicidad» (Bruno, 25-nov, `lib/caja/publicidad.core.js`): lo a favor es el descuento a la venta en pesos, cortado en el
+  // subtotal; reemplaza al descuento a mano y a la promo de compra. Si cubre todo, el total da $0 y ⛔ hay forma de pago.
+  const enPublicidad = bor.publicidad != null
+  const aFavorN = enPublicidad ? aNumero(bor.publicidad?.aFavor ?? '') : null
+  const publicidadLista = enPublicidad && (bor.publicidad?.persona.trim().length ?? 0) >= 2 && (bor.publicidad?.persona.trim().length ?? 0) <= MAX_PERSONA && aFavorN != null && aFavorN > 0
+  const subFilas = filas ? filas.reduce((t, f) => t + f.importe, 0) : null
+  const publicidadCubre = publicidadLista && !!filas && cubreTodo({ aFavor: aFavorN as number }, filas)
+  // La promo de compra va SIN la feria (A9): la prenda de feria tiene precio final. La a mano, sobre todo.
+  const descuentoVenta: (Rebaja & { sinFeria?: boolean }) | null = enPublicidad
+    ? publicidadLista && subFilas != null ? descuentoDePublicidad({ aFavor: aFavorN as number }, subFilas) : null
+    : descuentoManual ?? (conPromo.venta ? { tipo: 'pesos', valor: conPromo.venta.pesos, sinFeria: true } : null)
+  const usadoPublicidad = publicidadLista && descuentoVenta ? descuentoVenta.valor : null
+  const sobraPublicidad = usadoPublicidad != null && aFavorN != null ? Math.round((aFavorN - usadoPublicidad) * 100) / 100 : null
   // Lo que queda después de las rebajas a mano: es lo que decide si se ofrecen las 6 cuotas.
   const aPagar = (() => {
     if (!filas || !reglas) return null
@@ -872,7 +898,7 @@ function POS() {
   // 🔑 La pantalla de la clienta (rediseño, fase 3): se le publican los números del POS, ⛔ los recalcula.
   const vistaCliente = JSON.stringify(
     vistaParaCliente({
-      carrito: bor.renglones.map((r) => ({ nombre: r.variante.product_name, talle: r.variante.size_name, color: colorDe(r.variante), cantidad: r.cantidad, precio: r.precio, foto: r.foto })),
+      carrito: (bor.falla ? [] : bor.renglones).map((r) => ({ nombre: r.variante.product_name, talle: r.variante.size_name, color: colorDe(r.variante), cantidad: r.cantidad, precio: r.precio, foto: r.foto })),
       filas,
       aPagar,
       cobro: c,
@@ -965,7 +991,8 @@ function POS() {
   }
 
   async function confirmar(encargada?: { persona: string; pin: string }) {
-    if (!c) return
+    // Con todo a favor (publicidad) ⛔ hay cobro: se registra con total $0 y sin pagos.
+    if (!c && !publicidadCubre) return
     setEnviando(true)
     setAviso(null)
     setBor((b) => (b.enviado ? b : { ...b, enviado: true }))
@@ -976,9 +1003,10 @@ function POS() {
         id: bor.id,
         // El nombre, el talle y la foto van para el ticket por mail; la plata ⛔ los mira.
         items: bor.renglones.map((r, i) => ({ ...items[i], nombre: r.variante.product_name, talle: r.variante.size_name, sku: r.variante.sku ?? null, linea: esStunnedVariante(r.variante) ? 'stunned' : 'zattia', foto: r.foto, precioLista: r.precioLista ?? null, repetida: r.repetida ?? null })),
-        pagos: pedidos,
-        total: c.total,
-        descuentoVenta: descuentoManual,
+        pagos: publicidadCubre ? [] : pedidos,
+        total: publicidadCubre ? 0 : (c?.total ?? 0),
+        descuentoVenta: enPublicidad ? null : descuentoManual,
+        publicidad: enPublicidad && bor.publicidad && aFavorN != null ? { persona: bor.publicidad.persona.trim(), aFavor: aFavorN } : null,
         email: bor.email.trim() || null,
         pagaCon: enEfectivo > 0 ? pagaConN : null,
         ...(encargada ? { encargada } : {}),
@@ -1062,7 +1090,9 @@ function POS() {
   }, [cargarAgenda])
 
   const prendas = bor.renglones.reduce((s, r) => s + r.cantidad, 0)
-  const puedeCobrar = !soloMirar && bor.renglones.length > 0 && !sinPrecio
+  const puedeCobrar = !soloMirar && !enFalla && bor.renglones.length > 0 && !sinPrecio && (!enPublicidad || (publicidadLista && !publicidadCubre))
+  /** Publicidad que cubre toda la compra: «Registrar publicidad» en lugar del cobro (total $0, ⛔ forma de pago). */
+  const puedeRegistrarPublicidad = !soloMirar && publicidadCubre && bor.renglones.length > 0 && !sinPrecio && !enviando
   // Si el pedido se vacía o queda una prenda sin precio, se vuelve al pedido.
   const mostrarCobro = enCobro && puedeCobrar
   // A6: al abrir el cobro, la config y la promo de crédito de HOY (una Caja abierta desde ayer traía las de ayer).
@@ -1088,6 +1118,79 @@ function POS() {
     window.addEventListener('keydown', tecla)
     return () => window.removeEventListener('keydown', tecla)
   }, [puedeCobrar, abrirCobro, enCambio, cambioListoParaCobrar])
+
+  /** «Publicidad» (Bruno, 25-nov): la venta de ahora pasa a tener una persona con plata a favor. Lo escaneado se queda. */
+  function entrarAPublicidad() {
+    setAviso(null)
+    setEnCobro(false)
+    setBor((b) => ({ ...b, publicidad: { persona: '', aFavor: '' }, descuentoVenta: null }))
+  }
+  const salirDePublicidad = () => {
+    setEnCobro(false)
+    setBor((b) => ({ ...b, publicidad: null }))
+  }
+
+  /** Entrar a «Falla»: con el pedido vacío (lo que ya está escaneado es una venta: ⛔ se convierte callado en falla). */
+  function entrarAFalla() {
+    if (bor.renglones.length > 0) {
+      setAviso({ tono: 'warning', texto: 'Para pasar a falla, el pedido tiene que estar vacío: cobralo o vacialo.' })
+      return
+    }
+    setErrorFalla(null)
+    setAviso(null)
+    setEnCobro(false)
+    setBor((b) => ({ ...b, falla: true, descuentoVenta: null, email: '' }))
+  }
+  async function salirDeFalla() {
+    if (bor.renglones.some((r) => r.fallaId != null)) {
+      setErrorFalla('Hay productos cargados en Post-venta que falta descontar: tocá «Registrar falla» de nuevo.')
+      return
+    }
+    if (bor.renglones.length > 0 && !(await preguntar({ titulo: 'Salir de falla', mensaje: `Se ${prendas === 1 ? 'saca el producto' : `sacan los ${prendas} productos`} del pedido. No se cargó ninguna falla.`, ok: 'Salir de falla', tono: 'warning' }))) return
+    setErrorFalla(null)
+    setBor((b) => ({ ...b, renglones: [], falla: false }))
+  }
+  /**
+   * «Registrar falla»: cada renglón es una falla del local (`registrarFallaPOS`). Lo que anduvo sale del pedido; lo que ⛔ queda con
+   * el error y, si ya se cargó en Post-venta, con su `fallaId` (el reintento sólo descuenta: ⛔ carga otra igual).
+   */
+  async function registrarFalla() {
+    if (soloMirar || registrandoFalla || bor.renglones.length === 0) return
+    const rs = bor.renglones
+    if (!(await preguntar({ titulo: 'Registrar falla', mensaje: `${prendas === 1 ? 'El producto se carga' : `Los ${prendas} productos se cargan`} como falla y se ${prendas === 1 ? 'descuenta' : 'descuentan'} del stock. No se cobra ni sale comprobante.`, ok: 'Registrar falla', tono: 'danger' }))) return
+    const cred = await credencialConPrompt('del Monitor')
+    if (!cred) {
+      setErrorFalla('Falta tu contraseña del Monitor: sin ella no se descuenta el stock.')
+      return
+    }
+    setRegistrandoFalla(true)
+    setErrorFalla(null)
+    const ctx = { usuario: perfil?.name || '', cred }
+    const quedan: Renglon[] = []
+    const errores: string[] = []
+    const ajustes: number[] = []
+    let hechas = 0
+    for (const r of rs) {
+      const res = await registrarFallaPOS(storeCaja() as Marca, r, ctx)
+      if (res.ok) {
+        hechas += r.cantidad
+        if (res.erpAjuste) ajustes.push(res.erpAjuste)
+      } else {
+        quedan.push({ ...r, fallaId: res.fallaId, fallaBarcode: res.barcode })
+        errores.push(`${r.variante.product_name} ${r.variante.size_name}: ${res.error}`)
+      }
+    }
+    setBor((b) => ({ ...b, renglones: quedan, falla: quedan.length > 0 }))
+    setRegistrandoFalla(false)
+    if (hechas > 0) {
+      avisar('ok')
+      setAviso({ tono: 'success', texto: `${hechas === 1 ? 'Falla registrada' : `${hechas} fallas registradas`}${ajustes.length ? ` · ajuste ${ajustes.map((a) => `A-${a}`).join(', ')} en Areben Gestión` : ''}. Se ve en Post-venta › Fallas del local.` })
+    }
+    if (errores.length) {
+      avisar('no')
+      setErrorFalla(`No se registró: ${errores.join(' · ')}`)
+    }
+  }
 
   async function vaciar() {
     if (!(await preguntar({ titulo: 'Vaciar pedido', mensaje: `Se ${prendas === 1 ? 'saca el producto' : `sacan los ${prendas} productos`} del pedido. No se cobró nada.`, ok: 'Vaciar pedido', tono: 'warning' }))) return
@@ -1717,6 +1820,8 @@ pendientes
             {avisoSinLlegarJSX}
             {ultimaJSX}
             {modalesJSX}
+            {enFalla && <BandaFalla onSalir={() => void salirDeFalla()} trabajando={registrandoFalla} />}
+            {enPublicidad && bor.publicidad && <BandaPublicidad p={bor.publicidad} onCambio={(p) => setBor((b) => ({ ...b, publicidad: p }))} onSalir={salirDePublicidad} trabajando={enviando} />}
             <div>{buscadorJSX}</div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space[2] }}>
               <h2 style={{ margin: 0, fontSize: font.lg, fontWeight: weight.bold, color: color.ink }}>{`Pedido · ${prendas === 1 ? '1 producto' : `${prendas} productos`}`}</h2>
@@ -1724,41 +1829,64 @@ pendientes
                 Vaciar pedido
               </Button>
             </div>
-            <Card style={{ padding: `0 ${space[3]}px` }}>{renglonesJSX}</Card>
-            {sinPrecio && <Notice tone="warning">Producto sin precio: escribirlo en el renglón.</Notice>}
+            <Card style={{ padding: `0 ${space[3]}px` }}>
+              {enFalla ? <RenglonesFalla renglones={bor.renglones} onCantidad={(i, n) => cambiarRenglon(i, { cantidad: n })} onSacar={sacarRenglon} trabajando={registrandoFalla} /> : renglonesJSX}
+            </Card>
+            {enFalla && errorFalla && <Notice tone="danger">{errorFalla}</Notice>}
+            {!enFalla && sinPrecio && <Notice tone="warning">Producto sin precio: escribirlo en el renglón.</Notice>}
+            {enFalla ? (
+              <span style={{ color: color.mut, fontSize: font.sm }}>Sin mail, sin descuento y sin forma de pago: no se cobra.</span>
+            ) : (
             <Card style={{ display: 'grid', gap: space[2], padding: space[3] }}>
               <Field label="Mail para el ticket (opcional)">
                 <CampoMail valor={bor.email} onCambio={(m) => setBor((b) => ({ ...b, email: m }))} />
               </Field>
+              {enPublicidad ? (
+                <LineasPublicidad persona={bor.publicidad?.persona ?? ''} usado={usadoPublicidad} sobra={sobraPublicidad} />
+              ) : (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
                 <span style={{ color: color.mut }}>Descuento</span>
                 <CampoRebaja valor={descuentoManual} onCambio={(rb) => setBor((b) => ({ ...b, descuentoVenta: rb }))} />
               </div>
-              {!descuentoManual && conPromo.venta && (
+              )}
+              {!enPublicidad && !descuentoManual && conPromo.venta && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[2], fontSize: font.sm }}>
                   <Badge tone="success">{conPromo.venta.nombre}</Badge>
                   <b style={{ color: color.successInk, fontVariantNumeric: 'tabular-nums' }}>−{plata(conPromo.venta.pesos)}</b>
                 </div>
               )}
             </Card>
+            )}
           </div>
 
           <div className="pm-barra">
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: font.sm, color: color.mut }}>{prendas === 0 ? 'Sin productos' : prendas === 1 ? '1 producto' : `${prendas} productos`}</div>
               <div style={{ fontSize: font['2xl'], fontWeight: weight.heavy, color: color.brand, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
-                {bor.renglones.length === 0 ? plata(0) : mostrarCobro && c ? plata(c.total) : aPagar != null ? plata(aPagar) : '—'}
+                {enFalla || bor.renglones.length === 0 ? plata(0) : mostrarCobro && c ? plata(c.total) : aPagar != null ? plata(aPagar) : '—'}
               </div>
             </div>
+            {enFalla ? (
+              <Button size="lg" tone="danger" variant="solid" disabled={bor.renglones.length === 0 || registrandoFalla || soloMirar} onClick={() => void registrarFalla()} style={{ height: 52 }}>
+                {registrandoFalla ? 'Registrando…' : 'Registrar falla'}
+              </Button>
+            ) : publicidadCubre ? (
+              <Button size="lg" tone="success" variant="solid" disabled={!puedeRegistrarPublicidad} onClick={() => void confirmar()} style={{ height: 52 }}>
+                {enviando ? 'Registrando…' : 'Registrar publicidad'}
+              </Button>
+            ) : (
             <Button size="lg" tone="success" variant="solid" disabled={!puedeCobrar} onClick={abrirCobro} style={{ height: 52 }}>
               Continuar al cobro
             </Button>
+            )}
           </div>
         </div>
 
         <Modal abierto={menuMovil} onCerrar={() => setMenuMovil(false)} titulo={`Caja ${MARCA_CAJA.nombre}`}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: space[2] }}>
             {opcion('Ventas', () => setVerVentas(true))}
+            {puedeFalla && !enPublicidad && opcion(enFalla ? 'Salir de falla' : 'Falla', () => (enFalla ? void salirDeFalla() : entrarAFalla()))}
+            {!enFalla && opcion(enPublicidad ? 'Salir de publicidad' : 'Publicidad', () => (enPublicidad ? salirDePublicidad() : entrarAPublicidad()))}
             {!soloMirar && opcion('Contar billetes', () => setPanelTurno('contar'))}
             {!soloMirar && opcion('+ Ingreso', () => setPanelTurno('ingreso'))}
             {!soloMirar && opcion('+ Salida', () => setPanelTurno('salida'))}
@@ -1834,10 +1962,20 @@ pendientes
           </button>
           {/* El cambio en el POS (Bruno, 27-oct): con alguna línea de esta Caja vendiendo por el ERP (`erp_lineas`, su corte). */}
           {(config?.erp_lineas?.length ?? 0) > 0 && (
-            <button type="button" className="pos-tbtn" onClick={() => (enCambio ? salirDelCambio() : (cambio.setError(null), setEnCambio(true)))} aria-pressed={enCambio} style={{ height: 36 }}>
+            <button type="button" className="pos-tbtn" onClick={() => (enCambio ? salirDelCambio() : (cambio.setError(null), setEnCambio(true)))} aria-pressed={enCambio} disabled={enFalla || enPublicidad} style={{ height: 36 }}>
               ⇄ Cambios
             </button>
           )}
+          {/* La Falla del POS (Bruno, 25-nov): un estado de la venta, como el Cambio. */}
+          {puedeFalla && (
+            <button type="button" className="pos-tbtn" onClick={() => (enFalla ? void salirDeFalla() : entrarAFalla())} aria-pressed={enFalla} disabled={enCambio || enPublicidad || registrandoFalla} style={{ height: 36 }}>
+              Falla
+            </button>
+          )}
+          {/* «Publicidad» (Bruno, 25-nov; ⛔ «Canje»): la persona y lo que tiene a favor, descontado del total. */}
+          <button type="button" className="pos-tbtn" onClick={() => (enPublicidad ? salirDePublicidad() : entrarAPublicidad())} aria-pressed={enPublicidad} disabled={enCambio || enFalla || enviando} style={{ height: 36 }}>
+            Publicidad
+          </button>
           <button
             type="button"
             className="pos-tbtn"
@@ -1872,6 +2010,8 @@ pendientes
 
       {modalesTurnoJSX}
 
+      {enFalla && <BandaFalla onSalir={() => void salirDeFalla()} trabajando={registrandoFalla} />}
+      {enPublicidad && bor.publicidad && <BandaPublicidad p={bor.publicidad} onCambio={(p) => setBor((b) => ({ ...b, publicidad: p }))} onSalir={salirDePublicidad} trabajando={enviando} />}
       {enCambio && (
         <BandaCambio paso={pasoCambio} c={cambio} onBuscar={() => setVerVentaOriginal(true)} onSiguiente={siguienteDelCambio} onVolver={() => setPasoCambio(1)} onSalir={salirDelCambio} />
       )}
@@ -1887,7 +2027,7 @@ pendientes
 
           {modalesJSX}
           {modalesCambioJSX}
-          <SectionCard title={enCambio ? (pasoCambio === 1 ? 'Lo que devuelve' : 'Lo que se lleva') : 'Escanear o buscar'} actions={<span style={{ fontSize: font.sm, color: color.mut }}>Variantes: ↑/↓ y Enter</span>}>
+          <SectionCard title={enCambio ? (pasoCambio === 1 ? 'Lo que devuelve' : 'Lo que se lleva') : enFalla ? 'Productos con falla' : 'Escanear o buscar'} actions={<span style={{ fontSize: font.sm, color: color.mut }}>Variantes: ↑/↓ y Enter</span>}>
             {buscadorJSX}
           </SectionCard>
         </div>
@@ -1895,6 +2035,17 @@ pendientes
         <div className="pos-der">
           {enCambio ? (
             <PedidoCambio paso={pasoCambio} c={cambio} onCobro={() => setCobrandoCambio(true)} puedeCobrar={cambioListoParaCobrar} />
+          ) : enFalla ? (
+            <PedidoFalla
+              renglones={bor.renglones}
+              onCantidad={(i, n) => cambiarRenglon(i, { cantidad: n })}
+              onSacar={sacarRenglon}
+              onVaciar={vaciar}
+              onRegistrar={() => void registrarFalla()}
+              trabajando={registrandoFalla}
+              bloqueado={soloMirar}
+              error={errorFalla}
+            />
           ) : (
           <>
           {/* El pedido (prototipo del 5-oct): los renglones se desplazan y el pie —mail, total y «Continuar al
@@ -1918,11 +2069,15 @@ pendientes
                   <span>Subtotal</span>
                   <b style={{ fontVariantNumeric: 'tabular-nums' }}>{bor.renglones.length === 0 ? plata(0) : subtotalFilas != null ? plata(subtotalFilas) : '—'}</b>
                 </div>
+                {enPublicidad ? (
+                  <LineasPublicidad persona={bor.publicidad?.persona ?? ''} usado={usadoPublicidad} sobra={sobraPublicidad} />
+                ) : (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
                   <span style={{ color: color.mut }}>Descuento</span>
                   <CampoRebaja valor={descuentoManual} onCambio={(rb) => setBor((b) => ({ ...b, descuentoVenta: rb }))} />
                 </div>
-                {!descuentoManual && conPromo.venta && (
+                )}
+                {!enPublicidad && !descuentoManual && conPromo.venta && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: space[2], fontSize: font.sm }}>
                     <Badge tone="success">{conPromo.venta.nombre}</Badge>
                     <b style={{ color: color.successInk, fontVariantNumeric: 'tabular-nums' }}>−{plata(conPromo.venta.pesos)}</b>
@@ -1936,7 +2091,12 @@ pendientes
                 </div>
                 {!mostrarCobro && <span style={{ color: color.mut, fontSize: font.sm }}>El descuento de la forma de pago se ve al cobrar.</span>}
                 {sinPrecio && <Notice tone="warning">Producto sin precio: escribirlo en el renglón.</Notice>}
-                {!mostrarCobro && (
+                {enPublicidad && !publicidadLista && <span style={{ color: color.mut, fontSize: font.sm }}>Falta la persona y cuánto tiene a favor.</span>}
+                {publicidadCubre ? (
+                  <Button size="lg" tone="success" variant="solid" fullWidth disabled={!puedeRegistrarPublicidad} onClick={() => void confirmar()} style={{ height: 52 }}>
+                    {enviando ? 'Registrando…' : 'Registrar publicidad'}
+                  </Button>
+                ) : !mostrarCobro && (
                   <Button size="lg" tone="success" variant="solid" fullWidth disabled={!puedeCobrar} onClick={abrirCobro} style={{ height: 52 }}>
                     Continuar al cobro <span className="pos-alt">Alt+C</span>
                   </Button>

@@ -25,6 +25,7 @@ import { leerConfig, leerPendientes, leerTurno, type Config, type Turno, type Ve
 import { Button, Notice, color, font, space, weight } from '@/components/ui'
 import { DeteccionTransferencias, IrA, LogoDelTicket, Pendientes, PoliticaCambio, ProductosFeria, TransferenciasEnEspera, TurnoCaja, UltimosTurnos, VentasDelTurno, diaAr } from '@/components/caja/partes'
 import { VistaTicket } from '@/components/caja/VistaTicket'
+import { PublicidadConSaldo } from '@/components/caja/partesPublicidad'
 import { imprimirTicket, ticketDeVenta } from '@/lib/caja/ticket'
 import { PromosCaja } from '@/components/caja/PromosCaja'
 import { PromosFormaDePago } from '@/components/caja/PromosFormaDePago'
@@ -151,6 +152,8 @@ function CajaDeMarca({ store }: { store: string }) {
         {admin && config && store === 'zattia' && <LogoDelTicket marca="stunned" nombre="Stunned" tienda={config.marca?.tiendaStunned ?? null} inicial={config.ticket_logo_stunned ?? null} onGuardado={(l) => setConfig({ ...config, ...l })} />}
         {admin && <GiftCards />}
         {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}
+        {/* «Publicidad con saldo» (Bruno, 25-nov): lo que le sobró a favor a alguien en una venta con publicidad. */}
+        <PublicidadConSaldo />
         <UltimosTurnos ultimos={ultimosTurnos} onVerVentas={(t) => setVerVentas({ turnoId: t.id, titulo: `Ventas de la caja del ${diaAr(t.abierto_en)}${t.abierto_por ? ` · ${t.abierto_por}` : ''}` })} />
         {verVentas && (
           <VentasDelTurno

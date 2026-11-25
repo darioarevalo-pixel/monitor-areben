@@ -94,6 +94,24 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   NEGATIVOS y donde la venta dice TOTAL dice SIN DIFERENCIA / DIFERENCIA A COBRAR / SALDO A FAVOR. Queda la MISMA tarjeta
   de «Última venta» («Cambio #N · en el ERP»): «Reimprimir ticket» = el comprobante, «Ticket de cambio» = el de regalo de lo
   que se lleva. ⛔ Lo imprime sólo el POS; erp › Caja › Cambio todavía ⛔.
+- 🔑 **La FALLA en el POS (estado «Falla», Bruno 25-nov; pantallas cerradas en https://claude.ai/artifact/UogoxRzVs9iPMMHNak1Kdt)**: botón «Falla»
+  en la barra (PC y el menú del celular), con el permiso de cargar una falla (alguna de `SECCIONES_POSTVENTA`, el mismo de `api/_fallas.js`).
+  Es la MISMA venta en otro estado (`bor.falla`, viaja con el carrito): se escanea normal, el TOTAL da $0 y «Registrar falla» reemplaza a
+  «Continuar al cobro» — ⛔ cobro, ⛔ comprobante, ⛔ mail, ⛔ descuento, y la pantalla de la clienta ⛔ la ve. Se entra con el pedido VACÍO
+  (lo escaneado es una venta). Cada renglón va por el camino de «+Cargar falla» (`registrarFallaPOS`, `lib/caja/falla-pos.ts`):
+  `crearFalla` + `registrarVentaGN` (en una línea cortada, el ajuste «Fallado» del ERP). 🔴 **De dónde se descuenta lo decide el STOCK**
+  (`ubicacionDeFalla`, ⛔ `'local'` fijo). 🔴 Si cargó y ⛔ descontó, el renglón queda con `fallaId` (⛔ se saca, ⛔ se sale de falla) y el
+  reintento sólo descuenta. Tests `caja-falla-pos`, `caja-pos-falla`.
+- 🔑 **PUBLICIDAD en el POS (estado «Publicidad», ⛔ «Canje»; Bruno 25-nov)**: la MISMA venta con la persona (nombre, DNI o @instagram) y lo
+  que tiene a favor (`bor.publicidad`). Las cuentas, en `lib/caja/publicidad.core.js` (pantalla y servidor): lo a favor ES el descuento
+  a la venta en pesos (`descuentoDePublicidad`, cortado en el subtotal), reemplaza al descuento a mano y a la promo de compra (con los dos
+  ⇒ 400), y la diferencia se cobra como una venta (con el % de la forma de pago). 🔑 **Si cubre todo, total $0 SIN pagos**
+  (`cobroConPublicidad`: `cobro()` ⛔ deja un pago en $0): «Registrar publicidad» en lugar del cobro; con pagos ⇒ 400, y sólo si el ticket
+  va al ERP (a GN ⇒ 400; el `payload` va `{ publicidad: true }`, es NOT NULL). 🔴 **⛔ es descuento a mano**: `a_mano.venta` = 0 y
+  `a_mano.publicidad` = { persona, a_favor, usado, sobra } (⛔ migración); al ERP va en `detalle.publicidad` (`entradaDelMotor`); el ticket
+  dice «A favor de [persona]». Lo que sobra se ve en la pestaña Caja › «Publicidad con saldo» (`action=publicidad`, `conSaldo`, 120 días),
+  sólo para mirar: lo organiza quien acordó el monto. Persona y monto A MANO: lo automático con Canjes es otra tanda (Bruno, 25-nov).
+  ⚠️ El mail del ticket (`areben-mailer`) todavía dice «Descuento en la venta». Tests `caja-publicidad`, `caja-pos-falla`, `caja-handler`.
 - 🎯 **«ERP sin CG; GN igual» (Bruno, 10-nov):** la venta de una línea en el ERP (`entradaDelMotorErp`, `reglas` OBLIGATORIO) anota el pago a
   «Transferencia CG» (Caja Gerencia: 20595 Zattia/Stunned, 20597 BDI, salen de `opciones`/`transferenciaFija`/`titulares`, `cajaGerencia`) como la
   «Transferencia» de Areben (`titulares.areben`); adónde fue la plata lo dice la cuenta REAL (la ruta del medio). `caja_venta.pagos` y lo que va a

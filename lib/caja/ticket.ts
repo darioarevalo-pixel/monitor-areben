@@ -56,6 +56,8 @@ export type RenglonTicket = { nombre: string; talle?: string | null; cantidad: n
 export type PagoTicket = { cuenta: number; rebaja?: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
 
 export type DatosTicket = {
+  /** «Publicidad» (Bruno, 25-nov): lo a favor de la persona, en vez de «Descuento en la venta»; con todo a favor ⛔ hay pagos que lo digan. */
+  publicidad?: { persona: string; usado: number; sobra: number } | null
   /** El número de la venta en GN (o en el ERP, si es de Stunned); `null` si todavía ⛔ llegó. */
   numero: number | null
   /** La venta va al ERP, ⛔ a GN: si ⛔ llegó, el ticket dice «pendiente en el ERP». */
@@ -117,6 +119,7 @@ export function ticketDeVenta(venta: Venta, config: Pick<Config, 'politica_cambi
     logo: config?.ticket_logo ?? null,
     logoStunned: config?.ticket_logo_stunned ?? null,
     cliente: venta.email,
+    publicidad: venta.a_mano?.publicidad ? { persona: venta.a_mano.publicidad.persona, usado: venta.a_mano.publicidad.usado, sobra: venta.a_mano.publicidad.sobra } : null,
   }
 }
 
@@ -267,7 +270,9 @@ export function armarTicket(
 
   par('Subtotal', `${t.subtotal < 0 ? '-' : ''}${plata(t.subtotal)}`, 10)
   const aVenta = Math.round(t.pagos.reduce((s, p) => s + (p.rebaja || 0), 0) * 100) / 100
-  if (aVenta > 0) par('Descuento en la venta', `-${plata(aVenta)}`, 10)
+  if (t.publicidad) {
+    if (t.publicidad.usado > 0) par(`A favor de ${t.publicidad.persona}`, `-${plata(t.publicidad.usado)}`, 10)
+  } else if (aVenta > 0) par('Descuento en la venta', `-${plata(aVenta)}`, 10)
   for (const p of t.pagos) {
     if (p.descuento > 0) par(`Descuento ${p.porcentaje}%`, `-${plata(p.descuento)}`, 10)
     if (p.redondeo > 0) par('Redondeo', `+${plata(p.redondeo)}`, 10)
