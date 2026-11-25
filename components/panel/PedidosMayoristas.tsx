@@ -286,7 +286,7 @@ function BarraDePasos({ p }: { p: PedidoDelCliente }) {
 }
 
 /** Los transportes del envío pagado en origen (EM). */
-const TRANSPORTES = ['Andreani', 'Correo Argentino']
+const TRANSPORTES = ['Andreani'] // Correo Argentino fuera: hoy no se usa (Darío 25-nov)
 
 /**
  * El envío del pedido (Darío 15-nov): lo que paga el cliente en origen (EM) va en el pedido y se suma al total, así el pago
