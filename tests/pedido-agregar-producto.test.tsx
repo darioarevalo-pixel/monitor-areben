@@ -79,6 +79,8 @@ beforeEach(async () => {
   root = createRoot(caja)
   await act(async () => { root.render(<HojaPedido pedidoId={P} onCerrar={() => {}} onHecho={() => {}} />) })
   await esperar()
+  // Los productos vienen plegados (Darío 25-nov): se abren para cambiarlos.
+  await act(async () => { boton(/^Productos/).click() })
 })
 afterEach(() => { act(() => root.unmount()); caja.remove() })
 
@@ -117,7 +119,7 @@ describe('«Agregar producto» en la hoja del pedido', () => {
     expect(cliente.cambiarPedidoPanel).toHaveBeenCalledWith(P, [{ productId: 1, sizeId: 10, cantidad: 3 }], [])
   })
 
-  it('un agregado que vuelve a 0 ⛔ viaja, y sin otro cambio ⛔ hay «Guardar»', async () => {
+  it('un agregado que vuelve a 0 ⛔ viaja, y sin otro cambio «Guardar» queda apagado', async () => {
     await act(async () => { boton('+ Agregar').click() })
     await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el producto"]')!, 'cargo')
     await esperar(350)
@@ -125,7 +127,7 @@ describe('«Agregar producto» en la hoja del pedido', () => {
     await confirmarAgregar()
     await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label^="Uno menos de Funda Cargo"]')!.click() })
     expect(document.body.textContent).not.toContain('nuevo')
-    expect(botones().some((b) => b.textContent?.trim() === 'Guardar')).toBe(false)
+    expect(botones().find((b) => b.textContent?.trim() === 'Guardar')?.disabled).toBe(true)
   })
 
   it('el total cambia en el momento, con el redondeo mayorista (Darío 18-nov)', async () => {
@@ -134,6 +136,7 @@ describe('«Agregar producto» en la hoja del pedido', () => {
     root = createRoot(caja)
     await act(async () => { root.render(<HojaPedido pedidoId={P} onCerrar={() => {}} onHecho={() => {}} />) })
     await esperar()
+    await act(async () => { boton(/^Productos/).click() })
     await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label^="Uno más de Funda Mom"]')!.click() })
     expect(document.body.textContent).toMatch(/Total \(sin guardar\).*1\.500/)
     await act(async () => { boton('+ Agregar').click() })
@@ -170,6 +173,7 @@ describe('«Agregar producto» en la hoja del pedido', () => {
     root = createRoot(caja)
     await act(async () => { root.render(<HojaPedido pedidoId={P} onCerrar={() => {}} onHecho={() => {}} />) })
     await esperar()
+    await act(async () => { boton(/^Productos/).click() })
     expect(document.body.textContent).toContain('para el 5%')
     await act(async () => { boton('+ Agregar').click() })
     await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar el producto"]')!, 'case')

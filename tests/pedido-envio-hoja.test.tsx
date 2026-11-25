@@ -51,15 +51,15 @@ const escribir = async (el: HTMLInputElement, v: string) => {
 afterEach(() => { act(() => root?.unmount()); root = null; caja?.remove(); document.body.innerHTML = '' })
 
 describe('Envío en la hoja del pedido', () => {
-  it('sin envío: «+ Envío», monto y transporte → lo guarda', async () => {
+  it('sin envío: «+ Envío» y el monto → lo guarda, sin elegir transporte (Darío 25-nov)', async () => {
     await montar(base)
     expect(boton('💬Total')).toBeUndefined()
     await act(async () => { boton('+ Envío')!.click() })
     await escribir(document.querySelector('input[inputmode="decimal"]') as HTMLInputElement, '12.500')
-    await act(async () => { boton('Andreani')!.click() })
-    await act(async () => { boton('Guardar')!.click() })
+    expect(boton('Andreani')).toBeUndefined()
+    await act(async () => { [...document.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Guardar' && !b.disabled)[0]!.click() })
     await esperar()
-    expect(cliente.ponerEnvioPedidoPanel).toHaveBeenCalledWith(P, 12500, 'Andreani')
+    expect(cliente.ponerEnvioPedidoPanel).toHaveBeenCalledWith(P, 12500, null)
   })
   it('con envío: se ve, «Sacar» lo saca y está «💬 Total»', async () => {
     await montar({ ...base, pedido: { ...base.pedido, total: 96500, envio: 12500, transporte: 'Andreani' } })

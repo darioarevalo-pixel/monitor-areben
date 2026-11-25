@@ -285,9 +285,6 @@ function BarraDePasos({ p }: { p: PedidoDelCliente }) {
   )
 }
 
-/** Los transportes del envío pagado en origen (EM). */
-const TRANSPORTES = ['Andreani'] // Correo Argentino fuera: hoy no se usa (Darío 25-nov)
-
 /**
  * El envío del pedido (Darío 15-nov): lo que paga el cliente en origen (EM) va en el pedido y se suma al total, así el pago
  * cierra justo. Vacío o 0 lo saca. ⛔ se cambia con el pedido facturado (el servidor frena igual).
@@ -298,6 +295,7 @@ function EnvioDelPedido({ envio, transporte, sinFactura, cambiar, guardar }: {
 }) {
   const [abierto, setAbierto] = useState(false)
   const [monto, setMonto] = useState('')
+  // Sin elegir transporte (Darío 25-nov): sólo el monto; el que ya tenía se conserva.
   const [trans, setTrans] = useState<string | null>(null)
   const hay = envio != null && envio > 0
   const abrir = () => { setMonto(hay ? escribirMonto(envio as number) : ''); setTrans(transporte); setAbierto(true) }
@@ -307,11 +305,6 @@ function EnvioDelPedido({ envio, transporte, sinFactura, cambiar, guardar }: {
   if (abierto) return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${color.line2}`, paddingTop: 6 }}>
       <Field label="Envío"><Input inputMode="decimal" autoFocus value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="$" /></Field>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {TRANSPORTES.map((t) => (
-          <Button key={t} size="sm" variant={trans === t ? 'solid' : 'outline'} tone={trans === t ? 'brand' : undefined} onClick={() => setTrans(trans === t ? null : t)}>{t}</Button>
-        ))}
-      </div>
       <div style={{ display: 'flex', gap: 6 }}>
         <Button size="sm" variant="outline" onClick={() => setAbierto(false)}>Cancelar</Button>
         {hay && <Button size="sm" variant="ghost" tone="danger" onClick={() => { setAbierto(false); void guardar(null, null) }}>Sacar</Button>}

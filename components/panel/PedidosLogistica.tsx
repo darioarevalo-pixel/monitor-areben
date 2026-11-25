@@ -667,7 +667,8 @@ function ElegirYCompletar({
   return (
     <Panel>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {cat.datos.dispatch_options.map((o) => (
+        {/* Sólo EM, Etiqueta libre y Transporte (Darío 25-nov: Correo Argentino hoy no se usa); si el pedido ya tiene otra, se sigue viendo. */}
+        {cat.datos.dispatch_options.filter((o) => [FORMA_EM, FORMA_LIBRE, TRANSPORTE].includes(o.code) || codigo === o.code).map((o) => (
           <button
             key={o.code}
             type="button"
