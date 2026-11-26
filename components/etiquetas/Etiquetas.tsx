@@ -31,6 +31,8 @@ import {
   filtrarProductosDeCampania,
   categoriasDeCampania,
   variantesSinCodigo,
+  lineasFpDePrenda,
+  mismaFormaDePago,
 } from '@/lib/etiquetas/core'
 import { buildEstantesPdf, buildEtiquetasPdf, buildLibrePdf, buildSkuGrandePdf, imprimirPdf, SKU_POR_BOLSA, type BolsaSku, type CtxEtiqueta } from '@/lib/etiquetas/pdf'
 import { estantesDelDeposito, nombresDeEstantes, rangosDelDeposito, TOPE_ESTANTES } from '@/lib/ubicaciones-local/core.core.js'
@@ -491,6 +493,7 @@ export function Etiquetas() {
           marca={marca}
           linea={marca === 'zattia' ? linea : undefined}
           anotar={(pid, precio, lista) => void cola.marcar([pid], 'impresa', { [pid]: { precio, precioLista: lista } }).catch(() => {})}
+          fpHoyDe={fpCaja ? (pid) => lineasFpDeCaja(pctDeEtiqueta(fpCaja, pid)) : undefined}
         />
       ) : (
         <ModoPanel
@@ -1156,11 +1159,13 @@ function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiquet
 // contra el precio de Tienda Nube; sellar acá el precio de feria —que en TN ⛔ no está, porque la
 // prenda se oculta— marcaría las 1.282 como «desactualizadas» al instante. La feria ⛔ no es un
 // reetiquetado: es una etiqueta paralela que se saca cuando la feria termina.
-function PrecioDeCampania({ vars, marca, linea, anotar }: { vars: VarianteEti[]; marca: Marca; linea?: 'zattia' | 'stunned'; anotar?: (pid: string, precio: number, lista: number | null) => void }) {
+function PrecioDeCampania({ vars, marca, linea, anotar, fpHoyDe }: { vars: VarianteEti[]; marca: Marca; linea?: 'zattia' | 'stunned'; anotar?: (pid: string, precio: number, lista: number | null) => void; fpHoyDe?: (pid: string) => LineaEtiqueta[] }) {
   const [liq, setLiq] = useState(() => lsGet(keyCampaniaLiq(marca), ''))
   const [copias, setCopias] = useState('1')
   const [conBarras, setConBarras] = useState(false)
   const [conProvisorios, setConProvisorios] = useState(false)
+  // 🔑 Bruno (26-nov, BF): «la de formas de pago si ya está actualizada no la cambiaría» ⇒ por defecto sale sólo si cambia.
+  const [fpSoloSiCambia, setFpSoloSiCambia] = useState(true)
   const [feedback, setFeedback] = useState<{ ok: boolean; tono?: 'warn'; html: string } | null>(null)
   const [tirada, setTirada] = useState<Record<string, number>>(() => lsGet(keyCampaniaTirada(marca), {}))
   const scanRef = useRef<HTMLInputElement>(null)
@@ -1284,8 +1289,10 @@ function PrecioDeCampania({ vars, marca, linea, anotar }: { vars: VarianteEti[];
     }
     // Con un grupo, cada prenda lleva el rótulo y la forma de pago de SU campaña (BF 15/10, Liquidar 10/10).
     const rotuloPrenda = camp.rotuloDe(v.pid)
+    // La de formas de pago sale sólo si dice otra cosa que la que la prenda ya tiene (la que arma hoy la Caja para ella).
+    const fpIgual = !!(porPrenda && rotuloPrenda && fpSoloSiCambia && mismaFormaDePago(lineasFpDePrenda(rotuloPrenda.etiqueta, item), fpHoyDe?.(v.pid)))
     const pdf = porPrenda && rotuloPrenda
-      ? await pdfPorPrenda(rotuloPrenda, v, item, n)
+      ? await pdfPorPrenda(rotuloPrenda, v, item, n, fpIgual ? 'prenda' : undefined)
       : await buildLibrePdf(dibujo(item.precio, n, conBarras ? String(v.barcode || '') : ''))
     if (pdf) imprimirPdf(pdf)
     if (porPrenda) setUltimaPrenda({ v, item })
@@ -1298,7 +1305,7 @@ function PrecioDeCampania({ vars, marca, linea, anotar }: { vars: VarianteEti[];
     setFeedback({
       ok: true,
       tono: item.firme ? undefined : 'warn',
-      html: `✓ ${n === 1 ? '1 etiqueta' : `${n} etiquetas`} de <b>$${Math.round(item.precio).toLocaleString('es-AR')}</b> · ${item.nombre}${item.firme ? '' : ' <b>(provisorio)</b>'}`,
+      html: `✓ ${n === 1 ? '1 etiqueta' : `${n} etiquetas`} de <b>$${Math.round(item.precio).toLocaleString('es-AR')}</b> · ${item.nombre}${item.firme ? '' : ' <b>(provisorio)</b>'}${porPrenda ? (fpIgual ? ' · formas de pago: <b>no cambia</b>, no se imprime' : ' · <b>+ formas de pago nueva</b>') : ''}`,
     })
     inp.focus()
   }
@@ -1361,6 +1368,12 @@ function PrecioDeCampania({ vars, marca, linea, anotar }: { vars: VarianteEti[];
                 <option key={c.id} value={c.id}>{c.nombre}</option>
               ))}
             </Select>
+          </label>
+        )}
+        {porPrenda && fpHoyDe && (
+          <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <input type="checkbox" id="fp-solo-si-cambia" style={{ accentColor: 'var(--mo-brand-solid)' }} checked={fpSoloSiCambia} onChange={(e) => setFpSoloSiCambia(e.target.checked)} />
+            Formas de pago: sólo si cambia
           </label>
         )}
         <label style={{ fontSize: 12, color: color.mut }}>Copias por escaneo<br />

@@ -26,6 +26,11 @@ es sólo de la pestaña de Precio: va detrás de cualquiera de las dos que dicen
 
 ## ⛔ Lo que comparte con otras secciones
 
+- 🔑 **Desde el 26-nov-2026, en Precio de campaña la de formas de pago sale SÓLO SI CAMBIA** (Bruno, BF: «la de formas de pago si ya
+  está actualizada no la cambiaría»). Tilde «Formas de pago: sólo si cambia», prendido por defecto: compara la de la campaña con la que
+  arma hoy la Caja para esa prenda (`mismaFormaDePago` + `lineasFpDeCaja`). Sin la Caja leída, sale. Medido el 26-nov: de 1.331 prendas
+  de BLACK en el Local, cambian 306 (Liquidar 10/10 y el Buzo Future). Test `etiquetas-fp-si-cambia`.
+
 - 🔑 **Desde el 26-nov-2026, la etiqueta POR PRENDA de Precio de campaña queda registrada** (Bruno, BF: «que haya un registro de que
   reetiquetaron»): se sella con su número, y cuando se aplica la campaña la cola ⛔ la vuelve a pedir si dice el número que quedó y se
   imprimió después del último cambio de rótulo (`etiquetaAnticipada`, `lib/etiquetas/cola.core.js`). ⚠️ Entre imprimir y aplicar, esas
