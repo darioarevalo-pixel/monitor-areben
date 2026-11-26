@@ -34,6 +34,17 @@ describe('unidadesEnPedidos', () => {
   it('SKU repetido dentro del producto: desempata el talle', () => {
     expect(unidadesEnPedidos(inv, [{ sku: 'BKB-0003-VI-L', nombre: 'BOMBACHA NYA - VIOLETA (L)', cantidad: 1 }])).toEqual({ l: 1 })
   })
+  it('bikini CONJUNTO (SKU de las partes unido con «+», 26-nov-2026): cuenta el corpiño y la bombacha', () => {
+    const conj = [V('cs', 'BKC-0008-S', 'CORPIÑO JULIET RIVIERA', 'S'), V('bs', 'BKB-0008-S', 'BOMBACHA JULIET RIVIERA', 'S'), V('bm', 'BKB-0008-M', 'BOMBACHA JULIET RIVIERA', 'M')]
+    const p = [
+      { sku: 'BKC-0008-S+BKB-0008-S', nombre: 'Bikini JULIET · Riviera (S, S)', cantidad: 1, reserva: true },
+      { sku: 'bkc-0008-s+BKB-0008-M', nombre: 'Bikini JULIET · Riviera (S, M)', cantidad: 1, reserva: true },
+    ]
+    expect(unidadesEnPedidos(conj, p)).toEqual({ cs: 2, bs: 1, bm: 1 })
+    expect(reservadasEnPedidos(conj, p)).toEqual({ cs: 2, bs: 1, bm: 1 })
+    // una parte con SKU repetido: el nombre es el de la bikini ⇒ ⛔ desempata, la otra parte igual cuenta
+    expect(unidadesEnPedidos(inv.concat(conj), [{ sku: 'BKB-0002-VI-S+BKB-0008-M', nombre: 'Bikini X (S, M)', cantidad: 1 }])).toEqual({ bm: 1 })
+  })
   it('SKU repetido sin coincidencia, o SKU desconocido: no hay alerta', () => {
     expect(unidadesEnPedidos(inv, [{ sku: 'BKB-0002-VI-S', nombre: 'BIKINI TAYRA (S)', cantidad: 1 }, { sku: 'NADA', nombre: 'x', cantidad: 1 }])).toEqual({})
   })
