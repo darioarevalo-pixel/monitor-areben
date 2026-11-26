@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { REGLAS_INICIALES } from '@/lib/caja/core.core.js'
 import type { Reglas } from '@/lib/caja/cliente'
-import { BLACK_FRIDAY, bikiniDeLaParte, enBlackFriday, escaleraDeHoy, partesDeLaBikini, recargaDelTotem, esTarjetaEncargada, indiceDelTotem, opcionesDelLocal, coloresDelProducto, precioTotem, tallesDelLocal, varianteDelCodigo } from '@/lib/caja/totem'
+import { BLACK_FRIDAY, bikiniDeLaParte, fotosDeLaBikini, enBlackFriday, escaleraDeHoy, partesDeLaBikini, recargaDelTotem, esTarjetaEncargada, indiceDelTotem, opcionesDelLocal, coloresDelProducto, precioTotem, tallesDelLocal, varianteDelCodigo } from '@/lib/caja/totem'
 
 /**
  * El tótem (rediseño, fase 4). Oráculo a mano con las reglas iniciales: efectivo 15 % y redondeo a $100.
@@ -193,6 +193,15 @@ describe('🩱 la bikini en el tótem', () => {
     const p = precioTotem({ product_id: 1000000074, size_id: 1000000075, precio: 26990, reglas: BIKINIS, hoy: '2026-11-27', categorias: [], bikini: SKY as never })
     expect(p).toMatchObject({ antes: 49990, pctOferta: 15, promo: 'Black Friday bikinis' })
     expect(escaleraDeHoy(BIKINIS, '2026-11-27', [1000000074, 1000000070], [])).toBeNull()
+  })
+
+  it('las fotos son las del producto BIKINI de TN (por la variante), ⛔ el geometral de la parte', () => {
+    const audit = [
+      { id: 1, imagenes: [{ src: 'geometral.png' }], variantes: [{ id: '11' }] },
+      { id: 382971482, imagenes: [{ src: 'juliet-1.jpg' }, { src: 'juliet-2.png' }], variantes: [{ id: '1644988985' }] },
+    ]
+    expect(fotosDeLaBikini(audit, 1644988985)).toEqual(['juliet-1.jpg', 'juliet-2.png'])
+    expect(fotosDeLaBikini(audit, 999)).toEqual([])
   })
 
   it('una prenda fuera del alcance ⛔ tiene escalera', () => {

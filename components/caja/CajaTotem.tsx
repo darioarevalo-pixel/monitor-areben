@@ -33,7 +33,7 @@ import { imagenesDe } from '@/lib/tn'
 import { precioDeCaja } from '@/lib/caja/precio'
 import { hoyIso } from '@/lib/agenda'
 import { buscarNombre, buscarProducto, elegirVariante, leerConfig, stockEnVivo, type Candidato, type Config, type ProductoLista, type Variante } from '@/lib/caja/cliente'
-import { bikiniDeLaParte, coloresDelProducto, combosDeHoy, enBlackFriday, escaleraDeHoy, esTarjetaEncargada, fotosDeLaPrenda, indiceDelTotem, opcionesDelLocal, partesDeLaBikini, precioTotem, primeroLosDelLocal, recargaDelTotem, TOTEM_MS, varianteDelCodigo } from '@/lib/caja/totem'
+import { bikiniDeLaParte, coloresDelProducto, combosDeHoy, fotosDeLaBikini, enBlackFriday, escaleraDeHoy, esTarjetaEncargada, fotosDeLaPrenda, indiceDelTotem, opcionesDelLocal, partesDeLaBikini, precioTotem, primeroLosDelLocal, recargaDelTotem, TOTEM_MS, varianteDelCodigo } from '@/lib/caja/totem'
 import { TTL_MS } from '@/lib/cache'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
@@ -167,6 +167,8 @@ function Totem() {
     if (kit) {
       // 🩱 La bikini: el nombre y el precio de la bikini, los talles de cada parte y las fotos de las dos.
       const partes = partesDeLaBikini(kit)
+      // Las fotos del producto BIKINI de TN; sólo si ⛔ está, las de las partes (que suelen ser el geometral).
+      const deLaBikini = fotosDeLaBikini(audit, kit.variant_id)
       const fotosPartes = partes.flatMap((pt) => precioYFoto(pt.product_id).fotos)
       setEstado({
         que: 'ok',
@@ -174,7 +176,7 @@ function Totem() {
           variante,
           nombre: kit.nombre,
           tipo: 'Bikini',
-          fotos: fotosDeLaPrenda(cols.foto, cols.fotos, foto, fotos, fotosPartes),
+          fotos: deLaBikini.length ? fotosDeLaPrenda(deLaBikini) : fotosDeLaPrenda(cols.foto, cols.fotos, foto, fotos, fotosPartes),
           colores: [],
           colorActual: null,
           talles: [],
