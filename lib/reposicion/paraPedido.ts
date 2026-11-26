@@ -50,10 +50,17 @@ export function unidadesEnPedidos(todas: Variante[], prendas: PrendaPedido[]): R
   }
   const out: Record<string, number> = {}
   for (const p of prendas) {
-    const candidatas = porSku.get(clave(p.sku))
-    if (!candidatas) continue
-    const v = candidatas.length === 1 ? candidatas[0] : candidatas.find((c) => esLaMismaPrenda(c, p.nombre))
-    if (v) out[v.vid] = (out[v.vid] || 0) + p.cantidad
+    // 🔴 La bikini 2027 se vende en TN como CONJUNTO y la línea trae el SKU de sus partes unido con «+»
+    // (`BKC-0008-S+BKB-0008-M`: corpiño S + bombacha M; medido 26-nov en #7583 y #7586). En el inventario están
+    // las partes sueltas ⇒ sin partirlo ⛔ cruzaba nada y el pedido ⛔ salía en Reposición. Cada parte cuenta la
+    // cantidad entera; si una parte tiene el SKU repetido, el nombre de la línea (el de la bikini) ⛔ desempata ⇒ sin alerta.
+    const partes = clave(p.sku).split('+').map((s) => s.trim()).filter(Boolean)
+    for (const parte of partes) {
+      const candidatas = porSku.get(parte)
+      if (!candidatas) continue
+      const v = candidatas.length === 1 ? candidatas[0] : partes.length === 1 ? candidatas.find((c) => esLaMismaPrenda(c, p.nombre)) : undefined
+      if (v) out[v.vid] = (out[v.vid] || 0) + p.cantidad
+    }
   }
   return out
 }
