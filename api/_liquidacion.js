@@ -57,6 +57,8 @@ import { armarCola, cambioElRotulo, conCambioDeRotulo } from '../lib/etiquetas/c
 import { fpDeCaja } from '../lib/etiquetas/fpCaja.core.js';
 import { reglasDeHoy as reglasDeHoyCaja, reglasGuardadas as reglasGuardadasCaja } from './_caja-reglas.js';
 import { marcaDeCaja } from '../lib/caja/marcas.core.js';
+import { conjuntosDeCaja } from './_caja-motor.js';
+import { bikinisParaEtiquetas } from '../lib/etiquetas/bikinis.core.js';
 // El aviso de la portada: ofertas escritas en la tienda sin campaña viva que las justifique.
 import { ofertasColgadas } from '../lib/liquidacion/colgadas.core.js';
 // Qué clase de cambio de precio es la campaña: la lista de tipos válidos y su default.
@@ -556,6 +558,14 @@ export default async function handler(req, res) {
     // la pantalla lo dice y ⛔ imprime: la etiqueta de una línea cortada con el precio de TN puede decir otro número que la Caja.
     if (vistaEtiquetas && String(req.query.minorista || '') === '1') {
       return res.status(200).json({ ok: true, ...(await minoristaDelErp(store)), leidoEn: new Date().toISOString() });
+    }
+
+    // 🔑 `&bikinis=1`: las bikinis 2027 (corpiño + bombacha) que conoce la Caja, para que escanear una parte imprima la etiqueta de SU
+    // bikini con el precio que cobra la Caja (Bruno, 26-nov). Lista blanca (`bikinisParaEtiquetas`): ⛔ viaja el reparto por costo.
+    if (vistaEtiquetas && String(req.query.bikinis || '') === '1') {
+      const kits = await conjuntosDeCaja(store).catch((e) => ({ conjuntos: null, error: e && e.message }));
+      if (!kits.conjuntos) return res.status(502).json({ ok: false, error: `No se pudieron leer las bikinis de Areben Gestión (${kits.error || 'sin conexión'}).` });
+      return res.status(200).json({ ok: true, bikinis: bikinisParaEtiquetas(kits.conjuntos), leidoEn: new Date().toISOString() });
     }
 
     if (vistaEtiquetas) {
