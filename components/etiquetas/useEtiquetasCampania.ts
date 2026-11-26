@@ -7,6 +7,7 @@ import type { EtiquetaCampania } from '@/lib/liquidacion/etiqueta'
 import { lineasFpDePrenda } from '@/lib/etiquetas/core'
 import { buildEtiquetasPdf } from '@/lib/etiquetas/pdf'
 import type { LabelItem, VarianteEti } from '@/lib/etiquetas/tipos'
+import { esGrupo, gruposDeCampanias, unirCampanias, type GrupoCampanias } from '@/lib/etiquetas/grupos'
 
 /**
  * LOS PRECIOS DE UNA CAMPAÑA, PARA ETIQUETAR ANTES DE APLICARLOS.
@@ -31,7 +32,7 @@ const API = '/api/datos?recurso=liquidacion'
 /** Un producto de la campaña, tal como sale de `preciosAEtiquetar`. */
 export type PrecioCampania = { pid: string; nombre: string; imagen: string | null; precio: number; lista: number | null; parte?: string | null; firme: boolean }
 
-export type CampaniaEti = { id: string; nombre: string; desde: string | null; hasta: string | null; linea?: string | null }
+export type CampaniaEti = { id: string; nombre: string; desde: string | null; hasta: string | null; linea?: string | null; nombreComercial?: string | null }
 
 /**
  * Cómo se imprime la etiqueta de esta campaña: el título de arriba y el diseño (qué va debajo del
@@ -42,6 +43,15 @@ export type RotuloCampania = { id: string; nombre: string; nombreComercial: stri
 
 export interface EstadoCampania {
   campanias: CampaniaEti[]
+  /** Las campañas con el mismo rótulo en la misma línea, para etiquetarlas juntas (`lib/etiquetas/grupos.ts`). */
+  grupos: GrupoCampanias[]
+  /**
+   * El rótulo de la campaña de ESTE producto. Con una campaña es `rotulo`; con un grupo, el de la campaña de donde vino (la forma de
+   * pago de atrás cambia: BF 15/10, Liquidar 10/10).
+   */
+  rotuloDe: (pid: string) => RotuloCampania | null
+  /** Productos que están en más de una campaña del grupo: se quedan con la más nueva. */
+  repetidos: string[]
   /**
    * El rótulo que va IMPRESO arriba del precio, tal como lo dejó quien armó la campaña. 🔑 Sale del
    * servidor y ⛔ no de esta máquina: va en miles de etiquetas y tiene que ser uno solo.
@@ -67,6 +77,9 @@ export function useEtiquetasCampania(marca: Marca, liq: string, activo = true, l
   const campanias = useMemo(() => (linea ? todas.filter((c) => !c.linea || c.linea === linea) : todas), [todas, linea])
   const [items, setItems] = useState<PrecioCampania[]>([])
   const [rotulo, setRotulo] = useState<RotuloCampania | null>(null)
+  const [rotuloPorPid, setRotuloPorPid] = useState<Record<string, RotuloCampania>>({})
+  const [repetidos, setRepetidos] = useState<string[]>([])
+  const grupos = useMemo(() => gruposDeCampanias(campanias), [campanias])
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -83,33 +96,46 @@ export function useEtiquetasCampania(marca: Marca, liq: string, activo = true, l
   }, [marca, activo])
 
   // Con marca elegida, la campaña guardada vale sólo si sigue en la lista: oculta o de la otra marca ⛔ se etiqueta.
-  const liqValido = linea ? (campanias.some((c) => c.id === liq) ? liq : '') : liq
+  const liqValido = esGrupo(liq) ? (grupos.some((g) => g.id === liq) ? liq : '') : linea ? (campanias.some((c) => c.id === liq) ? liq : '') : liq
   const liqEfectivo = liqValido || (campanias.length === 1 ? campanias[0].id : '')
 
   const traerItems = useCallback(async () => {
     if (!activo || !liqEfectivo) {
       setItems([])
       setRotulo(null)
+      setRotuloPorPid({})
+      setRepetidos([])
       return
     }
     setCargando(true)
     setError(null)
     try {
-      const r = await apiFetch(`${API}&store=${marca}&etiquetas=1&precios=1&liq=${encodeURIComponent(liqEfectivo)}&nc=${Date.now()}`)
-      const d = await r.json().catch(() => null)
-      if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer los precios de la campaña.')
-      setItems(d.items || [])
-      setRotulo(d.campania || null)
+      const ids = esGrupo(liqEfectivo) ? grupos.find((g) => g.id === liqEfectivo)?.miembros || [] : [liqEfectivo]
+      const listas = await Promise.all(
+        ids.map(async (id) => {
+          const r = await apiFetch(`${API}&store=${marca}&etiquetas=1&precios=1&liq=${encodeURIComponent(id)}&nc=${Date.now()}`)
+          const d = await r.json().catch(() => null)
+          if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer los precios de la campaña.')
+          return { items: (d.items || []) as PrecioCampania[], rotulo: (d.campania || null) as RotuloCampania | null }
+        }),
+      )
+      const u = unirCampanias(listas)
+      setItems(u.items)
+      setRotulo(listas[0]?.rotulo || null)
+      setRotuloPorPid(Object.fromEntries(Object.entries(u.rotuloPorPid).filter(([, r]) => r)) as Record<string, RotuloCampania>)
+      setRepetidos(u.repetidos)
     } catch (e) {
       // 🔑 La lista se vacía al fallar, igual que la cola: seguir escaneando contra un mapa viejo
       // imprime precios que ya no son los de la campaña, y eso no se ve hasta que está en la percha.
       setItems([])
       setRotulo(null)
+      setRotuloPorPid({})
+      setRepetidos([])
       setError(e instanceof Error ? e.message : 'No se pudieron leer los precios de la campaña.')
     } finally {
       setCargando(false)
     }
-  }, [marca, liqEfectivo, activo])
+  }, [marca, liqEfectivo, activo, grupos])
 
   useEffect(() => {
     let vivo = true
@@ -146,7 +172,9 @@ export function useEtiquetasCampania(marca: Marca, liq: string, activo = true, l
     return [...m.values()].sort((a, b) => a.precio - b.precio)
   }, [items])
 
-  return { campanias, rotulo, porPid, porPrecio, cargando, error, liqEfectivo }
+  const rotuloDe = useCallback((pid: string) => rotuloPorPid[pid] || rotulo, [rotuloPorPid, rotulo])
+
+  return { campanias, grupos, rotulo, rotuloDe, repetidos, porPid, porPrecio, cargando, error, liqEfectivo }
 }
 
 /**

@@ -586,6 +586,8 @@ export default async function handler(req, res) {
             desde: (r.datos || {}).desde || null,
             hasta: (r.datos || {}).hasta || null,
             linea: lineas.get(r.id) ?? null,
+            // El rótulo impreso: Etiquetas junta en una opción las campañas de la misma línea con el mismo (Bruno 26-nov, BF).
+            nombreComercial: (r.datos || {}).nombreComercial || null,
           })),
         });
       }
