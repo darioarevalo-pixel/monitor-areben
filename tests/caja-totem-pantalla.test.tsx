@@ -20,7 +20,7 @@ let pedidosDeStock = 0
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', setMarca: () => {} }) }))
 vi.mock('@/components/fundas/useDatosMonitor', () => ({ useDatosMonitor: () => ({ datos: { allProductos: [{ id: 5 }], allVariantes: cargadas } }) }))
 vi.mock('@/components/productos/useTnImages', () => ({ useTnPromo: () => ({}) }))
-vi.mock('@/lib/etiquetas/core', () => ({ construirPrecios: () => ({ precios: { 5: 18900 }, fueraDeTn: new Set() }) }))
+vi.mock('@/lib/etiquetas/core', () => ({ construirPrecios: () => ({ precios: { 5: 18900 }, promos: {}, fueraDeTn: new Set() }) }))
 vi.mock('@/lib/tn', () => ({ imagenDe: () => null, imagenesDe: () => ['tienda-2.jpg'], matchTn: () => null }))
 vi.mock('@/lib/tn-audit', () => ({
   traerAudit: () =>
@@ -85,6 +85,8 @@ async function escanear(codigo: string) {
   return caja.textContent ?? ''
 }
 
+const foto = () => caja.querySelector('.totem-foto img.on')?.getAttribute('src')
+
 describe('CajaTotem', () => {
   it('muestra la prenda y el precio sin afirmar stock hasta confirmarlo', async () => {
     stockPendiente = true
@@ -129,35 +131,34 @@ describe('CajaTotem', () => {
     expect(t).toContain('16.100')
   })
 
-  it('espera con «Escaneá un producto»', async () => {
+  it('espera con «Escaneá el producto» y qué va a ver (Bruno 26-nov)', async () => {
     const { CajaTotem } = await import('@/components/caja/CajaTotem')
     await act(async () => raiz.render(<CajaTotem />))
-    expect(caja.textContent).toContain('Escaneá un producto para ver su precio')
+    expect(caja.textContent).toContain('Escaneá el producto')
+    expect(caja.textContent).toContain('Mirá el precio y los talles disponibles.')
   })
 
-  it('una prenda: nombre, talles del local, lista y efectivo del núcleo', async () => {
+  it('una prenda: nombre, talles del local, precio y las TRES formas de pago iguales, del núcleo (26-nov)', async () => {
     const t = await escanear('7790001')
     expect(t).toContain('BLAZER NEREA')
-    expect(t).toContain('Talles en el local')
     expect(t).toContain('$18.900')
-    expect(t).toContain('$16.100')
-    expect(t).toContain('Ahorrás $2.800')
-    // Con las reglas iniciales transferencia es 10 % ⇒ ⛔ «o transferencia».
-    expect(t).toContain('En efectivo')
-    expect(t).not.toContain('o transferencia')
+    expect(t).toContain('3 cuotas sin interés de $6.300')
+    expect(t).toContain('Efectivo$16.100−15%')
+    expect(t).toContain('Transferencia$17.000−10%')
+    // Sin oferta: ⛔ tachado ni «Black Friday».
+    expect(caja.querySelector('.totem-antes')).toBeNull()
     // La fila de colores del audit de TN, y la foto del color escaneado.
     expect(t).toContain('Negro')
     expect(t).toContain('Chocolate')
-    expect(caja.querySelector('img')?.getAttribute('src')).toBe('negro.jpg')
+    expect(foto()).toBe('negro.jpg')
     const s = [...caja.querySelectorAll('span')].find((x) => x.textContent === 'S')!
     expect(s.style.textDecoration).toBe('line-through')
   })
 
   it('muestra los DOS precios y la galería avanza con las flechas, empezando por la foto del color', async () => {
     const t = await escanear('7790001')
-    expect(t).toContain('Con transferencia')
+    expect(t).toContain('Transferencia')
     expect(t).toContain('$17.000')
-    const foto = () => caja.querySelector('img')?.getAttribute('src')
     expect(foto()).toBe('negro.jpg')
     const siguiente = caja.querySelector('button[aria-label="Foto siguiente"]') as HTMLButtonElement
     await act(async () => siguiente.dispatchEvent(new MouseEvent('click', { bubbles: true })))
@@ -174,9 +175,9 @@ describe('CajaTotem', () => {
     expect(blanco.getAttribute('aria-pressed')).toBe('true')
     const siguiente = caja.querySelector('button[aria-label="Foto siguiente"]') as HTMLButtonElement
     await act(async () => siguiente.dispatchEvent(new MouseEvent('click', { bubbles: true })))
-    expect(caja.querySelector('img')?.getAttribute('src')).toBe('atras.jpg')
+    expect(foto()).toBe('atras.jpg')
     await act(async () => blanco.dispatchEvent(new MouseEvent('click', { bubbles: true })))
-    expect(caja.querySelector('img')?.getAttribute('src')).toBe('negro.jpg')
+    expect(foto()).toBe('negro.jpg')
     const chocolate = [...caja.querySelectorAll('button')].find((b) => b.textContent?.includes('Chocolate')) as HTMLButtonElement
     await act(async () => chocolate.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     expect(chocolate.getAttribute('aria-pressed')).toBe('true')

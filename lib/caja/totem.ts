@@ -11,51 +11,141 @@
  */
 
 import { cobro, idsDeFeria, pagosDeMedio, precioDeFeria, renglones } from '@/lib/caja/core.core.js'
-import { aplicarPromos } from '@/lib/caja/promos.core.js'
+import { aplicarPromos, entra, promosVigentes } from '@/lib/caja/promos.core.js'
+import { conjuntosConPieza, parteDe, type ConjuntoCaja } from '@/lib/caja/conjuntos.core.js'
 import { talleVisible } from '@/lib/caja/ticket-mail.core.js'
 import { porTalle } from '@/lib/caja/buscar.core.js'
 import { normCode } from '@/lib/caja/gn.core.js'
 import type { Candidato, Reglas, Variante } from '@/lib/caja/cliente'
 
 /**
- * `conTransferencia`: el MISMO cobro por transferencia da el mismo total ⇒ el rótulo dice «En efectivo o
- * transferencia». Se pregunta al núcleo, ⛔ se supone: con las reglas iniciales efectivo es 15 % y
- * transferencia 10 %, y decir «o transferencia» ahí sería prometer un precio que la caja ⛔ cobra.
+ * Las tres formas de pago van IGUALES (diseño aprobado por Bruno, 26-nov: ⛔ priorizar el efectivo): tarjeta en 3 cuotas sin
+ * interés, transferencia y efectivo. Cada monto es el `cobro()` de la Caja con la cuenta de esa forma de pago; el % del chip sale
+ * de comparar ese total con el de tarjeta, ⛔ de la regla escrita (una prenda de campaña puede pagar otro % en efectivo).
+ * `null`: la Caja ⛔ tiene esa cuenta configurada.
  */
-/** `promo`: el nombre de la promo del local que le toca a la prenda sola (W5), o null. */
-export type PrecioTotem =
-  | { feria: true; lista: number; final: number }
-  | { feria: false; lista: number; efectivo: number; /** `null`: sin cuenta de transferencia configurada. */ transferencia: number | null; ahorro: number; conTransferencia: boolean; promo: string | null }
+export type PagosTotem = {
+  tarjeta: number | null
+  /** Una de las 3 cuotas sin interés (Bruno, 26-nov). */
+  cuota: number | null
+  transferencia: number | null
+  pctTransferencia: number | null
+  efectivo: number
+  pctEfectivo: number | null
+}
 
 /**
- * El precio de una prenda para el tótem; `null` si no tiene precio o la Caja no tiene formas de pago.
- * 🔑 Robustez (auditoría, 11-oct): con las PROMOS del local, como el POS (`aplicarPromos`, el MISMO núcleo):
- * antes el tótem decía un precio más alto que el que cobraba la caja. `hoy` y `categorias` (las de Tienda
- * Nube) son los mismos datos que usa el POS.
+ * `precio`: lo que paga la prenda con las promos de la Caja (el precio grande). `antes`: el precio de antes, para tacharlo (la
+ * lista de Tienda Nube cuando está en oferta, o el de la prenda antes de la promo de la Caja); `null` si ⛔ hay rebaja.
+ * `promo`: el nombre de la promo del local que le toca a la prenda sola (W5), o null.
  */
-export function precioTotem(a: { product_id: number; size_id: number; precio: number | null; reglas: Reglas | null; hoy: string; categorias: string[] }): PrecioTotem | null {
+export type PrecioTotem =
+  | { feria: true; lista: number; final: number }
+  | ({ feria: false; lista: number; precio: number; antes: number | null; pctOferta: number | null; promo: string | null } & PagosTotem)
+
+const pctDe = (menor: number, mayor: number) => (mayor > 0 && menor < mayor ? Math.round((1 - menor / mayor) * 100) : null)
+const CUOTAS = 3
+
+/**
+ * El precio de una prenda (o de UNA bikini) para el tótem; `null` si no tiene precio o la Caja no tiene formas de pago.
+ * 🔑 Robustez (auditoría, 11-oct): con las PROMOS del local, como el POS (`aplicarPromos`, el MISMO núcleo).
+ * 🩱 `bikini` (26-nov): se vende SÓLO la bikini completa ⇒ el precio es el de la bikini (el de Tienda Nube, con su oferta), con
+ * sus partes marcadas como en la Caja: la promo la cuenta como UNA unidad. `antes` = la lista de TN de la prenda o de la bikini.
+ */
+export function precioTotem(a: { product_id: number; size_id: number; precio: number | null; antes?: number | null; reglas: Reglas | null; hoy: string; categorias: string[]; bikini?: ConjuntoCaja | null }): PrecioTotem | null {
   if (!a.reglas?.medios) return null
   const reglas = a.reglas
+  const kit = a.bikini && a.bikini.piezas.length && a.bikini.precio > 0 ? a.bikini : null
   // La prenda de feria, al precio de SU campaña, como en el POS (13-oct).
-  const precio = precioDeFeria(reglas, a.product_id) ?? a.precio
+  const precio = kit ? kit.precio : (precioDeFeria(reglas, a.product_id) ?? a.precio)
   if (precio == null || !(precio > 0)) return null
-  const conPromo = aplicarPromos({ items: [{ product_id: a.product_id, size_id: a.size_id, cantidad: 1, precio, categorias: a.categorias }], promos: reglas.promos, feriaIds: idsDeFeria(reglas), hoy: a.hoy })
+  const items = kit
+    ? kit.piezas.map((p) => ({ product_id: p.product_id, size_id: p.size_id, cantidad: 1, precio: p.precio, categorias: a.categorias, conjunto: { variant_id: kit.variant_id, n: p.n } }))
+    : [{ product_id: a.product_id, size_id: a.size_id, cantidad: 1, precio, categorias: a.categorias }]
+  const conPromo = aplicarPromos({ items, promos: reglas.promos, feriaIds: idsDeFeria(reglas), hoy: a.hoy })
   const filas = renglones(conPromo.items)
   const descuentoVenta = conPromo.venta ? { tipo: 'pesos' as const, valor: conPromo.venta.pesos, sinFeria: true } : null
-  const nombres = [...(conPromo.items[0].promos ?? []), ...(conPromo.venta ? [conPromo.venta.nombre] : [])]
-  const totalCon = (medio: 'efectivo' | 'transferencia') => {
+  const nombres = [...new Set([...conPromo.items.flatMap((it: { promos?: string[] }) => it.promos ?? []), ...(conPromo.venta ? [conPromo.venta.nombre] : [])])]
+  const totalCon = (medio: 'efectivo' | 'transferencia' | 'credito') => {
     const pagos = pagosDeMedio(medio, { filas, reglas, total: precio, promoCreditoHoy: false, esDelBanco: false, seisCuotas: false })
     return cobro({ filas, pagos, reglas, descuentoVenta }).total
   }
-  const total = totalCon('efectivo')
-  if (idsDeFeria(reglas).has(a.product_id)) return { feria: true, lista: precio, final: total }
-  let transferencia: number | null = null
-  try {
-    transferencia = totalCon('transferencia')
-  } catch {
-    /* sin cuenta de transferencia configurada: el rótulo dice sólo «En efectivo» */
+  const efectivo = totalCon('efectivo')
+  if (!kit && idsDeFeria(reglas).has(a.product_id)) return { feria: true, lista: precio, final: efectivo }
+  const intentar = (medio: 'transferencia' | 'credito') => {
+    try {
+      return totalCon(medio)
+    } catch {
+      return null /* sin esa cuenta configurada */
+    }
   }
-  return { feria: false, lista: precio, efectivo: total, transferencia, ahorro: Math.round((precio - total) * 100) / 100, conTransferencia: transferencia === total, promo: nombres.length ? nombres.join(' + ') : null }
+  const tarjeta = intentar('credito')
+  const transferencia = intentar('transferencia')
+  // El precio grande: el de la prenda con sus promos, el MISMO de la etiqueta. ⛔ el de tarjeta: la Caja redondea a $100 también
+  // con tarjeta (medido 26-nov: la bikini de $49.990 se cobra $50.000) y ése va en su cuadro.
+  const grande = Math.round(filas.reduce((s: number, f: { importe: number }) => s + f.importe, 0) - (conPromo.venta?.pesos ?? 0))
+  const antesDe = Math.max(a.antes ?? 0, precio)
+  const antes = antesDe > grande ? antesDe : null
+  return {
+    feria: false, lista: precio, precio: grande, antes, pctOferta: antes ? pctDe(grande, antes) : null, promo: nombres.length ? nombres.join(' + ') : null,
+    tarjeta, cuota: tarjeta != null ? Math.round(tarjeta / CUOTAS) : null,
+    transferencia, pctTransferencia: transferencia != null ? pctDe(transferencia, grande) : null,
+    efectivo, pctEfectivo: pctDe(efectivo, grande),
+  }
+}
+
+/**
+ * 🩱 La bikini de una parte escaneada (Bruno, 26-nov: se vende SÓLO la bikini completa ⇒ escanear el corpiño muestra SU bikini,
+ * como Etiquetas `2bfe783d`). Todas las bikinis con esa parte son del mismo modelo y color, al mismo precio: la primera.
+ */
+export function bikiniDeLaParte(conjuntos: ConjuntoCaja[] | null | undefined, product_id: number, size_id: number): ConjuntoCaja | null {
+  return conjuntosConPieza(conjuntos, product_id, size_id)[0] ?? null
+}
+
+/** Las partes de la bikini, sin repetir producto: «Corpiño» y «Bombacha», con su producto (para los talles). */
+export function partesDeLaBikini(kit: ConjuntoCaja): { rotulo: string; product_id: number }[] {
+  const vistos = new Set<number>()
+  return [...kit.piezas]
+    .sort((x, y) => x.n - y.n)
+    .filter((p) => !vistos.has(p.product_id) && vistos.add(p.product_id))
+    .map((p) => ({ rotulo: parteDe(p.producto ?? p.nombre) || `Parte ${p.n}`, product_id: p.product_id }))
+}
+
+/**
+ * El descuento por cantidad que la Caja cobra HOY a esta prenda (la promo `cantidad`, «escalera»): los escalones de la primera
+ * vigente que la alcanza, o null. Sale de las promos de la Caja, ⛔ escrito: el tótem promete lo que el mostrador cobra.
+ * `ids`: los productos de la prenda (las dos partes de una bikini).
+ */
+export function escaleraDeHoy(reglas: Reglas | null, hoy: string, ids: number[], categorias: string[]): { desde: number; pct: number }[] | null {
+  const vigentes = promosVigentes(reglas?.promos ?? [], hoy) as { tipo: string; alcance: unknown; escalones?: { desde: number; pct: number }[] }[]
+  const p = vigentes.find((x) => x.tipo === 'cantidad' && x.escalones?.length && entra(x.alcance as never, { product_id: ids[0], ids, categorias } as never))
+  return p?.escalones ? [...p.escalones].sort((x, y) => x.desde - y.desde) : null
+}
+
+/**
+ * 🖤 BLACK FRIDAY 2026 (Bruno: jue 26-nov 20 h → lun 30 inclusive). Sólo cambia lo que se VE (la cinta, la etiqueta «Black
+ * Friday» sobre una prenda con rebaja, el aviso de las bikinis); ⛔ el precio: ése sale de Tienda Nube y de la Caja, que se
+ * cambian al apretar «Aplicar» en las campañas.
+ */
+export const BLACK_FRIDAY = {
+  desde: Date.parse('2026-11-26T20:00:00-03:00'),
+  hasta: Date.parse('2026-12-01T00:00:00-03:00'),
+  cinta: 'BLACK FRIDAY · HASTA EL LUNES 30',
+  vuelveCantidad: 'El descuento por cantidad vuelve el lunes 30.',
+} as const
+export const enBlackFriday = (ahora: number) => ahora >= BLACK_FRIDAY.desde && ahora < BLACK_FRIDAY.hasta
+
+/**
+ * 🔑 Cada cuánto se recarga el tótem en espera para tomar los precios nuevos. Alrededor del arranque del BF (jue 26 de 19:50 a
+ * 23 h, cuando se aprietan los «Aplicar») y de su cierre (lun 30 desde las 20 h), cada 15 minutos y pidiéndole a Tienda Nube el
+ * catálogo fresco (`refrescar`); el resto de los días del BF, cada hora; fuera, el vencimiento del caché (`TTL_MS`). `null`: lo de siempre.
+ */
+export function recargaDelTotem(ahora: number): { cadaMs: number; refrescar: boolean } | null {
+  const h = (iso: string) => Date.parse(iso)
+  const cambio = (ahora >= h('2026-11-26T19:50:00-03:00') && ahora < h('2026-11-26T23:00:00-03:00')) || (ahora >= h('2026-11-30T20:00:00-03:00') && ahora < h('2026-12-01T12:00:00-03:00'))
+  if (cambio) return { cadaMs: 15 * 60_000, refrescar: true }
+  if (ahora >= BLACK_FRIDAY.desde && ahora < BLACK_FRIDAY.hasta) return { cadaMs: 60 * 60_000, refrescar: false }
+  return null
 }
 
 /** Los talles del producto en el local (stock de anoche): sin repetir, en el orden de la lista. */
@@ -168,4 +258,4 @@ export function fotosDeLaPrenda(...grupos: (string | null | undefined | (string 
 }
 
 /** Cuánto queda a la vista una prenda escaneada antes de volver a «Escaneá una prenda». */
-export const TOTEM_MS = { encontrada: 10_000, noEncontrada: 5_000, encargada: 30_000, reintentoStock: 1_500 } as const
+export const TOTEM_MS = { encontrada: 14_000, noEncontrada: 5_000, encargada: 30_000, reintentoStock: 1_500 } as const
