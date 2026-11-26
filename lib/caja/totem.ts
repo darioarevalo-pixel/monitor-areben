@@ -102,6 +102,15 @@ export function bikiniDeLaParte(conjuntos: ConjuntoCaja[] | null | undefined, pr
   return conjuntosConPieza(conjuntos, product_id, size_id)[0] ?? null
 }
 
+/**
+ * 🩱 Las fotos de la BIKINI en Tienda Nube (Bruno 26-nov: «escaneamos una bikini juliet y apareció el geometral, tiene que usar la
+ * foto del producto bikini»): el producto de TN que tiene la variante de la bikini (`variant_id`). Vacío si ⛔ está en el audit.
+ */
+export function fotosDeLaBikini(ps: { imagenes?: { src: string }[]; variantes?: { id?: string | number | null }[] }[], variantId: number): string[] {
+  const p = ps.find((x) => (x.variantes ?? []).some((v) => v.id != null && Number(v.id) === variantId))
+  return (p?.imagenes ?? []).map((i) => i.src).filter(Boolean)
+}
+
 /** Las partes de la bikini, sin repetir producto: «Corpiño» y «Bombacha», con su producto (para los talles). */
 export function partesDeLaBikini(kit: ConjuntoCaja): { rotulo: string; product_id: number }[] {
   const vistos = new Set<number>()
