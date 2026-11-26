@@ -15,6 +15,7 @@ import { codigoArqueo } from '@/lib/caja/arqueo.core.js'
 import { DOMINIOS_MAIL, completarMail, mailOk } from '@/lib/caja/mail'
 import { imprimirCierre, numeroProvisorio, plata, plataConSigno, type DatosCierre, type LogoTicket } from '@/lib/caja/ticket'
 import { titularesDe } from '@/lib/caja/otra-cuenta.core.js'
+import { parteDe } from '@/lib/caja/conjuntos.core.js'
 import { TOLERANCIA_TRANSFERENCIA } from '@/lib/pagos-recibidos/core.core.js'
 import { ArmadoDelSobre, CalculadoraBilletes, olvidarConteo } from '@/components/caja/CalculadoraBilletes'
 import { aNumero as aNumeroTxt, textoDiferencia } from '@/lib/caja/textos'
@@ -547,6 +548,118 @@ export function FilaRenglon({
           aria-label="Precio"
         />
         <CampoRebaja valor={r.rebaja ?? null} onCambio={onRebaja} chico />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 🩱 La BIKINI en UN renglón (Bruno 26-nov, probando en el local: «las partes no tendrían que tener precio, sino las bikini en
+ * general»): el nombre de la bikini, su precio y su promo; las partes abajo, sin precio, sólo con su talle y su stock. La cantidad, el
+ * descuento y la cruz son de la bikini entera (el carrito reparte en las partes: `rebajaEnPartes`).
+ */
+export function FilaBikini({
+  nombre,
+  partes,
+  precio,
+  importe,
+  promos = null,
+  rebaja,
+  onCantidad,
+  onRebaja,
+  onSacar,
+  avisos,
+  mirandoWeb,
+  tactil = false,
+}: {
+  nombre: string
+  /** Los renglones de las partes, en orden (corpiño primero). */
+  partes: Renglon[]
+  /** Lo que vale UNA bikini (`gruposDelPedido`). */
+  precio: number | null
+  importe: number | null
+  promos?: string[] | null
+  rebaja: Rebaja | null
+  onCantidad: (n: number) => void
+  onRebaja: (rb: Rebaja | null) => void
+  onSacar: () => void
+  avisos: Array<{ tipo: 'separada' | 'reponer' | 'sin_stock'; texto: string } | null>
+  mirandoWeb: boolean
+  tactil?: boolean
+}) {
+  const cantidad = partes[0]?.cantidad ?? 0
+  const lista = precio != null ? Math.round(cantidad * precio * 100) / 100 : null
+  const conRebaja = (!!rebaja || !!promos?.length) && importe != null && lista != null && lista - importe > 0.004
+  const paso = (delta: number, etiqueta: string, signo: string) => (
+    <button type="button" onClick={() => onCantidad(cantidad + delta)} aria-label={etiqueta} style={{ height: tactil ? 40 : 28, width: tactil ? 40 : 28, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', color: color.ink2, fontSize: font.lg, cursor: 'pointer' }}>
+      {signo}
+    </button>
+  )
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `36px minmax(0, 1fr) auto ${tactil ? 40 : 24}px`, columnGap: space[2], rowGap: space[1], padding: `${space[1.5]}px 0`, borderBottom: `1px solid ${color.bg2}` }}>
+      <div style={{ gridRow: 'span 2' }}>
+        <Foto src={partes[0]?.foto ?? null} ancho={36} proporcion="1 / 1" />
+      </div>
+      <div style={{ minWidth: 0, fontWeight: weight.semibold, color: color.ink, fontSize: font.base, lineHeight: 1.25 }}>
+        {nombre} {!!promos?.length && <Badge tone="success">{promos.join(' + ')}</Badge>}
+      </div>
+      <div style={{ gridRow: 'span 2', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+        {conRebaja && <s style={{ display: 'block', color: color.mut2, fontSize: font.xs }}>{plata(lista as number)}</s>}
+        <b style={{ fontSize: font.md, color: conRebaja ? color.successInk : color.ink }}>{importe != null ? plata(importe) : lista != null ? plata(lista) : '—'}</b>
+      </div>
+      <button
+        type="button"
+        onClick={onSacar}
+        className="caja-sacar"
+        aria-label={`Sacar ${nombre} del pedido`}
+        title="Sacar la bikini del pedido"
+        style={{ gridRow: 'span 2', alignSelf: 'start', height: tactil ? 40 : 24, width: tactil ? 40 : 24, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', borderRadius: radius.md, color: color.danger, cursor: 'pointer', padding: 0 }}
+      >
+        <Icono nombre="cruz" size={16} />
+      </button>
+      {/* Las partes: sólo talle y stock, ⛔ precio (el stock es por prenda). */}
+      <div style={{ display: 'grid', gap: 2, fontSize: font.xs, color: color.mut, minWidth: 0 }}>
+        {partes.map((r) => {
+          const quedan = r.stock.local - r.cantidad
+          return (
+            <div key={claveDeRenglon(r)} style={{ display: 'flex', gap: space[1.5], alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
+              <span style={{ fontSize: font.sm }}>{[parteDe(r.variante.product_name), r.variante.size_name].filter(Boolean).join(' ')}</span>
+              {(r.variante.sku ?? r.variante.barcode) && <span style={{ color: color.mut2 }}>· {r.variante.sku ?? r.variante.barcode}</span>}
+              <span>·</span>
+              {quedan < 0 ? <Badge tone="danger">Local: sin stock en {r.stock.fuente === 'erp' ? 'Areben Gestión' : 'Gestión Nube'}</Badge> : quedan === 0 ? <Badge tone="warning">ÚLTIMA</Badge> : <span>Local: quedan {quedan}</span>}
+              <span>· Para reponer: {r.stock.deposito}</span>
+              {!!r.stock.atras?.length && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: weight.semibold, color: color.brand, background: color.brandBg, border: `1px solid ${color.brandBorder}`, padding: '0 6px', borderRadius: radius.pill }}>
+                  <Icono nombre="ubicaciones" size={12} />
+                  Posición: {r.stock.atras.join(' · ')}
+                </span>
+              )}
+              {r.stock.fuente === 'espejo' && <span title={r.stock.motivo}>· Stock de anoche (Gestión Nube sin respuesta)</span>}
+            </div>
+          )
+        })}
+      </div>
+      {(mirandoWeb || avisos.some(Boolean)) && (
+        <div style={{ gridColumn: '2 / 5', display: 'flex', gap: space[1.5], flexWrap: 'wrap', alignItems: 'center', fontSize: font.xs }}>
+          {mirandoWeb && <span style={{ color: color.mut }}>Pedidos web: leyendo…</span>}
+          {avisos.map((a, i) => a && <Badge key={i} tone={a.tipo === 'sin_stock' ? 'danger' : 'warning'} style={{ whiteSpace: 'normal', minWidth: 0, maxWidth: '100%', borderRadius: 8 }}>{a.texto}</Badge>)}
+        </div>
+      )}
+      <div style={{ gridColumn: '1 / -1', display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'nowrap' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', height: tactil ? 44 : 28, border: `1px solid ${color.line2}`, borderRadius: radius.md, background: color.surface, flexShrink: 0 }}>
+          {paso(-1, 'Una menos', '−')}
+          <span style={{ minWidth: 28, textAlign: 'center', fontWeight: weight.semibold, fontSize: font.base, fontVariantNumeric: 'tabular-nums' }}>{cantidad}</span>
+          {paso(1, 'Una más', '+')}
+        </div>
+        {/* El precio de la bikini es el de Tienda Nube: se ve, ⛔ se cambia (para rebajarla, un descuento). */}
+        <Input
+          value={precio != null ? String(precio) : ''}
+          readOnly
+          title="El precio de la bikini es el de Tienda Nube: para rebajarla, un descuento."
+          style={{ width: tactil ? 96 : 84, height: tactil ? 44 : 28, textAlign: 'right', color: color.brand, fontWeight: weight.semibold, fontSize: font.base }}
+          aria-label="Precio"
+        />
+        <CampoRebaja valor={rebaja} onCambio={onRebaja} chico />
       </div>
     </div>
   )
