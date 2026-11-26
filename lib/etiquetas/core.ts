@@ -385,3 +385,14 @@ export function conPreciosDelErp(
   }
   return { precios, promos, fueraDeTn, delErp }
 }
+
+/**
+ * ¿La etiqueta de formas de pago de la campaña dice lo MISMO que la que la prenda ya tiene colgada? (Bruno, 26-nov, BF: «la de formas de
+ * pago si ya está actualizada no la cambiaría»). La de hoy es la que arma la Caja para esa prenda (`lineasFpDeCaja`): mismo dibujo y
+ * mismos renglones que `fpDescuentos`, así que se comparan los textos. Sin la de hoy (la Caja no se pudo leer) ⇒ `false`: se imprime.
+ */
+export function mismaFormaDePago(campania: LineaEtiqueta[], hoy: LineaEtiqueta[] | null | undefined): boolean {
+  if (!hoy || !hoy.length) return false
+  const t = (ls: LineaEtiqueta[]) => ls.map((l) => (l.texto || '').trim().toUpperCase()).join('\n')
+  return t(campania) === t(hoy)
+}
