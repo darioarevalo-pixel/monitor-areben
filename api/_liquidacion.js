@@ -522,7 +522,10 @@ export default async function handler(req, res) {
         liqNombre: r.liq_nombre || null,
         modo: r.modo,
       }));
-      const cola = armarCola(conCambioDeRotulo(eventos, rotulos), impresas, stock);
+      // Con el número de cada sello: la etiqueta impresa ANTES de aplicar (Precio de campaña) cuenta si dice el precio que quedó.
+      const sellosNum = {};
+      for (const r of im) sellosNum[r.pid] = { cuando: r.cuando, precio: r.precio == null ? null : Number(r.precio) };
+      const cola = armarCola(conCambioDeRotulo(eventos, rotulos), impresas, stock, { sellos: sellosNum, rotulos });
       // Los sellos con su número van enteros: la comparación «¿la etiqueta dice lo que se paga
       // hoy?» se hace en el navegador, que es donde están los precios de Tienda Nube. El servidor
       // no los tiene y traerlos acá sería una consulta externa por request.

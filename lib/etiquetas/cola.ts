@@ -57,6 +57,7 @@ export const armarCola = armarColaJs as (
   eventos: EventoDePrecio[],
   impresasPorPid: Record<string, string>,
   stockPorPid: Record<string, number>,
+  anticipo?: { sellos?: Record<string, { cuando: string; precio: number | null }>; rotulos?: Record<string, { desde: string | null }> },
 ) => Cola
 
 /** Las pendientes lo bastante viejas como para sospechar que la prenda no está exhibida. */
