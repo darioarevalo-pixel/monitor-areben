@@ -59,6 +59,7 @@ function sujeto(a) {
 function tituloCaja(p) {
   const quien = sujeto(p.alcance);
   if (p.tipo === 'cantidad') return `${quien}: ${(p.escalones || []).map((e, i, l) => `${e.pct}% llevando ${e.desde}${i === l.length - 1 ? ' o más' : ''}`).join(' · ')}`;
+  if (p.tipo === 'llevando_precio') return `${quien}: a ${plata(p.precio)} si también lleva ${p.requiere ? sujeto(p.requiere) : 'otro producto'}`;
   if (p.tipo === 'llevando') return `${quien}: ${p.pct}% si también lleva ${p.requiere ? sujeto(p.requiere) : 'otro producto'}`;
   if (p.tipo === 'nxm') return `${quien}: ${p.lleva}x${p.paga}`;
   if (p.tipo === 'segunda_unidad') return `${quien}: 2ª unidad al ${p.pct}%`;

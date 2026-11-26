@@ -123,6 +123,37 @@ export function escaleraDeHoy(reglas: Reglas | null, hoy: string, ids: number[],
 }
 
 /**
+ * El combo a PRECIO FIJO que la Caja cobra HOY (promo `llevando_precio`, Bruno 26-nov: «el short a $34.990 con cualquier bikini»),
+ * visto desde las dos puntas: la prenda que HABILITA (la bikini ⇒ «Sumale el short a $34.990») y la que queda a ese precio (el
+ * short ⇒ «Con una bikini: $34.990»). Sale de las promos de la Caja, ⛔ escrito. `bikinis`: el catálogo de bikinis, para decir
+ * «una bikini» cuando lo que habilita son partes de bikini.
+ */
+export function combosDeHoy(reglas: Reglas | null, hoy: string, ids: number[], categorias: string[], bikinis: ConjuntoCaja[] | null | undefined): { texto: string; precio: number }[] {
+  type P = { tipo: string; precio?: number; alcance: { tipo: string; productos?: { id: number; nombre: string }[] }; requiere?: { tipo: string; productos?: { id: number; nombre: string }[] } }
+  const vigentes = (promosVigentes(reglas?.promos ?? [], hoy) as P[]).filter((p) => p.tipo === 'llevando_precio' && p.precio && p.requiere)
+  const it = { product_id: ids[0], ids, categorias } as never
+  const deBikini = new Set((bikinis ?? []).flatMap((k) => k.piezas.map((p) => p.product_id)))
+  const queEs = (a: P['alcance']) => {
+    const ps = a.tipo === 'productos' ? (a.productos ?? []) : []
+    if (ps.length && ps.every((p) => deBikini.has(p.id))) return 'una bikini'
+    const w = [...new Set(ps.map((p) => parteDe(p.nombre).toLowerCase()))]
+    return w.length === 1 ? w[0] : null
+  }
+  const out: { texto: string; precio: number }[] = []
+  for (const p of vigentes) {
+    const precio = Number(p.precio)
+    if (entra(p.requiere as never, it) && !entra(p.alcance as never, it)) {
+      const q = queEs(p.alcance)
+      out.push({ texto: q ? `Sumale el ${q} a {PRECIO}` : 'Con este producto, otro a {PRECIO}', precio })
+    } else if (entra(p.alcance as never, it)) {
+      const q = queEs(p.requiere!)
+      out.push({ texto: q === 'una bikini' ? 'Con una bikini: {PRECIO}' : q ? `Llevando un ${q}: {PRECIO}` : 'Con otro producto: {PRECIO}', precio })
+    }
+  }
+  return out
+}
+
+/**
  * 🖤 BLACK FRIDAY 2026 (Bruno: jue 26-nov 20 h → lun 30 inclusive). Sólo cambia lo que se VE (la cinta, la etiqueta «Black
  * Friday» sobre una prenda con rebaja, el aviso de las bikinis); ⛔ el precio: ése sale de Tienda Nube y de la Caja, que se
  * cambian al apretar «Aplicar» en las campañas.
