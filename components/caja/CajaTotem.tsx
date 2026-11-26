@@ -27,7 +27,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
+import { traerCatalogo } from '@/lib/datos'
+import { computarDatos } from '@/lib/etl/computar'
+import type { DatosETL } from '@/lib/etl/tipos'
 import { useTnPromo } from '@/components/productos/useTnImages'
 import { imagenesDe } from '@/lib/tn'
 import { precioDeCaja } from '@/lib/caja/precio'
@@ -56,6 +58,34 @@ export function CajaTotem() {
   return <Totem key={quiere} />
 }
 
+/**
+ * 🔑 El catálogo del tótem: SÓLO productos e inventario (`traerCatalogo`), ⛔ el monitor entero (`useDatosMonitor` bajaba el
+ * historial de ventas: 81 pedidos y 6,4 MB por apertura, medido el 26-nov). Si falla (wifi del local), reintenta cada 20 s.
+ */
+function useCatalogo(): Pick<DatosETL, 'allProductos' | 'allVariantes'> | null {
+  const [datos, setDatos] = useState<Pick<DatosETL, 'allProductos' | 'allVariantes'> | null>(null)
+  useEffect(() => {
+    let vivo = true
+    let t: ReturnType<typeof setTimeout> | null = null
+    const cargar = () =>
+      traerCatalogo(storeCaja() as Marca)
+        .then((p) => {
+          if (!vivo) return
+          const d = computarDatos(p, { today: new Date(), colorManualMap: {} })
+          setDatos({ allProductos: d.allProductos, allVariantes: d.allVariantes })
+        })
+        .catch(() => {
+          if (vivo) t = setTimeout(cargar, 20_000)
+        })
+    void cargar()
+    return () => {
+      vivo = false
+      if (t) clearTimeout(t)
+    }
+  }, [])
+  return datos
+}
+
 /** La hora, cada minuto: la cinta del Black Friday aparece y se va sola. */
 function useAhora() {
   const [ahora, setAhora] = useState(() => Date.now())
@@ -67,7 +97,7 @@ function useAhora() {
 }
 
 function Totem() {
-  const { datos } = useDatosMonitor()
+  const datos = useCatalogo()
   const tnIdx = useTnPromo(storeCaja())
   const tnIdxStunned = useTnPromo(storeCaja() === 'zattia' ? 'stunned' : storeCaja())
   const indice = useMemo(() => (datos ? indiceDelTotem(datos.allVariantes) : null), [datos])
