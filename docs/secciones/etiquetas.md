@@ -26,6 +26,11 @@ es sólo de la pestaña de Precio: va detrás de cualquiera de las dos que dicen
 
 ## ⛔ Lo que comparte con otras secciones
 
+- 🔑 **Desde el 26-nov-2026, Precio de campaña junta las campañas de la misma línea con el mismo rótulo** (`nombreComercial`) en una opción
+  más del selector («BLACK ZATTIA · todas juntas»). Bruno: «unificar todas las campañas de black friday en una». ⛔ Se fusionan en la
+  Liquidación: están separadas porque la Caja cobra distinto la forma de pago por campaña (BF 15/10, Liquidar 10/10). Cada prenda imprime
+  el rótulo y la forma de pago de SU campaña (`rotuloDe`). Núcleo `lib/etiquetas/grupos.ts`, test `etiquetas-grupos`.
+
 - 🔴 **Desde el 26-nov-2026, la parte de una BIKINI 2027 se etiqueta como SU bikini** (Bruno: «escanear una parte cualquiera y que
   salga la etiqueta de su bikini»). Nombre y precio de la bikini, «Corpiño · S» / «Bombacha · M» abajo, y **el código de la PARTE**
   (es lo que escanea la Caja, que después pide la otra). El precio es el que cobra la Caja: `?etiquetas=1&bikinis=1` →

@@ -1277,8 +1277,10 @@ function PrecioDeCampania({ vars, marca, linea }: { vars: VarianteEti[]; marca: 
       inp.focus()
       return
     }
-    const pdf = porPrenda && camp.rotulo
-      ? await pdfPorPrenda(camp.rotulo, v, item, n)
+    // Con un grupo, cada prenda lleva el rótulo y la forma de pago de SU campaña (BF 15/10, Liquidar 10/10).
+    const rotuloPrenda = camp.rotuloDe(v.pid)
+    const pdf = porPrenda && rotuloPrenda
+      ? await pdfPorPrenda(rotuloPrenda, v, item, n)
       : await buildLibrePdf(dibujo(item.precio, n, conBarras ? String(v.barcode || '') : ''))
     if (pdf) imprimirPdf(pdf)
     if (porPrenda) setUltimaPrenda({ v, item })
@@ -1304,13 +1306,13 @@ function PrecioDeCampania({ vars, marca, linea }: { vars: VarianteEti[]; marca: 
   const construirPrevia = useCallback(
     () =>
       porPrenda
-        ? prendaPrevia && camp.rotulo ? pdfPorPrenda(camp.rotulo, prendaPrevia.v, prendaPrevia.item, 1, 'prenda') : null
+        ? prendaPrevia && camp.rotuloDe(prendaPrevia.v.pid) ? pdfPorPrenda(camp.rotuloDe(prendaPrevia.v.pid)!, prendaPrevia.v, prendaPrevia.item, 1, 'prenda') : null
         : precioPrevia == null ? null : buildLibrePdf(dibujo(precioPrevia, 1, '')),
-    [porPrenda, prendaPrevia, camp.rotulo, precioPrevia, dibujo],
+    [porPrenda, prendaPrevia, camp, precioPrevia, dibujo],
   )
   const construirPreviaFP = useCallback(
-    () => (prendaPrevia && camp.rotulo ? pdfPorPrenda(camp.rotulo, prendaPrevia.v, prendaPrevia.item, 1, 'fp') : null),
-    [prendaPrevia, camp.rotulo],
+    () => (prendaPrevia && camp.rotuloDe(prendaPrevia.v.pid) ? pdfPorPrenda(camp.rotuloDe(prendaPrevia.v.pid)!, prendaPrevia.v, prendaPrevia.item, 1, 'fp') : null),
+    [prendaPrevia, camp],
   )
 
   const provisorios = camp.porPrecio.reduce((a, m) => a + (m.modelos - m.firmes), 0)
@@ -1331,12 +1333,21 @@ function PrecioDeCampania({ vars, marca, linea }: { vars: VarianteEti[]; marca: 
       </div>
 
       {camp.error && <Notice tone="danger" icon="✗">{camp.error}</Notice>}
+      {camp.repetidos.length > 0 && (
+        <Notice tone="warning" icon="⚠️">
+          {camp.repetidos.length === 1 ? '1 producto está' : `${camp.repetidos.length} productos están`} en más de una de estas campañas: se imprime con el precio de la
+          primera de la lista.
+        </Notice>
+      )}
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
         {camp.campanias.length > 0 && (
           <label style={{ fontSize: 12, color: color.mut }}>Campaña<br />
             <Select value={camp.liqEfectivo} onChange={(e) => setLiq(e.target.value)} style={{ width: 300, maxWidth: '100%' }}>
               <option value="">Elegí una campaña…</option>
+              {camp.grupos.map((g) => (
+                <option key={g.id} value={g.id}>{g.nombre}</option>
+              ))}
               {camp.campanias.map((c) => (
                 <option key={c.id} value={c.id}>{c.nombre}</option>
               ))}
