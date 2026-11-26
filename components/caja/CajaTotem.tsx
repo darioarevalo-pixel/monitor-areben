@@ -2,24 +2,27 @@
 
 /**
  * El tótem verificador de precios (`/pos/totem`, rediseño fase 4 = V2): la clienta escanea una prenda
- * con el lector y ve la foto, los talles que hay en el local, el precio de lista y el de efectivo. Diez
- * segundos después vuelve a «Escaneá una prenda». Es SÓLO lectura: ⛔ cobra ni escribe.
+ * con el lector y ve la foto, los talles que hay en el local, el precio y las tres formas de pago. Unos
+ * segundos después vuelve a «Escaneá el producto». Es SÓLO lectura: ⛔ cobra ni escribe.
+ *
+ * 🖤 Diseño aprobado por Bruno el 26-nov (Black Friday): colores de la TIENDA (blanco y negro, ⛔ los del monitor: es para la
+ * clienta), Montserrat, fotos que pasan solas, las tres formas de pago iguales (⛔ priorizar el efectivo) y, en BF, la cinta.
+ * El dibujo vive en `TotemVista.tsx`; acá, lo que se lee y se calcula.
  *
  * - 🔑 La prenda y el precio salen de lo que el tótem ya cargó (`indiceDelTotem`): aparecen al escanear. Si el código
  *   ⛔ está cargado o lo comparten varias prendas, como el POS (`buscarProducto`).
+ * - 🩱 Una PARTE de bikini (corpiño o bombacha) muestra SU bikini (Bruno 26-nov: se vende sólo la bikini completa), al precio de
+ *   la bikini de la Caja (`config.conjuntos`), con los talles de cada parte y el descuento por cantidad que cobra la Caja HOY.
  * - 🔴 El stock se dibuja recién CONFIRMADO en vivo (`stockEnVivo`, una lectura de Gestión Nube o del ERP): lo cargado
  *   atrasa en lo vendido hoy (medido el 4-nov: decía «hay» de una prenda en 0). Hasta entonces, cuadros vacíos; si
  *   ⛔ se pudo confirmar, lo dice, manda a caja y ⛔ dibuja talles.
- * - El precio de lista, de los datos de Zattia como en el POS; el de efectivo, del núcleo (`lib/caja/totem.ts`).
+ * - El precio, de los datos de la marca como en el POS; las formas de pago, del núcleo (`lib/caja/totem.ts`).
  *
  * - 🔑 La tarjeta de la encargada (`TARJETA_ENCARGADA`): con una prenda en pantalla, suma dónde está en el
  *   depósito y su stock (`elegirVariante`, una lectura de GN sólo cuando se pide); sin prenda, espera la
  *   próxima 30 segundos.
  * - 🔑 `?prueba=1`: la entrada se ve y también busca por nombre, para probar sin lector ni etiqueta. Sin
  *   eso, la pantalla de la clienta sigue igual: sólo el escaneo.
- *
- * ⛔ Decidido: si es la misma tablet que la pantalla de la clienta, y si escanea con la cámara (plan v3,
- * paso 0 de V2). Esta ruta sirve para cualquiera de los dos casos; la cámara, fuera.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -30,33 +33,14 @@ import { imagenesDe } from '@/lib/tn'
 import { precioDeCaja } from '@/lib/caja/precio'
 import { hoyIso } from '@/lib/agenda'
 import { buscarNombre, buscarProducto, elegirVariante, leerConfig, stockEnVivo, type Candidato, type Config, type ProductoLista, type Variante } from '@/lib/caja/cliente'
-import { plata } from '@/lib/caja/ticket'
-import { coloresDelProducto, esTarjetaEncargada, fotosDeLaPrenda, indiceDelTotem, opcionesDelLocal, precioTotem, primeroLosDelLocal, TOTEM_MS, varianteDelCodigo, type ColorTotem, type PrecioTotem } from '@/lib/caja/totem'
+import { bikiniDeLaParte, coloresDelProducto, enBlackFriday, escaleraDeHoy, esTarjetaEncargada, fotosDeLaPrenda, indiceDelTotem, opcionesDelLocal, partesDeLaBikini, precioTotem, primeroLosDelLocal, recargaDelTotem, TOTEM_MS, varianteDelCodigo } from '@/lib/caja/totem'
 import { TTL_MS } from '@/lib/cache'
-import { nombreDeColor } from '@/lib/caja/pantalla-cliente'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
-import { MARCA_CAJA, marcaParaPOS, storeCaja, useMarcaDeLaUrl, usarMarcaCaja } from '@/lib/caja/marca'
+import { marcaParaPOS, storeCaja, useMarcaDeLaUrl, usarMarcaCaja } from '@/lib/caja/marca'
 import type { Marca } from '@/lib/nav.datos'
-import { CabeceraMarca, ESTILOS_CLIENTA, FONDO_FOTO } from '@/components/caja/CajaCliente'
-import { color, font, radius, space, weight } from '@/components/ui'
+import { Cabecera, Espera, ListaPrueba, Prenda, TOTEM_CSS, TOTEM_FUENTE, type Resultado, type Ubicacion } from '@/components/caja/TotemVista'
 
-type Resultado = { variante: Variante; fotos: string[]; precio: PrecioTotem | null; talles: { talle: string; hay: boolean }[]; colores: ColorTotem[]; colorActual: string | null; stock: 'confirmando' | 'confirmado' | 'sin-confirmar' }
-/** Lo que ve la encargada al pasar su tarjeta. */
-type Ubicacion = { que: 'buscando' } | { que: 'falla' } | { que: 'ok'; atras: string[]; deposito: number; local: number }
-
-/** El marco del lector con las barras (espera) y la alerta (no encontrada): trazos del prototipo aprobado. */
-const TRAZO = {
-  lector: 'M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M14 8v8M17 8v8',
-  alerta: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z',
-} as const
-function Trazo({ d }: { d: keyof typeof TRAZO }) {
-  return (
-    <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ width: '55%', height: '55%' }}>
-      <path d={TRAZO[d]} />
-    </svg>
-  )
-}
 /** `no`: la prenda ⛔ está (404). `falla`: ⛔ se pudo consultar (GN, la red): son cosas distintas (robustez, 11-oct). */
 type Estado = { que: 'espera' } | { que: 'buscando' } | { que: 'no' } | { que: 'falla' } | { que: 'lista'; productos: ProductoLista[] } | { que: 'encargada' } | { que: 'ok'; r: Resultado }
 
@@ -67,9 +51,19 @@ export function CajaTotem() {
   useEffect(() => {
     if (marca !== quiere) setMarca(quiere as Marca)
   }, [marca, quiere, setMarca])
-  if (marca !== quiere) return <div style={{ minHeight: '100dvh', background: color.surface }} />
+  if (marca !== quiere) return <div style={{ minHeight: '100dvh', background: '#fff' }} />
   usarMarcaCaja(quiere)
   return <Totem key={quiere} />
+}
+
+/** La hora, cada minuto: la cinta del Black Friday aparece y se va sola. */
+function useAhora() {
+  const [ahora, setAhora] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setAhora(Date.now()), 60_000)
+    return () => clearInterval(t)
+  }, [])
+  return ahora
 }
 
 function Totem() {
@@ -108,6 +102,8 @@ function Totem() {
     }
   }, [])
 
+  const ahora = useAhora()
+  const bf = enBlackFriday(ahora)
   const [prueba] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('prueba') === '1')
   const [estado, setEstado] = useState<Estado>({ que: 'espera' })
   const [codigo, setCodigo] = useState('')
@@ -132,11 +128,18 @@ function Totem() {
 
   // 🔑 El tótem queda prendido días: sin recargar, seguiría con los precios y el stock del día que se abrió.
   // Pasado el vencimiento del caché (más un margen, para que la recarga lo encuentre vencido), y sólo en espera.
+  // 🖤 Alrededor del Black Friday, más seguido (`recargaDelTotem`): los precios cambian al apretar «Aplicar».
   const [abierto] = useState(() => Date.now())
   useEffect(() => {
     if (estado.que !== 'espera') return
     const t = setInterval(() => {
-      if (navigator.onLine && Date.now() - abierto > TTL_MS + 10 * 60_000) window.location.reload()
+      if (!navigator.onLine) return
+      const ahora = Date.now()
+      const r = recargaDelTotem(ahora)
+      if (r ? ahora - abierto < r.cadaMs : ahora - abierto <= TTL_MS + 10 * 60_000) return
+      // `refrescar`: el catálogo de TN fresco también del lado del servidor (su caché es de una hora).
+      const antes = r?.refrescar ? Promise.allSettled([traerAudit(storeCaja(), { refrescar: true }), traerAudit(storeCaja(), { variantes: true, refrescar: true })]) : Promise.resolve()
+      void antes.then(() => window.location.reload())
     }, 60_000)
     return () => clearInterval(t)
   }, [estado.que, abierto])
@@ -144,34 +147,66 @@ function Totem() {
   const precioYFoto = useCallback(
     (productId: number) => {
       const p = datos?.allProductos.find((x) => String(x.id) === String(productId))
-      if (!p || !tnIdx) return { precio: null, foto: null, fotos: [] as string[], categorias: [] as string[] }
+      if (!p || !tnIdx) return { precio: null, antes: null, foto: null, fotos: [] as string[], categorias: [] as string[] }
       // Las categorías de Tienda Nube: las promos por categoría (las mismas que manda el POS).
       // Stunned, sólo su Tienda Nube (`lib/caja/precio.ts`). `reglas: null`: la oferta la pone `precioTotem`.
-      const { precio, foto, categorias } = precioDeCaja(p, { store: storeCaja(), idx: tnIdx, idxStunned: tnIdxStunned, reglas: null, localStunned: config?.stunned_local ?? null })
+      const { precio, antes, foto, categorias } = precioDeCaja(p, { store: storeCaja(), idx: tnIdx, idxStunned: tnIdxStunned, reglas: null, localStunned: config?.stunned_local ?? null })
       const fotos = [...imagenesDe(p, tnIdx), ...(tnIdxStunned ? imagenesDe(p, tnIdxStunned) : [])]
-      return { precio, foto, fotos, categorias }
+      return { precio, antes: antes ?? null, foto, fotos, categorias }
     },
     [datos, tnIdx, tnIdxStunned, config?.stunned_local],
   )
 
   /** Arma la prenda con sus talles y su precio. `n`: la vuelta que la pidió; si ya hubo otra, ⛔ se muestra. */
   async function mostrar(variante: Variante, n: number) {
+    if (vuelta.current !== n) return
+    const hoy = hoyIso()
+    const { precio, antes, foto, fotos, categorias } = precioYFoto(variante.product_id)
+    const cols = coloresDelProducto(audit, variante.sku)
+    const kit = bikiniDeLaParte(config?.conjuntos, variante.product_id, variante.size_id)
+    if (kit) {
+      // 🩱 La bikini: el nombre y el precio de la bikini, los talles de cada parte y las fotos de las dos.
+      const partes = partesDeLaBikini(kit)
+      const fotosPartes = partes.flatMap((pt) => precioYFoto(pt.product_id).fotos)
+      setEstado({
+        que: 'ok',
+        r: {
+          variante,
+          nombre: kit.nombre,
+          tipo: 'Bikini',
+          fotos: fotosDeLaPrenda(cols.foto, cols.fotos, foto, fotos, fotosPartes),
+          colores: [],
+          colorActual: null,
+          talles: [],
+          partes: partes.map((pt) => ({ ...pt, talles: opcionesDelLocal(indice?.porProducto.get(pt.product_id) ?? [], []).talles })),
+          precio: precioTotem({ product_id: variante.product_id, size_id: variante.size_id, precio: kit.precio, antes: (kit as { lista?: number | null }).lista ?? null, reglas: config?.reglas ?? null, hoy, categorias, bikini: kit }),
+          escalera: escaleraDeHoy(config?.reglas ?? null, hoy, kit.piezas.map((p) => p.product_id), categorias),
+          bikini: true,
+          stock: 'confirmando',
+        },
+      })
+      volverEn(TOTEM_MS.encontrada)
+      void confirmarStockBikini(variante, partes.map((p) => p.product_id))
+      return
+    }
     // Los talles cargados, para dibujarlos ya: el stock de cada uno ⛔ se afirma hasta confirmarlo.
     const variantes = indice?.porProducto.get(variante.product_id) ?? []
-    if (vuelta.current !== n) return
-    const { precio, foto, fotos, categorias } = precioYFoto(variante.product_id)
-    const cols = coloresDelProducto(audit, variante.sku)
     const opciones = opcionesDelLocal(variantes, cols.colores)
     const fotoDelColor = opciones.colores.map((c) => c.foto)
     setEstado({
       que: 'ok',
       r: {
         variante,
+        nombre: variante.product_name,
+        tipo: null,
         fotos: fotosDeLaPrenda(cols.foto, cols.fotos, foto, fotos, fotoDelColor),
         colores: opciones.colores,
         colorActual: cols.actual ?? (opciones.talles.length ? null : variante.size_name),
-        precio: precioTotem({ product_id: variante.product_id, size_id: variante.size_id, precio, reglas: config?.reglas ?? null, hoy: hoyIso(), categorias }),
+        precio: precioTotem({ product_id: variante.product_id, size_id: variante.size_id, precio, antes, reglas: config?.reglas ?? null, hoy, categorias }),
+        escalera: escaleraDeHoy(config?.reglas ?? null, hoy, [variante.product_id], categorias),
+        bikini: false,
         talles: opciones.talles,
+        partes: [],
         stock: 'confirmando',
       },
     })
@@ -180,18 +215,35 @@ function Totem() {
   }
 
   /** Con un reintento: el 429 de Gestión Nube se pasa en segundos. ⛔ Toca el reloj de la ficha. */
-  async function confirmarStock(variante: Variante, colores: { nombre: string; foto: string | null }[]) {
-    const poner = (cambio: Partial<Resultado>) =>
-      setEstado((e) => (e.que === 'ok' && e.r.variante === variante ? { que: 'ok', r: { ...e.r, ...cambio } } : e))
-    let vivos: Candidato[] | null = null
+  async function vivosDe(productId: number): Promise<Candidato[] | null> {
     for (const espera of [0, TOTEM_MS.reintentoStock]) {
       if (espera) await new Promise((r) => setTimeout(r, espera))
-      vivos = await stockEnVivo(variante.product_id).then((r) => r.variantes).catch(() => null)
-      if (vivos) break
+      const vivos = await stockEnVivo(productId).then((r) => r.variantes).catch(() => null)
+      if (vivos) return vivos
     }
+    return null
+  }
+  const ponerEn = (variante: Variante) => (cambio: Partial<Resultado>) =>
+    setEstado((e) => (e.que === 'ok' && e.r.variante === variante ? { que: 'ok', r: { ...e.r, ...cambio } } : e))
+
+  async function confirmarStock(variante: Variante, colores: { nombre: string; foto: string | null }[]) {
+    const poner = ponerEn(variante)
+    const vivos = await vivosDe(variante.product_id)
     if (!vivos) return poner({ stock: 'sin-confirmar' })
     const { colores: conStock, talles } = opcionesDelLocal([...vivos].sort(primeroLosDelLocal), colores)
     poner({ stock: 'confirmado', colores: conStock, talles })
+  }
+
+  /** 🩱 Las dos partes de la bikini, cada una con su stock en vivo. Si alguna ⛔ se confirma, ⛔ se afirma ninguna. */
+  async function confirmarStockBikini(variante: Variante, productos: number[]) {
+    const poner = ponerEn(variante)
+    const vivos = await Promise.all(productos.map(vivosDe))
+    if (vivos.some((v) => !v)) return poner({ stock: 'sin-confirmar' })
+    setEstado((e) =>
+      e.que === 'ok' && e.r.variante === variante
+        ? { que: 'ok', r: { ...e.r, stock: 'confirmado', partes: e.r.partes.map((pt, i) => ({ ...pt, talles: opcionesDelLocal([...(vivos[i] as Candidato[])].sort(primeroLosDelLocal), []).talles })) } }
+        : e,
+    )
   }
 
   async function pedirUbicacion(variante: Variante, n: number) {
@@ -270,12 +322,14 @@ function Totem() {
 
   return (
     <div
-      style={{ height: '100dvh', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: color.surface, color: color.ink }}
+      className="totem"
+      style={{ height: '100dvh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
       // El lector tipea donde esté el foco: se lo devuelve siempre a la entrada.
       onClick={() => entrada.current?.focus()}
     >
-      <style>{ESTILOS_CLIENTA}</style>
-      <CabeceraMarca logo={config?.ticket_logo ?? null} derecha="Consultá el precio" />
+      <link rel="stylesheet" href={TOTEM_FUENTE} />
+      <style>{TOTEM_CSS}</style>
+      <Cabecera logo={config?.ticket_logo ?? null} />
       <input
         ref={entrada}
         autoFocus
@@ -295,221 +349,18 @@ function Totem() {
         // 🔑 El lector escribe igual; tocar la pantalla ⛔ abre el teclado. En modo prueba hace falta para tipear.
         inputMode={prueba ? undefined : 'none'}
         // Invisible pero enfocable: la clienta ⛔ tipea, escanea.
-        style={prueba ? { margin: `${space[2]}px ${space[4]}px`, padding: `${space[2]}px ${space[3]}px`, fontSize: font.lg, border: `1.5px dashed ${color.line2}`, borderRadius: radius.xl, background: color.surface, color: color.ink } : { position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
+        className={prueba ? 'totem-prueba' : undefined}
+        style={prueba ? undefined : { position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
       />
-      <main style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+      <main style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}>
         {estado.que === 'ok' ? (
-          <Prenda key={`${estado.r.variante.product_id}-${estado.r.variante.size_id}`} r={estado.r} ubicacion={ubicacion} arranques={arranques} tocar={() => volverEn(ubicacion ? TOTEM_MS.encargada : TOTEM_MS.encontrada)} msReloj={ubicacion ? TOTEM_MS.encargada : TOTEM_MS.encontrada} />
+          <Prenda key={`${estado.r.variante.product_id}-${estado.r.variante.size_id}`} r={estado.r} bf={bf} ubicacion={ubicacion} arranques={arranques} tocar={() => volverEn(ubicacion ? TOTEM_MS.encargada : TOTEM_MS.encontrada)} msReloj={ubicacion ? TOTEM_MS.encargada : TOTEM_MS.encontrada} />
         ) : estado.que === 'lista' ? (
           <ListaPrueba productos={estado.productos} elegir={(p) => void elegir(p)} />
         ) : (
-          <Espera no={estado.que === 'no'} falla={estado.que === 'falla'} buscando={estado.que === 'buscando'} encargada={estado.que === 'encargada'} />
+          <Espera bf={bf} no={estado.que === 'no'} falla={estado.que === 'falla'} buscando={estado.que === 'buscando'} encargada={estado.que === 'encargada'} />
         )}
       </main>
-    </div>
-  )
-}
-
-/** Sólo con `?prueba=1`: lo que encontró la búsqueda por nombre. */
-function ListaPrueba({ productos, elegir }: { productos: ProductoLista[]; elegir: (p: ProductoLista) => void }) {
-  return (
-    <div style={{ flex: 1, display: 'grid', alignContent: 'start', gap: space[2], padding: space[4] }}>
-      {productos.map((p) => (
-        <button key={p.product_id} type="button" onClick={() => elegir(p)} style={{ display: 'flex', justifyContent: 'space-between', gap: space[3], padding: space[3], fontSize: font.lg, textAlign: 'left', background: color.surface, color: color.ink, border: `1px solid ${color.line2}`, borderRadius: radius.xl, cursor: 'pointer' }}>
-          <span>{p.product_name}</span>
-          <span style={{ color: color.mut, flex: 'none' }}>{p.local > 0 ? `${p.local} en el local` : 'Sin stock en el local'}</span>
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function Espera({ no: noEsta, falla, buscando, encargada }: { no: boolean; falla: boolean; buscando: boolean; encargada: boolean }) {
-  const no = noEsta || falla
-  return (
-    <div style={{ flex: 1, display: 'grid', placeItems: 'center', alignContent: 'center', textAlign: 'center', gap: space[4], padding: space[8], background: `radial-gradient(circle at 50% 40%, ${MARCA_CAJA.acentoBg}, ${color.surface} 60%)` }}>
-      <div className={no ? undefined : 'caja-latido'} style={{ width: 'clamp(88px, 11vw, 140px)', aspectRatio: '1', borderRadius: 28, background: no ? color.bg2 : MARCA_CAJA.acento, color: no ? color.mut : color.surface, display: 'grid', placeItems: 'center' }}>
-        <Trazo d={no ? 'alerta' : 'lector'} />
-      </div>
-      <h1 style={{ margin: 0, fontSize: 'clamp(30px, 4.6vw, 60px)', letterSpacing: '-0.03em', maxWidth: '18ch', textWrap: 'balance' }}>
-        {encargada ? 'Escaneá el producto para ver su posición' : falla ? 'No pudimos consultar el precio' : no ? 'No encontramos este producto' : buscando ? 'Buscando…' : 'Escaneá un producto para ver su precio'}
-      </h1>
-      <p style={{ margin: 0, fontSize: 'clamp(16px, 1.8vw, 24px)', color: color.mut }}>{falla ? 'Probá de nuevo en un momento o consultá en caja.' : no ? 'Consultá en caja y te ayudamos.' : 'Acercá la etiqueta al lector.'}</p>
-    </div>
-  )
-}
-
-/** Foto grande con flechas, puntos y deslizar. Cada toque le da otros 10 segundos a la ficha (`tocar`). */
-function Galeria({ fotos, i, setI, tocar }: { fotos: string[]; i: number; setI: (i: number) => void; tocar: () => void }) {
-  const inicioX = useRef<number | null>(null)
-  const hay = fotos.length > 1
-  const ir = (paso: number) => {
-    setI((i + paso + fotos.length) % fotos.length)
-    tocar()
-  }
-  const flecha = (paso: number, rotulo: string, d: string) => (
-    <button
-      type="button"
-      aria-label={rotulo}
-      tabIndex={-1}
-      onClick={() => ir(paso)}
-      style={{ position: 'absolute', top: '50%', [paso < 0 ? 'left' : 'right']: space[3], transform: 'translateY(-50%)', width: 64, height: 64, borderRadius: '50%', border: 'none', background: 'rgba(255, 255, 255, .88)', color: color.ink, boxShadow: '0 4px 12px rgba(16, 24, 40, .22)', display: 'grid', placeItems: 'center', cursor: 'pointer' }}
-    >
-      <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" style={{ width: 30, height: 30 }}>
-        <path d={d} />
-      </svg>
-    </button>
-  )
-  return (
-    <div
-      style={{ position: 'relative', minHeight: 0, background: FONDO_FOTO, overflow: 'hidden', touchAction: 'pan-y' }}
-      onPointerDown={(e) => {
-        inicioX.current = e.clientX
-      }}
-      onPointerUp={(e) => {
-        if (inicioX.current == null || !hay) return
-        const dx = e.clientX - inicioX.current
-        inicioX.current = null
-        if (Math.abs(dx) > 50) ir(dx < 0 ? 1 : -1)
-      }}
-    >
-      {fotos[i] && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={fotos[i]} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', userSelect: 'none' }} />
-      )}
-      {hay && (
-        <>
-          {flecha(-1, 'Foto anterior', 'M15 5l-7 7 7 7')}
-          {flecha(1, 'Foto siguiente', 'M9 5l7 7-7 7')}
-          <div style={{ position: 'absolute', left: 0, right: 0, bottom: space[4], display: 'flex', justifyContent: 'center', gap: space[1.5] }}>
-            {fotos.map((f, n) => (
-              <i key={f} aria-hidden style={{ width: 10, height: 10, borderRadius: '50%', background: n === i ? MARCA_CAJA.acento : 'rgba(255, 255, 255, .85)', boxShadow: '0 0 0 1px rgba(0, 0, 0, .12)' }} />
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-/** Sólo con la tarjeta de la encargada: dónde está la prenda y cuánto hay. */
-function PanelUbicacion({ u }: { u: Ubicacion }) {
-  const caja: React.CSSProperties = { background: color.ink, color: color.surface, borderRadius: radius.xl, padding: space[4], display: 'grid', gap: space[1], fontSize: font.lg }
-  if (u.que === 'buscando') return <div style={caja}>Buscando la posición…</div>
-  if (u.que === 'falla') return <div style={caja}>No se pudo consultar la posición.</div>
-  return (
-    <div style={caja}>
-      <span>Posición en depósito</span>
-      <strong style={{ fontSize: font['2xl'] + 4 }}>{u.atras.length ? u.atras.join(' · ') : 'Sin estante cargado'}</strong>
-      <span>Stock: {u.deposito} en depósito · {u.local} en el local</span>
-    </div>
-  )
-}
-
-function Prenda({ r, ubicacion, arranques, msReloj, tocar }: { r: Resultado; ubicacion: Ubicacion | null; arranques: number; msReloj: number; tocar: () => void }) {
-  const { variante, precio, talles } = r
-  // Un color con `hay: null` ⛔ sabe de stock: decide lo que sí se sabe.
-  const conocidas = [...talles, ...r.colores].filter((o) => o.hay !== null)
-  const confirmado = r.stock === 'confirmado'
-  const sinStock = confirmado && conocidas.length > 0 && conocidas.every((o) => o.hay === false)
-  // 🔴 Lo que depende del stock va vacío hasta confirmarlo: con el nombre a la vista parece disponible y después se tacha.
-  const coloresAVer = r.stock === 'sin-confirmar' ? r.colores.filter((c) => c.hay === null) : r.colores
-  const [foto, setFoto] = useState(0)
-  const [elegido, setElegido] = useState(r.colorActual)
-  const mismo = (a: string | null, b: string) => a?.trim().toLowerCase() === b.trim().toLowerCase()
-  const elegirColor = (c: ColorTotem) => {
-    setElegido(c.nombre)
-    const n = c.foto ? r.fotos.indexOf(c.foto) : -1
-    if (n >= 0) setFoto(n)
-    tocar()
-  }
-  return (
-    <div className="totem-prenda" style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'grid', position: 'relative' }}>
-      <style>{`.totem-prenda { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); } @media (max-aspect-ratio: 1/1) { .totem-prenda { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; } }`}</style>
-      <Galeria fotos={r.fotos} i={foto} setI={setFoto} tocar={tocar} />
-      <div style={{ padding: 'clamp(16px, 2.6vw, 40px)', display: 'grid', alignContent: 'center', gap: space[3], overflowY: 'auto', minHeight: 0 }}>
-        {ubicacion && <PanelUbicacion u={ubicacion} />}
-        {variante.sku && <p style={{ margin: 0, color: color.mut, fontSize: font.lg, letterSpacing: '0.04em' }}>{variante.sku}</p>}
-        <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 54px)', letterSpacing: '-0.03em', lineHeight: 1.05 }}>{variante.product_name}</h1>
-        {coloresAVer.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: `${space[2]}px ${space[4]}px`, fontSize: font.lg, color: color.ink2 }}>
-            {coloresAVer.map((c) => (
-              !confirmado && c.hay !== null ? <span key={c.nombre} data-vacio aria-hidden style={{ width: 112, height: 56, borderRadius: radius.xl, background: color.bg2 }} /> : <button
-                key={c.nombre}
-                type="button"
-                tabIndex={-1}
-                onClick={() => elegirColor(c)}
-                aria-pressed={mismo(elegido, c.nombre)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: space[1.5], minHeight: 56, padding: `0 ${space[3]}px`, borderRadius: radius.xl, background: color.surface, cursor: 'pointer', font: 'inherit', fontWeight: mismo(elegido, c.nombre) ? weight.bold : weight.medium, color: c.hay === false ? color.mut2 : color.ink2, textDecoration: c.hay === false ? 'line-through' : 'none', border: mismo(elegido, c.nombre) ? `2px solid ${MARCA_CAJA.acento}` : `1px ${c.hay === false ? 'dashed' : 'solid'} ${color.line2}` }}
-              >
-                {/* TN ⛔ trae el hex: el punto es la foto del color en un círculo (sin foto, vacío). */}
-                <i
-                  aria-hidden
-                  style={{
-                    width: 22, height: 22, borderRadius: '50%', flex: 'none',
-                    border: '1px solid rgba(0, 0, 0, .12)',
-                    background: c.foto ? `center / cover no-repeat url("${c.foto.replace(/"/g, '%22')}")` : FONDO_FOTO,
-                  }}
-                />
-                {nombreDeColor(c.nombre)}
-              </button>
-            ))}
-          </div>
-        )}
-        {talles.length > 0 && r.stock !== 'sin-confirmar' && (
-          <>
-            <h2 style={{ margin: 0, fontSize: font.md, textTransform: 'uppercase', letterSpacing: '0.08em', color: color.mut }}>Talles en el local</h2>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: space[2] }}>
-              {talles.map((t) => (
-                !confirmado ? <span key={t.talle} data-vacio aria-hidden style={{ width: 56, height: 56, borderRadius: radius.xl, background: color.bg2 }} /> : <span
-                  key={t.talle}
-                  style={{
-                    minWidth: 56, height: 56, padding: `0 ${space[3]}px`, borderRadius: radius.xl, display: 'grid', placeItems: 'center', fontWeight: weight.bold, fontSize: font.xl,
-                    border: t.hay ? `1.5px solid ${MARCA_CAJA.acento}` : `1.5px dashed ${color.line2}`,
-                    color: t.hay ? MARCA_CAJA.acento : color.mut2,
-                    textDecoration: t.hay ? 'none' : 'line-through',
-                  }}
-                >
-                  {t.talle}
-                </span>
-              ))}
-            </div>
-          </>
-        )}
-        {r.stock === 'confirmando' && <p style={{ margin: 0, color: color.mut, fontSize: font.lg }}>Confirmando stock…</p>}
-        {r.stock === 'sin-confirmar' && <p style={{ margin: 0, color: color.ink2, fontSize: font.lg }}>No se pudo confirmar el stock. Consultá en caja.</p>}
-        {sinStock ? (
-          <div style={{ background: color.bg2, color: color.ink2, borderRadius: radius.xl, padding: space[4], fontSize: font.xl }}>Sin stock en el local. Consultá en caja.</div>
-        ) : !precio ? (
-          <div style={{ background: color.bg2, color: color.ink2, borderRadius: radius.xl, padding: space[4], fontSize: font.xl }}>Precio: consultá en caja.</div>
-        ) : precio.feria ? (
-          <Precio rotulo="Oferta · precio final" monto={precio.final} pie="Sólo efectivo o transferencia" />
-        ) : (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: font.xl, color: color.ink2 }}>
-              <span>Precio de lista</span>
-              <b style={{ fontSize: font['2xl'] + 4, fontVariantNumeric: 'tabular-nums' }}>{plata(precio.lista)}</b>
-            </div>
-            <Precio rotulo={precio.conTransferencia ? 'En efectivo o transferencia' : 'En efectivo'} monto={precio.efectivo} pie={[precio.promo, precio.ahorro > 0 ? `Ahorrás ${plata(precio.ahorro)}` : ''].filter(Boolean).join(' · ')} />
-            {precio.transferencia != null && !precio.conTransferencia && <Precio rotulo="Con transferencia" monto={precio.transferencia} pie="" />}
-          </>
-        )}
-      </div>
-      {/* Lo que falta para volver a «Escaneá una prenda». */}
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 5, background: color.bg2 }}>
-        <style>{`@keyframes totem-vaciar { from { width: 100%; } to { width: 0; } } @media (prefers-reduced-motion: reduce) { .totem-barra { animation: none !important; } }`}</style>
-        <i key={arranques} className="totem-barra" style={{ display: 'block', height: '100%', background: MARCA_CAJA.acento, animation: `totem-vaciar ${msReloj}ms linear forwards` }} />
-      </div>
-    </div>
-  )
-}
-
-function Precio({ rotulo, monto, pie }: { rotulo: string; monto: number; pie: string }) {
-  return (
-    <div style={{ background: MARCA_CAJA.acento, color: color.surface, borderRadius: 16, padding: `${space[4]}px ${space[5]}px`, display: 'grid', gap: space[0.5] }}>
-      <span style={{ fontSize: font.xl, fontWeight: weight.semibold, opacity: 0.9 }}>{rotulo}</span>
-      <strong style={{ fontSize: 'clamp(34px, 4.6vw, 64px)', letterSpacing: '-0.03em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{plata(monto)}</strong>
-      {pie && <small style={{ fontSize: font.lg, opacity: 0.85 }}>{pie}</small>}
     </div>
   )
 }

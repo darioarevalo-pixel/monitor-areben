@@ -25,7 +25,7 @@ import { precioDeCampania, precioDeFeria } from './core.core.js'
 type ProductoCaja = Parameters<typeof construirPrecios>[0][number]
 
 /** `oferta`: la prenda de Stunned está en oferta en su tienda ⇒ paga la oferta de su línea (`PCT_OFERTA_DE_LINEA`, 26-oct). */
-export type PrecioDeCaja = { precio: number | null; fueraDeTn: boolean; foto: string | null; categorias: string[]; oferta: boolean }
+export type PrecioDeCaja = { precio: number | null; fueraDeTn: boolean; foto: string | null; categorias: string[]; oferta: boolean; /** La lista de Tienda Nube cuando la prenda está en oferta allá (el tachado del tótem); null si ⛔. */ antes?: number | null }
 
 /**
  * ¿La prenda es de Stunned? Sólo en Zattia (en BDI el prefijo `STU` ⛔ significa nada). Mira el SKU del
@@ -48,12 +48,14 @@ export function precioDeCaja(
     const vigente = ofertaVigente(tn?.price, tn?.promo_price)
     const local = o.localStunned?.[String(producto.id)]
     const precio = local != null && local > 0 ? local : vigente.aCobrar
-    return { precio: precio && precio > 0 ? precio : null, fueraDeTn: false, foto: imagenDe(producto, o.idxStunned), categorias: tn?.categories ?? [], oferta: vigente.enOferta }
+    return { precio: precio && precio > 0 ? precio : null, fueraDeTn: false, foto: imagenDe(producto, o.idxStunned), categorias: tn?.categories ?? [], oferta: vigente.enOferta, antes: vigente.enOferta && !(local != null && local > 0) ? (vigente.lista ?? null) : null }
   }
-  const { precios, fueraDeTn } = construirPrecios([producto], o.idx)
+  const { precios, promos, fueraDeTn } = construirPrecios([producto], o.idx)
   // 🔑 La prenda de feria va al precio de SU campaña (13-oct): el de TN puede ser el de la «Feria Online».
   // 🔑 La campaña que manda el precio del local (Cyber, 1-nov): el escrito, ⛔ el cruce por nombre con TN.
   const deCampania = precioDeCampania(o.reglas, Number(producto.id))
   const precio = precioDeFeria(o.reglas, Number(producto.id)) ?? deCampania ?? (precios[producto.id] || null)
-  return { precio, fueraDeTn: deCampania == null && fueraDeTn.has(producto.id), foto: imagenDe(producto, o.idx), categorias: matchTn(producto, o.idx)?.categories ?? [], oferta: false }
+  // El tachado: la lista de TN sólo si el precio ES el de la oferta de TN (⛔ el de una campaña del local o de feria).
+  const deTn = precio != null && precio === precios[producto.id] ? (promos[producto.id]?.normal ?? null) : null
+  return { precio, fueraDeTn: deCampania == null && fueraDeTn.has(producto.id), foto: imagenDe(producto, o.idx), categorias: matchTn(producto, o.idx)?.categories ?? [], oferta: false, antes: deTn }
 }

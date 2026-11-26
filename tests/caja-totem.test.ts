@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { REGLAS_INICIALES } from '@/lib/caja/core.core.js'
 import type { Reglas } from '@/lib/caja/cliente'
-import { esTarjetaEncargada, indiceDelTotem, opcionesDelLocal, coloresDelProducto, precioTotem, tallesDelLocal, varianteDelCodigo } from '@/lib/caja/totem'
+import { BLACK_FRIDAY, bikiniDeLaParte, enBlackFriday, escaleraDeHoy, partesDeLaBikini, recargaDelTotem, esTarjetaEncargada, indiceDelTotem, opcionesDelLocal, coloresDelProducto, precioTotem, tallesDelLocal, varianteDelCodigo } from '@/lib/caja/totem'
 
 /**
  * El tótem (rediseño, fase 4). Oráculo a mano con las reglas iniciales: efectivo 15 % y redondeo a $100.
@@ -27,16 +27,29 @@ describe('precioTotem', () => {
     expect(precioTotem({ product_id: 6, size_id: 1, precio: 5590, reglas: { ...feria, feriaIdsCampania: [5, 6] } as Reglas, hoy: HOY, categorias: [] })).toMatchObject({ feria: true, lista: 5590 })
   })
 
-  it('el precio en efectivo es el del cobro: 15 % y redondeo a $100', () => {
-    // Transferencia es 10 % ($17.000) ⇒ ⛔ vale lo mismo: el rótulo dice sólo «En efectivo».
-    expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: R, hoy: HOY, categorias: [] })).toEqual({ feria: false, lista: 18900, efectivo: 16100, transferencia: 17000, ahorro: 2800, conTransferencia: false, promo: null })
+  it('las TRES formas de pago del cobro: tarjeta en 3 cuotas, transferencia 10 %, efectivo 15 % y redondeo a $100 (26-nov)', () => {
+    // 18.900 × 0,85 = 16.065 ⇒ 16.100 · × 0,9 = 17.010 ⇒ 17.000 · tarjeta (crédito sin %) 18.900 ⇒ cuota 6.300.
+    expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: R, hoy: HOY, categorias: [] })).toEqual({
+      feria: false, lista: 18900, precio: 18900, antes: null, pctOferta: null, promo: null,
+      tarjeta: 18900, cuota: 6300, transferencia: 17000, pctTransferencia: 10, efectivo: 16100, pctEfectivo: 15,
+    })
   })
 
-  it('«o transferencia» sólo si el cobro por transferencia da el MISMO total', () => {
+  it('el % de cada forma de pago sale del cobro, ⛔ escrito: si transferencia vale lo mismo que efectivo, los dos −15 %', () => {
     const t = 13015 // `transferenciaA` de las reglas iniciales
     const igual = { ...R, cuentas: { ...R.cuentas, [t]: { ...R.cuentas[t], descuento: 15 } } } as Reglas
-    const p = precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: igual, hoy: HOY, categorias: [] })
-    expect(p && !p.feria && p.conTransferencia).toBe(true)
+    expect(precioTotem({ product_id: 5, size_id: 1, precio: 18900, reglas: igual, hoy: HOY, categorias: [] })).toMatchObject({ transferencia: 16100, pctTransferencia: 15, efectivo: 16100, pctEfectivo: 15 })
+  })
+
+  it('🖤 en oferta de Tienda Nube: el precio de la oferta, la lista TACHADA y el chip del % (BF: TOP HAVEN 17.990 → 15.290)', () => {
+    const p = precioTotem({ product_id: 5, size_id: 1, precio: 15290, antes: 17990, reglas: R, hoy: HOY, categorias: [] })
+    // Tarjeta 15.290 ⇒ redondeo $100 = 15.300; efectivo 15.290 × 0,85 = 12.996,5 ⇒ 13.000.
+    expect(p).toMatchObject({ precio: 15290, antes: 17990, pctOferta: 15, tarjeta: 15300, efectivo: 13000 })
+  })
+
+  it('una promo de la Caja tacha el precio de antes (la promo se SUMA a la forma de pago)', () => {
+    const conPromo = { ...R, promos: [{ id: 'p', nombre: 'Black Friday bikinis', tipo: 'pct', pct: 15, alcance: { tipo: 'todo' }, desde: '2026-01-01', hasta: null, activa: true }] } as Reglas
+    expect(precioTotem({ product_id: 5, size_id: 1, precio: 20000, reglas: conPromo, hoy: HOY, categorias: [] })).toMatchObject({ precio: 17000, antes: 20000, pctOferta: 15, efectivo: 14500, promo: 'Black Friday bikinis' })
   })
 
   it('una prenda de feria: precio final, sin el % de la forma de pago', () => {
@@ -139,5 +152,67 @@ describe('varianteDelCodigo', () => {
   })
   it('los talles del producto, primero los que hay en el local, como `productosPorStock`', () => {
     expect(indice.porProducto.get(5)?.map((x) => x.size_name)).toEqual(['L', 'M', 'S'])
+  })
+})
+
+/**
+ * 🩱 La bikini (Bruno 26-nov: se vende SÓLO la bikini completa). Datos medidos en prod el 26-nov: «Bikini MADDIE · Sky» $49.990,
+ * corpiño 1000000074 (S = 1000000075) $21.917,24 + bombacha 1000000070 $28.072,76; la «Promo bikinis» de la Caja: 2 = 10 %, 3 = 15 %
+ * hasta el 26; «Black Friday bikinis» −15 % del 27 al 30.
+ */
+const SKY = {
+  variant_id: 1644987951, nombre: 'Bikini MADDIE · Sky', valores: ['S', 'S'], precio: 49990,
+  piezas: [
+    { n: 1, product_id: 1000000074, size_id: 1000000075, cantidad: 1, precio: 21917.24, producto: 'CORPIÑO MADDIE SKY', talle: 'S' },
+    { n: 2, product_id: 1000000070, size_id: 1000000071, cantidad: 1, precio: 28072.76, producto: 'BOMBACHA MADDIE SKY', talle: 'S' },
+  ],
+}
+const alcance = { tipo: 'productos', productos: [{ id: 1000000074, nombre: 'CORPIÑO MADDIE SKY' }] }
+const BIKINIS = { ...R, promos: [
+  { id: 'e', nombre: 'Promo bikinis', tipo: 'cantidad', escalones: [{ desde: 2, pct: 10 }, { desde: 3, pct: 15 }], alcance, desde: '2026-11-25', hasta: '2026-11-26', activa: true },
+  { id: 'bf', nombre: 'Black Friday bikinis', tipo: 'pct', pct: 15, alcance, desde: '2026-11-27', hasta: '2026-11-30', activa: true },
+] } as Reglas
+
+describe('🩱 la bikini en el tótem', () => {
+  it('escanear el corpiño muestra SU bikini, con las dos partes', () => {
+    expect(bikiniDeLaParte([SKY], 1000000074, 1000000075)?.nombre).toBe('Bikini MADDIE · Sky')
+    expect(bikiniDeLaParte([SKY], 1000000070, 1000000071)?.nombre).toBe('Bikini MADDIE · Sky')
+    expect(bikiniDeLaParte([SKY], 5, 1)).toBeNull()
+    expect(bikiniDeLaParte(null, 1000000074, 1000000075)).toBeNull()
+    expect(partesDeLaBikini(SKY)).toEqual([{ rotulo: 'Corpiño', product_id: 1000000074 }, { rotulo: 'Bombacha', product_id: 1000000070 }])
+  })
+
+  it('el precio es el de UNA bikini ($49.990), ⛔ el de la parte; la escalera ⛔ baja el precio de una', () => {
+    const p = precioTotem({ product_id: 1000000074, size_id: 1000000075, precio: 26990, reglas: BIKINIS, hoy: '2026-11-26', categorias: [], bikini: SKY as never })
+    // El grande, el de la etiqueta; con tarjeta la Caja redondea a $100 = 50.000 · efectivo 49.990 × 0,85 = 42.491,5 ⇒ 42.500.
+    expect(p).toMatchObject({ precio: 49990, antes: null, tarjeta: 50000, efectivo: 42500, transferencia: 45000 })
+    expect(escaleraDeHoy(BIKINIS, '2026-11-26', [1000000074, 1000000070], [])).toEqual([{ desde: 2, pct: 10 }, { desde: 3, pct: 15 }])
+  })
+
+  it('🖤 del 27 al 30: −15 % de la Caja tachando el de lista, y SIN escalera', () => {
+    const p = precioTotem({ product_id: 1000000074, size_id: 1000000075, precio: 26990, reglas: BIKINIS, hoy: '2026-11-27', categorias: [], bikini: SKY as never })
+    expect(p).toMatchObject({ antes: 49990, pctOferta: 15, promo: 'Black Friday bikinis' })
+    expect(escaleraDeHoy(BIKINIS, '2026-11-27', [1000000074, 1000000070], [])).toBeNull()
+  })
+
+  it('una prenda fuera del alcance ⛔ tiene escalera', () => {
+    expect(escaleraDeHoy(BIKINIS, '2026-11-26', [5], [])).toBeNull()
+  })
+})
+
+describe('🖤 Black Friday: jue 26 20 h → lun 30 inclusive (hora argentina)', () => {
+  it('la ventana', () => {
+    expect(enBlackFriday(Date.parse('2026-11-26T19:59:00-03:00'))).toBe(false)
+    expect(enBlackFriday(Date.parse('2026-11-26T20:00:00-03:00'))).toBe(true)
+    expect(enBlackFriday(Date.parse('2026-11-30T23:59:00-03:00'))).toBe(true)
+    expect(enBlackFriday(Date.parse('2026-12-01T00:00:00-03:00'))).toBe(false)
+    expect(BLACK_FRIDAY.cinta).toBe('BLACK FRIDAY · HASTA EL LUNES 30')
+  })
+
+  it('la recarga: cada 15 min con TN fresco cuando se aprietan los «Aplicar», cada hora en el BF, y lo de siempre fuera', () => {
+    expect(recargaDelTotem(Date.parse('2026-11-26T20:10:00-03:00'))).toEqual({ cadaMs: 15 * 60_000, refrescar: true })
+    expect(recargaDelTotem(Date.parse('2026-11-28T12:00:00-03:00'))).toEqual({ cadaMs: 60 * 60_000, refrescar: false })
+    expect(recargaDelTotem(Date.parse('2026-11-30T21:00:00-03:00'))).toEqual({ cadaMs: 15 * 60_000, refrescar: true })
+    expect(recargaDelTotem(Date.parse('2026-11-20T12:00:00-03:00'))).toBeNull()
   })
 })

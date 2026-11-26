@@ -433,6 +433,16 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   encargada** (código `ENCARGADA`, Code 128) suma estante y stock en vivo a la prenda en pantalla; sin
   prenda, espera la próxima 30 segundos. **`/pos/totem?prueba=1`** muestra la entrada y agrega la búsqueda por nombre, para probar sin lector;
   sin ese parámetro la clienta sólo escanea.
+  🖤 **26-nov (Black Friday, diseño aprobado por Bruno)**: colores de la TIENDA (blanco y negro, ⛔ los del monitor) y
+  Montserrat; el dibujo vive en `components/caja/TotemVista.tsx`. Toda prenda: precio grande (el de la ETIQUETA) + 3 cuadros
+  iguales —tarjeta «3 cuotas sin interés», transferencia y efectivo con su chip—, cada uno del `cobro()` con su cuenta y el %
+  calculado contra el grande (⛔ escrito). ⚠️ El de tarjeta puede dar más que el grande: la Caja redondea a $100 también con
+  crédito (la bikini de $49.990 se cobra $50.000, medido). Tachado + chip: la lista de TN cuando el precio es su oferta
+  (`precioDeCaja().antes`), o el precio antes de una promo de la Caja. 🩱 **Una parte de bikini muestra SU bikini**
+  (`bikiniDeLaParte` sobre `config.conjuntos`, el MISMO precio que cobra la Caja) con los talles de cada parte y la
+  escalera que la Caja cobra HOY (`escaleraDeHoy`, de las promos `cantidad`, ⛔ escrita). La cinta «BLACK FRIDAY · HASTA EL
+  LUNES 30» y la etiqueta salen de `BLACK_FRIDAY` (jue 26 20 h → lun 30); ⛔ cambian precios: ésos vienen de TN y de la Caja.
+  `recargaDelTotem`: en espera, cada 15 min con TN fresco (`refrescar`) el 26 de 19:50 a 23 h y el 30 desde las 20 h; cada hora en el BF.
 - 🔑 **La marca es CONFIGURACIÓN (rediseño fase 5 + V4)**: nombre, Local, Depósito, modo Local de GN,
   tokens de GN, los `store_name` del espejo, la Tienda Nube y la SIEMBRA de las formas de pago viven en
   `lib/caja/marcas.core.js` (JS plano: lo lee el handler). El handler resuelve `marcaDeCaja(store)` y

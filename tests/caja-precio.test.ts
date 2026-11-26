@@ -15,7 +15,7 @@ const feria = conFeria({ '700': 30000 })
 describe('Caja · el precio según la línea (16-oct)', () => {
   it('Stunned cobra el precio de SU Tienda Nube, con la oferta, ⛔ la lista de GN', () => {
     const r = precioDeCaja(sMail, { store: 'zattia', idx: idxZattia, idxStunned, reglas: feria })
-    expect(r).toEqual({ precio: 22090, fueraDeTn: false, foto: 'https://x/s-mail.jpg', categorias: ['REMERAS'], oferta: true })
+    expect(r).toEqual({ precio: 22090, fueraDeTn: false, foto: 'https://x/s-mail.jpg', categorias: ['REMERAS'], oferta: true, antes: 31490 })
   })
 
   it('Stunned que ⛔ está en su tienda queda SIN precio: la cajera lo escribe (⛔ cae a la lista de GN)', () => {
@@ -39,7 +39,7 @@ describe('Caja · el precio según la línea (16-oct)', () => {
 
   it('Stunned con precio LOCAL cargado en el ERP cobra ESE (28-oct); la foto y la oferta siguen saliendo de su Tienda Nube', () => {
     const r = precioDeCaja(sMail, { store: 'zattia', idx: idxZattia, idxStunned, reglas: null, localStunned: { '913512': 25000 } })
-    expect(r).toEqual({ precio: 25000, fueraDeTn: false, foto: 'https://x/s-mail.jpg', categorias: ['REMERAS'], oferta: true })
+    expect(r).toEqual({ precio: 25000, fueraDeTn: false, foto: 'https://x/s-mail.jpg', categorias: ['REMERAS'], oferta: true, antes: null })
     // Sin carga para ESE producto, sin lista (no se pudo leer) o un 0: lo de Tienda Nube, como siempre.
     expect(precioDeCaja(sMail, { store: 'zattia', idx: idxZattia, idxStunned, reglas: null, localStunned: { '1': 25000 } }).precio).toBe(22090)
     expect(precioDeCaja(sMail, { store: 'zattia', idx: idxZattia, idxStunned, reglas: null, localStunned: null }).precio).toBe(22090)
