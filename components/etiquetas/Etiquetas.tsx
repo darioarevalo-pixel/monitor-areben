@@ -7,6 +7,8 @@ import { BotonActualizarInventario } from '@/components/productos/BotonActualiza
 import { BotonRecargar } from '@/components/productos/BotonRecargar'
 import { useEtiquetasTn } from './useEtiquetasTn'
 import { useMinoristaErp } from './useMinoristaErp'
+import { useBikinisEti } from './useBikinisEti'
+import { conPreciosDeBikini, variantesComoBikini } from '@/lib/etiquetas/bikinis.core.js'
 import { pidsDe, useColaReetiquetado, type EstadoCola, type PrecioImpreso } from './useColaReetiquetado'
 import { dibujoDeCampania, pdfPorPrenda, useEtiquetasCampania, type PrecioCampania } from './useEtiquetasCampania'
 import { etiquetasDesactualizadas, preciosDesalineados, type PrecioDesalineado } from '@/lib/etiquetas/cola'
@@ -101,6 +103,7 @@ export function Etiquetas() {
   const { datos } = useDatosMonitor()
   const tn = useEtiquetasTn(marca)
   const erp = useMinoristaErp(marca)
+  const bik = useBikinisEti(marca)
 
   // Las huérfanas (stock en `inventario`, producto todavía no en `productos`) vienen aparte del
   // ETL a propósito y hay que sumarlas acá: si no, un producto recién cargado en GN no se puede
@@ -114,7 +117,13 @@ export function Etiquetas() {
     ].filter((v) => marca !== 'zattia' || lineaDelProducto('zattia', [v.sku]) === linea),
     [datos, marca, linea],
   )
-  const vars = useMemo(() => variantesEtiquetables(allVariantes), [allVariantes])
+  // 🔑 Bikini 2027 (Bruno, 26-nov): cada parte se etiqueta como SU bikini —nombre y precio de la bikini, «Corpiño · S» abajo— con el
+  // código de la parte, que es el que escanea la Caja. Ver `lib/etiquetas/bikinis.core.js`.
+  const allVariantesBik = useMemo<VarianteEti[]>(
+    () => variantesComoBikini(allVariantes.map((v) => ({ ...v, size: v.size || '' })), bik.bikinis),
+    [allVariantes, bik.bikinis],
+  )
+  const vars = useMemo(() => variantesEtiquetables(allVariantesBik), [allVariantesBik])
   /**
    * De dónde salen las hermanas de la pestaña de SKU.
    *
@@ -126,9 +135,9 @@ export function Etiquetas() {
   const varsById = useMemo(() => Object.fromEntries(vars.map((v) => [v.id, v])) as Record<string, VarianteEti>, [vars])
   const sinCodigo = useMemo(() => variantesSinCodigo(allVariantes), [allVariantes])
   // 🔑 Las líneas ya cortadas (BDI, Stunned) llevan el Minorista de Areben Gestión, lo que cobra la Caja (Bruno, 18-nov).
-  const { precios, promos, fueraDeTn, delErp } = useMemo(
-    () => conPreciosDelErp(construirPrecios(datos?.allProductos ?? [], tn.tnIdx), erp.filas),
-    [datos, tn.tnIdx, erp.filas],
+  const { precios, promos, fueraDeTn, delErp, deBikini } = useMemo(
+    () => conPreciosDeBikini(conPreciosDelErp(construirPrecios(datos?.allProductos ?? [], tn.tnIdx), erp.filas), bik.bikinis),
+    [datos, tn.tnIdx, erp.filas, bik.bikinis],
   )
   // Los productos nuevos que todavía ⛔ tienen precio: desde el corte nacen en Areben Gestión, ⛔ en el catálogo sincronizado.
   const nuevosSinCatalogo = useMemo(
@@ -184,14 +193,14 @@ export function Etiquetas() {
     for (const p of (datos?.allProductos ?? []) as { id: string; retailer_price?: number }[]) {
       const pid = String(p.id)
       // Lo de una línea cortada sale de Areben Gestión: compararlo contra el GN de antes del corte sólo da falsas alarmas.
-      if (delErp.has(pid)) continue
+      if (delErp.has(pid) || deBikini.has(pid)) continue
       const pr = promos[pid]
       const tienda = pr ? pr.normal : precios[pid] || 0
       const gn = Number(p.retailer_price || 0)
       m[pid] = { gn: gn > 0 ? gn : null, tienda: tienda > 0 ? tienda : null }
     }
     return m
-  }, [datos, precios, promos, delErp])
+  }, [datos, precios, promos, delErp, deBikini])
   const desalineados = useMemo(() => preciosDesalineados(listaPorPid, cola.stock), [listaPorPid, cola.stock])
   const nombrePorPid = useMemo(() => {
     const m: Record<string, string> = {}
@@ -425,6 +434,12 @@ export function Etiquetas() {
 
       {/* Antes estas variantes no se listaban en ningún lado: el producto nuevo simplemente no
           existía para Etiquetas. Ahora se etiquetan igual y el cartel explica qué les falta. */}
+      {bik.error && (
+        <Notice tone="danger">
+          <b>No se pudieron leer las bikinis.</b> Las partes de bikini salen con su nombre y su precio de parte: no imprimas bikinis hasta
+          recargar. ({bik.error})
+        </Notice>
+      )}
       {erp.error && (
         <Notice tone="danger">
           <b>No se pudo leer el precio de Areben Gestión.</b> En BDI y Stunned los precios que ves pueden no ser los que cobra la Caja: no imprimas hasta

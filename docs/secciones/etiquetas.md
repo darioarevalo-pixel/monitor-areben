@@ -26,6 +26,12 @@ es sólo de la pestaña de Precio: va detrás de cualquiera de las dos que dicen
 
 ## ⛔ Lo que comparte con otras secciones
 
+- 🔴 **Desde el 26-nov-2026, la parte de una BIKINI 2027 se etiqueta como SU bikini** (Bruno: «escanear una parte cualquiera y que
+  salga la etiqueta de su bikini»). Nombre y precio de la bikini, «Corpiño · S» / «Bombacha · M» abajo, y **el código de la PARTE**
+  (es lo que escanea la Caja, que después pide la otra). El precio es el que cobra la Caja: `?etiquetas=1&bikinis=1` →
+  `conjuntosDeCaja` (`api/_caja-motor.js`) → lista blanca `bikinisParaEtiquetas` (`lib/etiquetas/bikinis.core.js`, ⛔ viaja el
+  reparto por costo). Gana sobre TN y sobre el Minorista de la parte. Sólo Zattia. Test: `etiquetas-bikinis`.
+
 - 🔴 **Desde el 18-nov-2026, en las líneas CORTADAS (BDI, Stunned) el precio sale de Areben Gestión, ⛔ de Tienda Nube**
   (Bruno: la etiqueta dice lo que cobra la Caja). `?etiquetas=1&minorista=1` → `minoristaDelErp` (`api/_liquidacion-erp.js`, lista
   blanca `pid`/`local`/`online`) → `conPreciosDelErp` (`lib/etiquetas/core.ts`): Minorista = lo que se cobra (ya sigue a la

@@ -253,6 +253,8 @@ export async function conjuntosDeCaja(store) {
       const { partes } = repartirPrecio(precio, piezas, (pid) => costos.get(Number(pid))?.costo ?? null)
       conjuntos.push({
         variant_id, nombre: ps[0].producto || 'Bikini', valores: ps[0].valores || [], precio,
+        // El de lista, para que Etiquetas tache cuando hay promo (la Caja usa sólo `precio`).
+        lista: lista > precio ? lista : null,
         piezas: ps.map((r, i) => ({
           n: Number(r.n), product_id: Number(r.product_id), size_id: Number(r.size_id), cantidad: Number(r.cantidad) || 1,
           // Lo que vale UNA unidad de la parte (las bikinis 2027 llevan 1 de cada una).
