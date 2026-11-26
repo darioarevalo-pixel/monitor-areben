@@ -26,6 +26,11 @@ es sólo de la pestaña de Precio: va detrás de cualquiera de las dos que dicen
 
 ## ⛔ Lo que comparte con otras secciones
 
+- 🔑 **Desde el 26-nov-2026, la etiqueta POR PRENDA de Precio de campaña queda registrada** (Bruno, BF: «que haya un registro de que
+  reetiquetaron»): se sella con su número, y cuando se aplica la campaña la cola ⛔ la vuelve a pedir si dice el número que quedó y se
+  imprimió después del último cambio de rótulo (`etiquetaAnticipada`, `lib/etiquetas/cola.core.js`). ⚠️ Entre imprimir y aplicar, esas
+  prendas cuentan en «precio distinto» (la etiqueta dice el de la campaña, la tienda todavía el de antes). La de MESA (feria) sigue sin sellar.
+
 - 🔑 **Desde el 26-nov-2026, Precio de campaña junta las campañas de la misma línea con el mismo rótulo** (`nombreComercial`) en una opción
   más del selector («BLACK ZATTIA · todas juntas»). Bruno: «unificar todas las campañas de black friday en una». ⛔ Se fusionan en la
   Liquidación: están separadas porque la Caja cobra distinto la forma de pago por campaña (BF 15/10, Liquidar 10/10). Cada prenda imprime

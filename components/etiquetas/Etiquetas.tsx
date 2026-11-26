@@ -486,7 +486,12 @@ export function Etiquetas() {
           {marca === 'zattia' && <EstantesEditor />}
         </>
       ) : sub === 'campania' ? (
-        <PrecioDeCampania vars={vars} marca={marca} linea={marca === 'zattia' ? linea : undefined} />
+        <PrecioDeCampania
+          vars={vars}
+          marca={marca}
+          linea={marca === 'zattia' ? linea : undefined}
+          anotar={(pid, precio, lista) => void cola.marcar([pid], 'impresa', { [pid]: { precio, precioLista: lista } }).catch(() => {})}
+        />
       ) : (
         <ModoPanel
           key={sub === 'cola' ? `cola:${filtroCampania}` : sub}
@@ -1147,11 +1152,11 @@ function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiquet
 // esto se puede hacer el sábado con la feria arrancando el lunes: etiquetar deja de depender de
 // aplicar.
 //
-// 🔑 **⛔ NO anota la etiqueta como hecha.** La cola de reetiquetado compara lo que dice la etiqueta
+// 🔑 **⛔ NO anota la etiqueta de MESA como hecha** (la POR PRENDA sí, desde el 26-nov: ver `etiquetaAnticipada`). La cola de reetiquetado compara lo que dice la etiqueta
 // contra el precio de Tienda Nube; sellar acá el precio de feria —que en TN ⛔ no está, porque la
 // prenda se oculta— marcaría las 1.282 como «desactualizadas» al instante. La feria ⛔ no es un
 // reetiquetado: es una etiqueta paralela que se saca cuando la feria termina.
-function PrecioDeCampania({ vars, marca, linea }: { vars: VarianteEti[]; marca: Marca; linea?: 'zattia' | 'stunned' }) {
+function PrecioDeCampania({ vars, marca, linea, anotar }: { vars: VarianteEti[]; marca: Marca; linea?: 'zattia' | 'stunned'; anotar?: (pid: string, precio: number, lista: number | null) => void }) {
   const [liq, setLiq] = useState(() => lsGet(keyCampaniaLiq(marca), ''))
   const [copias, setCopias] = useState('1')
   const [conBarras, setConBarras] = useState(false)
@@ -1284,6 +1289,10 @@ function PrecioDeCampania({ vars, marca, linea }: { vars: VarianteEti[]; marca: 
       : await buildLibrePdf(dibujo(item.precio, n, conBarras ? String(v.barcode || '') : ''))
     if (pdf) imprimirPdf(pdf)
     if (porPrenda) setUltimaPrenda({ v, item })
+    // 🔑 La etiqueta POR PRENDA es un reetiquetado (Bruno 26-nov, BF: «que haya un registro de que reetiquetaron»): queda anotada con
+    // su número y la cola ⛔ la vuelve a pedir cuando se aplique ese precio (`etiquetaAnticipada`). ⛔ La de mesa (feria): esa se
+    // saca cuando termina y sellarla acusaría el número de remate.
+    if (porPrenda && anotar) anotar(v.pid, item.precio, item.lista != null && item.lista > item.precio ? item.lista : null)
     anotarTirada(item.precio, n)
     setUltimoPrecio(item.precio)
     setFeedback({

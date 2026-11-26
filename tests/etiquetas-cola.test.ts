@@ -226,3 +226,26 @@ describe('preciosDesalineados · Gestión Nube contra la tienda', () => {
     expect(r.map((x) => x.pid)).toEqual(['2', '3', '1'])
   })
 })
+
+describe('etiqueta impresa ANTES de aplicar (Precio de campaña, BF 26-nov)', () => {
+  const rotulos = { 'Black Friday 2026': { desde: '2026-11-26T14:07:00Z' } }
+  const ev = { pid: '1', producto: 'X', sku: null, cuando: '2026-11-26T23:00:00Z', precioA: 30590, precioLista: 35990, liqNombre: 'Black Friday 2026', modo: 'poner' }
+  it('impresa a las 16 con el número BF ⇒ al día cuando se aplica a las 20', () => {
+    const c = armarCola([ev], { '1': '2026-11-26T19:00:00Z' }, { '1': 3 }, { sellos: { '1': { cuando: '2026-11-26T19:00:00Z', precio: 30590 } }, rotulos })
+    expect(c.hechas).toHaveLength(1)
+  })
+  it('otro número ⇒ pendiente', () => {
+    const c = armarCola([ev], { '1': '2026-11-26T19:00:00Z' }, { '1': 3 }, { sellos: { '1': { cuando: '2026-11-26T19:00:00Z', precio: 29990 } }, rotulos })
+    expect(c.pendientes).toHaveLength(1)
+  })
+  it('impresa ANTES del rótulo de la campaña (mismo número, otro título) ⇒ pendiente', () => {
+    const c = armarCola([ev], { '1': '2026-11-20T19:00:00Z' }, { '1': 3 }, { sellos: { '1': { cuando: '2026-11-20T19:00:00Z', precio: 30590 } }, rotulos })
+    expect(c.pendientes).toHaveLength(1)
+  })
+  it('campaña sin rótulo fechado, o volver a lista ⇒ manda la regla de fechas', () => {
+    const s = { sellos: { '1': { cuando: '2026-11-26T19:00:00Z', precio: 30590 } }, rotulos: {} }
+    expect(armarCola([ev], { '1': '2026-11-26T19:00:00Z' }, { '1': 3 }, s).pendientes).toHaveLength(1)
+    const sacar = { ...ev, modo: 'sacar', precioA: null }
+    expect(armarCola([sacar], { '1': '2026-11-26T19:00:00Z' }, { '1': 3 }, { ...s, rotulos }).pendientes).toHaveLength(1)
+  })
+})
