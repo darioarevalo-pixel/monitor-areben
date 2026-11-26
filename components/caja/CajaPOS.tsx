@@ -57,7 +57,7 @@ import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
 import { avisoDeRenglon, stockSinReservasWeb } from '@/lib/caja/pedidos-web.core.js'
 import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { aplicarPromos } from '@/lib/caja/promos.core.js'
-import { conjuntosConPieza, type ConjuntoCaja } from '@/lib/caja/conjuntos.core.js'
+import { conjuntosConPieza, gruposDelPedido, parteDe, rebajaDeBikini, rebajaEnPartes, type ConjuntoCaja } from '@/lib/caja/conjuntos.core.js'
 import { registrarRespuesta, repetida } from '@/lib/caja/repetida.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { imprimirTicket, numeroProvisorio, plata, ticketDeCambio, ticketDeVenta, type ComprobanteCambio, type DatosTicket } from '@/lib/caja/ticket'
@@ -130,6 +130,7 @@ import {
   aNumero,
   claveDe,
   claveDeRenglon,
+  FilaBikini,
   horaAr,
   type PagoUI,
   type Renglon,
@@ -752,6 +753,18 @@ function POS() {
       const el = b.renglones[i]
       return { ...b, renglones: b.renglones.filter((r, j) => j !== i && !(el?.conjunto && mismaBikini(r, el))) }
     })
+  // 🩱 Cada bikini en UN renglón en pantalla (Bruno 26-nov); el carrito sigue con un renglón por parte (lo que viaja ⛔ cambia).
+  const grupos = gruposDelPedido(bor.renglones)
+  const rebajarBikini = (indices: number[], rb: Rebaja | null) =>
+    setBor((b) => {
+      const reparto = rebajaEnPartes(rb, indices.map((j) => b.renglones[j]))
+      return { ...b, renglones: b.renglones.map((r, j) => (indices.includes(j) ? { ...r, rebaja: reparto[indices.indexOf(j)] } : r)) }
+    })
+  const importeDe = (indices: number[]) => (filas && indices.every((j) => filas[j]) ? Math.round(indices.reduce((t, j) => t + Math.round(filas[j].importe * 100), 0)) / 100 : null)
+  const promosDe = (indices: number[]) => {
+    const ps = [...new Set(indices.flatMap((j) => (conPromo.items[j] as { promos?: string[] } | undefined)?.promos ?? []))]
+    return ps.length ? ps : null
+  }
 
   // ── El cobro: el mismo núcleo que el servidor ──
   const sinPrecio = bor.renglones.some((r) => !(r.precio && r.precio > 0))
@@ -898,8 +911,14 @@ function POS() {
   // 🔑 La pantalla de la clienta (rediseño, fase 3): se le publican los números del POS, ⛔ los recalcula.
   const vistaCliente = JSON.stringify(
     vistaParaCliente({
-      carrito: (bor.falla ? [] : bor.renglones).map((r) => ({ nombre: r.variante.product_name, talle: r.variante.size_name, color: colorDe(r.variante), cantidad: r.cantidad, precio: r.precio, foto: r.foto })),
-      filas,
+      // 🩱 La bikini en UN renglón también para la clienta (Bruno 26-nov).
+      carrito: (bor.falla ? [] : grupos).map(({ indices, bikini }) => {
+        const r = bor.renglones[indices[0]]
+        return bikini
+          ? { nombre: bikini.nombre ?? r.variante.product_name, talle: indices.map((j) => [parteDe(bor.renglones[j].variante.product_name), bor.renglones[j].variante.size_name].filter(Boolean).join(' ')).join(' / '), color: null, cantidad: bikini.cantidad, precio: bikini.precio, foto: r.foto }
+          : { nombre: r.variante.product_name, talle: r.variante.size_name, color: colorDe(r.variante), cantidad: r.cantidad, precio: r.precio, foto: r.foto }
+      }),
+      filas: filas ? grupos.map(({ indices }) => ({ importe: importeDe(indices) ?? 0 })) : null,
       aPagar,
       cobro: c,
       medio: !varios && pagos[0]?.medio ? NOMBRE_MEDIO[pagos[0].medio] : null,
@@ -1089,7 +1108,8 @@ function POS() {
     void cargarAgenda()
   }, [cargarAgenda])
 
-  const prendas = bor.renglones.reduce((s, r) => s + r.cantidad, 0)
+  // La bikini cuenta UNA (Bruno 26-nov: «Pedido · 4 productos» con 2 bikinis ⛔).
+  const prendas = grupos.reduce((s, g) => s + (g.bikini ? g.bikini.cantidad : bor.renglones[g.indices[0]].cantidad), 0)
   const puedeCobrar = !soloMirar && !enFalla && bor.renglones.length > 0 && !sinPrecio && (!enPublicidad || (publicidadLista && !publicidadCubre))
   /** Publicidad que cubre toda la compra: «Registrar publicidad» en lugar del cobro (total $0, ⛔ forma de pago). */
   const puedeRegistrarPublicidad = !soloMirar && publicidadCubre && bor.renglones.length > 0 && !sinPrecio && !enviando
@@ -1425,19 +1445,23 @@ pendientes
                     </Field>
                   )}
                   <div style={{ display: 'grid', gap: space[2], fontSize: font.sm }}>
-                    {bor.renglones.map((r, i) => (
-                      <div key={claveDe(r.variante)} style={{ display: 'flex', justifyContent: 'space-between', gap: space[2] }}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: weight.semibold, color: color.ink, textTransform: 'uppercase' }}>
-                            {r.variante.product_name} {feriaIds.has(Number(r.variante.product_id)) && <Badge tone="warning">Oferta</Badge>}
+                    {grupos.map(({ indices, bikini }) => {
+                      const r = bor.renglones[indices[0]]
+                      const imp = importeDe(indices)
+                      return (
+                        <div key={bikini ? `k${bikini.variant_id}` : claveDe(r.variante)} style={{ display: 'flex', justifyContent: 'space-between', gap: space[2] }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: weight.semibold, color: color.ink, textTransform: 'uppercase' }}>
+                              {bikini ? bikini.nombre ?? r.variante.product_name : r.variante.product_name} {!bikini && feriaIds.has(Number(r.variante.product_id)) && <Badge tone="warning">Oferta</Badge>}
+                            </div>
+                            <div style={{ color: color.mut }}>
+                              {bikini ? indices.map((j) => [parteDe(bor.renglones[j].variante.product_name), bor.renglones[j].variante.size_name].filter(Boolean).join(' ')).join(' / ') : r.variante.size_name} · ×{bikini ? bikini.cantidad : r.cantidad}
+                            </div>
                           </div>
-                          <div style={{ color: color.mut }}>
-                            {r.variante.size_name} · ×{r.cantidad}
-                          </div>
+                          <b style={{ color: color.ink, fontVariantNumeric: 'tabular-nums' }}>{imp != null ? plata(imp) : '—'}</b>
                         </div>
-                        <b style={{ color: color.ink, fontVariantNumeric: 'tabular-nums' }}>{filas?.[i] ? plata(filas[i].importe) : '—'}</b>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                   <div style={{ borderTop: `1px solid ${color.line}`, paddingTop: space[2] }}>
                     {c ? (
@@ -1723,7 +1747,30 @@ pendientes
               {bor.renglones.length === 0 ? (
                 <div style={{ padding: `${space[6]}px 0`, textAlign: 'center', color: color.mut, fontSize: font.base }}>Pedido vacío: escanear o buscar un producto.</div>
               ) : (
-                bor.renglones.map((r, i) => (
+                grupos.map(({ indices, bikini }) => {
+                  if (bikini) {
+                    const partes = indices.map((j) => bor.renglones[j])
+                    return (
+                      <FilaBikini
+                        key={`k${bikini.variant_id}`}
+                        nombre={bikini.nombre ?? partes[0].variante.product_name}
+                        partes={partes}
+                        precio={bikini.precio}
+                        importe={importeDe(indices)}
+                        promos={promosDe(indices)}
+                        rebaja={rebajaDeBikini(partes)}
+                        tactil={movil}
+                        onCantidad={(n) => (n <= 0 ? sacarRenglon(indices[0]) : cambiarRenglon(indices[0], { cantidad: n }))}
+                        onRebaja={(rb) => rebajarBikini(indices, rb)}
+                        onSacar={() => sacarRenglon(indices[0])}
+                        avisos={partes.map((p) => avisoWeb(p.variante, p.stock, p.cantidad))}
+                        mirandoWeb={!pedidosWeb && !errPedidos}
+                      />
+                    )
+                  }
+                  const i = indices[0]
+                  const r = bor.renglones[i]
+                  return (
                   <FilaRenglon
                     key={claveDe(r.variante)}
                     r={r}
@@ -1739,7 +1786,8 @@ pendientes
                     avisoWeb={avisoWeb(r.variante, r.stock, r.cantidad)}
                     mirandoWeb={!pedidosWeb && !errPedidos}
                   />
-                ))
+                  )
+                })
               )}
     </>
   )

@@ -678,6 +678,12 @@ salen de la MISMA `sobreEsperado`.
   descuenta se reparte entre las partes (`repartirDescuento`, al centavo).
 - 🔑 La venta lleva al motor `detalle.conjuntos` (`entradaDelMotor`); **ticket** (`renglonesParaMostrar`) y **factura**
   (`renglonesDeVenta`) la muestran en UNA línea con la regla del motor (`lineasParaMostrar`, `motor/venta/conjuntos.mjs`).
+- 🔑 **En la PANTALLA del POS la bikini también es UN renglón** (Bruno 26-nov, probando en el local: «las partes no tendrían que tener
+  precio, sino las bikini en general»): `gruposDelPedido` junta las partes para mostrar —pedido (`FilaBikini`), resumen del cobro,
+  pantalla de la clienta y el «Pedido · N productos», que cuenta bikinis—. Las partes van abajo SIN precio, sólo talle y stock. El
+  carrito y lo que viaja al servidor siguen con un renglón por parte (⛔ cambia). El descuento a mano es de la bikini: `rebajaEnPartes`
+  lo reparte (el % igual, los pesos por lo que vale cada parte) y `rebajaDeBikini` lo vuelve a leer. El redondeo a $100 ⛔ es de acá:
+  es el de la forma de pago, al cobrar (medido 26-nov: $144.474,50 ⇒ efectivo $122.800, transferencia $130.000, cuotas $144.500).
 - 🔑 **El CAMBIO** (`useCambio`: POS y ERP › Caja). La ficha de la venta trae sus bikinis (`conjuntos`, de `detalle`). Devolver una
   parte pregunta **«Devuelve la bikini completa»** (suma la otra parte) o **«Cambia el talle de esta parte»**. Lo que se lleva:
   la parte que vuelve SOLA sale sola sólo en **otro talle**, a lo que vale en la bikini (`precioDeParte`; en TN la parte ⛔ tiene
