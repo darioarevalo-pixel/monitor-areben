@@ -442,6 +442,9 @@ del monitor) (`sql/migrate-caja*.sql`, las 10 corridas en las dos) · respaldo d
   (`bikiniDeLaParte` sobre `config.conjuntos`, el MISMO precio que cobra la Caja) con los talles de cada parte y la
   escalera que la Caja cobra HOY (`escaleraDeHoy`, de las promos `cantidad`, ⛔ escrita). La cinta «BLACK FRIDAY · HASTA EL
   LUNES 30» y la etiqueta salen de `BLACK_FRIDAY` (jue 26 20 h → lun 30); ⛔ cambian precios: ésos vienen de TN y de la Caja.
+  🩱 **Promo «$ fijo llevando otro producto» (`llevando_precio`, Bruno 26-nov)**: el combo «short a $34.990 con cualquier
+  bikini» —misma regla de habilitar que «% llevando», pero la unidad queda a `precio` (⛔ la sube si ya vale menos; en BF el short
+  a $38.290 sigue a $34.990)—. El tótem la muestra desde las dos puntas (`combosDeHoy`).
   `recargaDelTotem`: en espera, cada 15 min con TN fresco (`refrescar`) el 26 de 19:50 a 23 h y el 30 desde las 20 h; cada hora en el BF.
 - 🔑 **La marca es CONFIGURACIÓN (rediseño fase 5 + V4)**: nombre, Local, Depósito, modo Local de GN,
   tokens de GN, los `store_name` del espejo, la Tienda Nube y la SIEMBRA de las formas de pago viven en

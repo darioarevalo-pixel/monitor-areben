@@ -16,7 +16,7 @@ import { buscarNombre, guardarPromos, type AlcancePromo, type ProductoLista, typ
 import { Badge, Button, Field, Input, Notice, Plegable, Select, color, font, radius, space } from '@/components/ui'
 import { storeCaja } from '@/lib/caja/marca'
 
-const TIPOS: TipoPromo[] = ['nxm', 'segunda_unidad', 'pct', 'cantidad', 'llevando', 'monto_minimo']
+const TIPOS: TipoPromo[] = ['nxm', 'segunda_unidad', 'pct', 'cantidad', 'llevando', 'llevando_precio', 'monto_minimo']
 
 /** dd/mm de una fecha `AAAA-MM-DD`. */
 const dm = (f: string) => `${f.slice(8, 10)}/${f.slice(5, 7)}`
@@ -28,9 +28,10 @@ function resumen(p: PromoCaja): string {
     : p.tipo === 'segunda_unidad' ? `2ª unidad al ${p.pct}%`
     : p.tipo === 'pct' ? `${p.pct}% de descuento`
     : p.tipo === 'llevando' ? `${p.pct}% llevando ${p.requiere ? queAlcance(p.requiere) : '—'}`
+    : p.tipo === 'llevando_precio' ? `A ${plata(p.precio ?? 0)} llevando ${p.requiere ? queAlcance(p.requiere) : '—'}`
     : p.tipo === 'cantidad' ? (p.escalones ?? []).map((e, i, l) => `${e.desde}${i === l.length - 1 ? ' o más' : ''}: ${e.pct}%`).join(' · ')
     : `${plata(p.pesos ?? 0)} de descuento desde ${plata(p.minimo ?? 0)}`
-  const donde = p.tipo === 'monto_minimo' ? null : (p.tipo === 'llevando' ? 'en ' : '') + queAlcance(p.alcance)
+  const donde = p.tipo === 'monto_minimo' ? null : (p.tipo === 'llevando' || p.tipo === 'llevando_precio' ? 'en ' : '') + queAlcance(p.alcance)
   const cuando = p.hasta ? `del ${dm(p.desde)} al ${dm(p.hasta)}` : `desde el ${dm(p.desde)}`
   return [que, donde, cuando].filter(Boolean).join(' · ')
 }
@@ -52,9 +53,9 @@ function estado(p: PromoCaja, hoy: string): { tono: 'success' | 'neutral' | 'war
 type Productos = Array<{ id: number; nombre: string }>
 /** Un alcance mientras se edita: a qué productos (lo que se descuenta, o lo que hay que llevar). */
 type FormAlcance = { tipo: AlcancePromo['tipo']; categorias: string[]; productos: Productos; excluidos: Productos }
-type Form = { nombre: string; tipo: TipoPromo; lleva: string; paga: string; pct: string; minimo: string; pesos: string; escalones: Array<{ desde: string; pct: string }>; alcance: FormAlcance; requiere: FormAlcance; desde: string; hasta: string }
+type Form = { nombre: string; tipo: TipoPromo; lleva: string; paga: string; pct: string; precio: string; minimo: string; pesos: string; escalones: Array<{ desde: string; pct: string }>; alcance: FormAlcance; requiere: FormAlcance; desde: string; hasta: string }
 const alcanceVacio = (): FormAlcance => ({ tipo: 'todo', categorias: [], productos: [], excluidos: [] })
-const formVacio = (): Form => ({ nombre: '', tipo: 'nxm', lleva: '3', paga: '2', pct: '', minimo: '', pesos: '', escalones: [{ desde: '2', pct: '' }], alcance: alcanceVacio(), requiere: { ...alcanceVacio(), tipo: 'categorias' }, desde: hoyIso(), hasta: '' })
+const formVacio = (): Form => ({ nombre: '', tipo: 'nxm', lleva: '3', paga: '2', pct: '', precio: '', minimo: '', pesos: '', escalones: [{ desde: '2', pct: '' }], alcance: alcanceVacio(), requiere: { ...alcanceVacio(), tipo: 'categorias' }, desde: hoyIso(), hasta: '' })
 
 function aAlcance(a: FormAlcance): AlcancePromo {
   const resta = a.excluidos.length ? { excluidos: a.excluidos } : {}
@@ -66,7 +67,8 @@ function aPromo(f: Form): PromoCaja {
   const p: PromoCaja = { id: `pr${Date.now().toString(36)}`, nombre: f.nombre.trim(), tipo: f.tipo, alcance, desde: f.desde, hasta: f.hasta || null, activa: true }
   if (f.tipo === 'nxm') Object.assign(p, { lleva: Number(f.lleva), paga: Number(f.paga) })
   if (f.tipo === 'segunda_unidad' || f.tipo === 'pct' || f.tipo === 'llevando') p.pct = Number(f.pct)
-  if (f.tipo === 'llevando') p.requiere = aAlcance(f.requiere)
+  if (f.tipo === 'llevando_precio') p.precio = Number(f.precio)
+  if (f.tipo === 'llevando' || f.tipo === 'llevando_precio') p.requiere = aAlcance(f.requiere)
   if (f.tipo === 'monto_minimo') Object.assign(p, { minimo: Number(f.minimo), pesos: Number(f.pesos) })
   if (f.tipo === 'cantidad') p.escalones = f.escalones.map((e) => ({ desde: Number(e.desde), pct: Number(e.pct) }))
   return p
@@ -187,6 +189,11 @@ function FormPromo({ form, setForm, guardando, onCancelar, onGuardar }: { form: 
           <Input inputMode="numeric" value={form.pct} onChange={(e) => cambiar({ pct: num(e.target.value) })} style={{ width: 100 }} />
         </Field>
       )}
+      {form.tipo === 'llevando_precio' && (
+        <Field label="Precio con la promo ($)">
+          <Input inputMode="numeric" value={form.precio} onChange={(e) => cambiar({ precio: num(e.target.value) })} style={{ width: 120 }} />
+        </Field>
+      )}
       {form.tipo === 'cantidad' && (
         <Field label="Escalones: desde cuántas unidades, qué % a todas">
           <div style={{ display: 'grid', gap: space[1.5] }}>
@@ -226,9 +233,9 @@ function FormPromo({ form, setForm, guardando, onCancelar, onGuardar }: { form: 
         </div>
       )}
       {form.tipo !== 'monto_minimo' && (
-        <ElegirAlcance titulo={form.tipo === 'llevando' ? 'Qué productos tienen el descuento' : 'A qué productos'} valor={form.alcance} onCambiar={(alcance) => cambiar({ alcance })} categorias={categorias} cargando={!tnIdx} />
+        <ElegirAlcance titulo={form.tipo === 'llevando' || form.tipo === 'llevando_precio' ? 'Qué productos tienen el descuento' : 'A qué productos'} valor={form.alcance} onCambiar={(alcance) => cambiar({ alcance })} categorias={categorias} cargando={!tnIdx} />
       )}
-      {form.tipo === 'llevando' && (
+      {(form.tipo === 'llevando' || form.tipo === 'llevando_precio') && (
         <>
           <ElegirAlcance titulo="Llevando alguno de estos productos" valor={form.requiere} onCambiar={(requiere) => cambiar({ requiere })} categorias={categorias} cargando={!tnIdx} />
           <span style={{ color: color.mut, fontSize: font.sm }}>Cada producto que se lleva habilita el descuento en uno solo (el más caro). Cuentan también los que tienen otra promo, descuento a mano o están en oferta. Un producto con el descuento nunca habilita a otro.</span>

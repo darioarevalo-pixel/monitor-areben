@@ -33,7 +33,7 @@ import { imagenesDe } from '@/lib/tn'
 import { precioDeCaja } from '@/lib/caja/precio'
 import { hoyIso } from '@/lib/agenda'
 import { buscarNombre, buscarProducto, elegirVariante, leerConfig, stockEnVivo, type Candidato, type Config, type ProductoLista, type Variante } from '@/lib/caja/cliente'
-import { bikiniDeLaParte, coloresDelProducto, enBlackFriday, escaleraDeHoy, esTarjetaEncargada, fotosDeLaPrenda, indiceDelTotem, opcionesDelLocal, partesDeLaBikini, precioTotem, primeroLosDelLocal, recargaDelTotem, TOTEM_MS, varianteDelCodigo } from '@/lib/caja/totem'
+import { bikiniDeLaParte, coloresDelProducto, combosDeHoy, enBlackFriday, escaleraDeHoy, esTarjetaEncargada, fotosDeLaPrenda, indiceDelTotem, opcionesDelLocal, partesDeLaBikini, precioTotem, primeroLosDelLocal, recargaDelTotem, TOTEM_MS, varianteDelCodigo } from '@/lib/caja/totem'
 import { TTL_MS } from '@/lib/cache'
 import { traerAudit } from '@/lib/tn-audit'
 import type { ProductoFchk } from '@/lib/tncat/tipos'
@@ -181,6 +181,7 @@ function Totem() {
           partes: partes.map((pt) => ({ ...pt, talles: opcionesDelLocal(indice?.porProducto.get(pt.product_id) ?? [], []).talles })),
           precio: precioTotem({ product_id: variante.product_id, size_id: variante.size_id, precio: kit.precio, antes: (kit as { lista?: number | null }).lista ?? null, reglas: config?.reglas ?? null, hoy, categorias, bikini: kit }),
           escalera: escaleraDeHoy(config?.reglas ?? null, hoy, kit.piezas.map((p) => p.product_id), categorias),
+          combos: combosDeHoy(config?.reglas ?? null, hoy, kit.piezas.map((p) => p.product_id), categorias, config?.conjuntos),
           bikini: true,
           stock: 'confirmando',
         },
@@ -204,6 +205,7 @@ function Totem() {
         colorActual: cols.actual ?? (opciones.talles.length ? null : variante.size_name),
         precio: precioTotem({ product_id: variante.product_id, size_id: variante.size_id, precio, antes, reglas: config?.reglas ?? null, hoy, categorias }),
         escalera: escaleraDeHoy(config?.reglas ?? null, hoy, [variante.product_id], categorias),
+        combos: combosDeHoy(config?.reglas ?? null, hoy, [variante.product_id], categorias, config?.conjuntos),
         bikini: false,
         talles: opciones.talles,
         partes: [],

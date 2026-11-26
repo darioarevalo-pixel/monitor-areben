@@ -34,6 +34,8 @@ export type Resultado = {
   partes: { rotulo: string; product_id: number; talles: { talle: string; hay: boolean }[] }[]
   /** El descuento por cantidad que la Caja cobra HOY a esta prenda; null si ninguno. */
   escalera: { desde: number; pct: number }[] | null
+  /** El combo a precio fijo de la Caja (`{PRECIO}` se reemplaza por el monto). */
+  combos: { texto: string; precio: number }[]
   bikini: boolean
   stock: 'confirmando' | 'confirmado' | 'sin-confirmar'
 }
@@ -112,6 +114,9 @@ export const TOTEM_CSS = `
 .totem-mas > div > div:last-child { background: var(--ink); color: #fff; }
 .totem-mas span { font-size: calc(var(--u) * 1.15); font-weight: 600; }
 .totem-mas strong { font-size: calc(var(--u) * 2.3); line-height: 1; font-weight: 800; }
+/* el combo: borde punteado, como en la maqueta */
+.totem-combo { border: 1.5px dashed #c9c8c4; border-radius: calc(var(--u) * 1); padding: calc(var(--u) * .9) calc(var(--u) * 1.2); font-size: calc(var(--u) * 1.4); font-weight: 600; }
+.totem-combo b { font-weight: 800; font-variant-numeric: tabular-nums; }
 .totem-nota { font-size: calc(var(--u) * 1.15); color: var(--mut); margin: 0; }
 .totem-aviso { background: var(--soft); border-radius: calc(var(--u) * 1); padding: calc(var(--u) * 1.2); font-size: calc(var(--u) * 1.5); font-weight: 600; }
 .totem-encargada { background: var(--ink); color: #fff; border-radius: calc(var(--u) * 1); padding: calc(var(--u) * 1.2); display: grid; gap: 4px; font-size: calc(var(--u) * 1.4); }
@@ -392,6 +397,14 @@ export function Prenda({ r, bf, ubicacion, arranques, msReloj, tocar }: { r: Res
             </div>
             <Pagos p={precio} />
             {r.escalera && <Cantidad escalones={r.escalera} bikini={r.bikini} />}
+            {r.combos.map((c) => {
+              const [antes, despues] = c.texto.split('{PRECIO}')
+              return (
+                <div key={c.texto} className="totem-combo">
+                  <span>{antes}<b>{plata(c.precio)}</b>{despues}</span>
+                </div>
+              )
+            })}
             {bf && r.bikini && !r.escalera && <p className="totem-nota">{BLACK_FRIDAY.vuelveCantidad}</p>}
           </>
         )}
