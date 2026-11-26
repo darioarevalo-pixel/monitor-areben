@@ -18,7 +18,9 @@ let stockPendiente = false
 let pedidosDeStock = 0
 
 vi.mock('@/components/SesionProvider', () => ({ useSesion: () => ({ marca: 'zattia', setMarca: () => {} }) }))
-vi.mock('@/components/fundas/useDatosMonitor', () => ({ useDatosMonitor: () => ({ datos: { allProductos: [{ id: 5 }], allVariantes: cargadas } }) }))
+// El tótem baja SÓLO productos e inventario (26-nov): `traerCatalogo` + el mismo `computarDatos`.
+vi.mock('@/lib/datos', () => ({ traerCatalogo: () => Promise.resolve({}) }))
+vi.mock('@/lib/etl/computar', () => ({ computarDatos: () => ({ allProductos: [{ id: 5 }], allVariantes: cargadas }) }))
 vi.mock('@/components/productos/useTnImages', () => ({ useTnPromo: () => ({}) }))
 vi.mock('@/lib/etiquetas/core', () => ({ construirPrecios: () => ({ precios: { 5: 18900 }, promos: {}, fueraDeTn: new Set() }) }))
 vi.mock('@/lib/tn', () => ({ imagenDe: () => null, imagenesDe: () => ['tienda-2.jpg'], matchTn: () => null }))

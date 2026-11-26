@@ -269,3 +269,25 @@ export async function traerDatos({ marca, desde, onProgress, onTiempos }: Opcion
 
   return { productos, inventario, vmMes, vmCat, vmFundas, colorManual, ventas: ventasReales, detalles: detallesReales, syncMeta }
 }
+
+/**
+ * 🖥️ Lo ÚNICO que necesita el tótem (Bruno 26-nov: «siempre tarda una banda abrir el tótem»): productos e inventario. Medido el
+ * 26-nov: con `traerDatos` el tótem bajaba el historial ENTERO de ventas para dibujar un precio —81 pedidos, 6,4 MB, ~8,6 s en
+ * fibra; en la tablet del local, mucho más— y como se recarga solo cada 6 h, lo pagaba de nuevo cada vez. Pasa por el MISMO
+ * `computarDatos` con las ventas vacías: `allProductos` y `allVariantes` salen iguales (el stock del local, `store_name = local`).
+ * ⛔ Costos ni ventas: el tótem es de la clienta.
+ */
+export async function traerCatalogo(marca: Marca): Promise<PayloadCache> {
+  const cuenta: Cuenta = CUENTAS[marca]
+  const esZattia = marca === 'zattia'
+  const selectProductos =
+    (esZattia
+      ? 'select=id,name,category,sku,proveedor,retailer_price,created_at,active&active=eq.1'
+      : 'select=id,name,category,sku,retailer_price,created_at,active&active=eq.1') + '&order=id'
+  const inv = (cols: string) => fetchAll<FilaInventario>(cuenta, 'inventario', `select=${cols}&order=product_id`, undefined, 'inventario')
+  const [productos, inventario] = await Promise.all([
+    fetchAll<FilaProducto>(cuenta, 'productos', selectProductos, undefined, 'productos'),
+    inv('product_id,product_name,size_id,size_name,available_quantity,store_name,sku,barcode').catch(() => inv('product_id,product_name,size_id,size_name,available_quantity,store_name')),
+  ])
+  return { productos, inventario, vmMes: [], vmCat: [], vmFundas: [], colorManual: [], ventas: [], detalles: [], syncMeta: null }
+}
