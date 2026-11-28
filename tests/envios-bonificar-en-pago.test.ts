@@ -58,7 +58,8 @@ describe('🔴 bonificar, en la columna del pago', () => {
   // mismo lugar y por la misma razón; con dos flags sueltos un llamador nuevo los pasa cruzados y
   // queda una pantalla que no es ni la bandeja ni la hoja.
   it('🔴 cada pantalla se monta diciendo cuál es', () => {
-    expect(pantalla).toContain('<PagoDelEnvio envio={e} onGuardado={recargar} donde="hoja" />')
+    // 27-nov (Bruno, maqueta de la columna «Cobro»): la hoja del día ⛔ lleva el pago del envío; se corrige en la ficha.
+    expect(pantalla).not.toContain('donde="hoja"')
     expect(pantalla).toContain('<PagoDelEnvio envio={e} onGuardado={onRecargar} donde="bandeja" />')
     // Y la decisión de qué se ofrece la toma el núcleo, no el JSX: acá sólo se le dice dónde está.
     expect(pago).toContain('pagoDelEnvio(envio, enLaBandeja)')

@@ -54,6 +54,7 @@ import {
   pagoDelEnvio,
   proximoDiaDeReparto,
   quienCobro,
+  OPCIONES_DE_COBRO,
   puedeIrAUnDia,
   rotuloDeDia,
   marcasPresentes,
@@ -377,7 +378,7 @@ export function Envios() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: space[4] }}>
         <KpiCard label="Envíos del día" value={String(totales.envios)} />
         <KpiCard label="Sin salir todavía" value={String(totales.pendienteDeSalir)} />
-        <KpiCard label="Cobró en las puertas" value={formatMoney(totales.cobrado)} />
+        <KpiCard label="Cobró en las puertas" value={formatMoney(totales.cobrado)} sub={totales.sinConfirmar ? `${formatMoney(totales.sinConfirmar)} de contraentrega sin confirmar` : undefined} />
         <KpiCard label="Se queda (sus envíos)" value={formatMoney(totales.tarifas)} />
         {/* El pie cambia de frase con el signo: lo que falta llegar puede ser plata que el cadete
             todavía tiene que cobrar, o —cuando lo que queda son envíos ya pagos o bonificados—
@@ -422,7 +423,7 @@ export function Envios() {
                     <Th>Cliente</Th>
                     <Th>Dirección</Th>
                     <Th>Pedido</Th>
-                    <Th>Cobra</Th>
+                    <Th>Cobro</Th>
                     <Th>
                       <span data-guia="envios.estado">Estado</span>
                     </Th>
@@ -453,23 +454,27 @@ export function Envios() {
                         <ResumenPedido envio={e} onVer={() => setViendoPedido(e)} />
                       </Td>
                       <Td wrap tall style={{ minWidth: 150 }}>
-                        {/* Igual que en el ticket: pagado NO es "$0". Un cero se lee como un precio. */}
-                        {estaTodoPago(e) ? <StatusPill tone="success" label="PAGADO" /> : <strong>{formatMoney(aCobrar(e))}</strong>}
-                        {/* 🔑 **El costo del envío no se borra cuando no se cobra: se pinta.** Es lo
-                            que se le paga al cadete, así que tiene que estar a la vista mientras se
-                            arma la mochila. Verde = esta puerta no lo cobra. */}
+                        {/* 🔑 27-nov, Bruno («usa vocabulario pq esta terrible»; maqueta https://claude.ai/artifact/RZLVg9hYthr4a3He73z4Lh):
+                            UNA palabra por cosa. Todo pagado ⇒ «Pagado · Sin contraentrega» y el envío (lo que se le paga al
+                            cadete), sin botones: corregir el pago va en la ficha. Con algo para cobrar ⇒ «Contraentrega» y el
+                            monto; entregado, quién cobró (`QuienCobro`). Igual que en el ticket: pagado ⛔ es «$0». */}
+                        {estaTodoPago(e) ? (
+                          <>
+                            <StatusPill tone="success" label="Pagado" />
+                            <div style={{ fontSize: font.sm, color: color.mut }}>Sin contraentrega</div>
+                          </>
+                        ) : (
+                          <>
+                            {e.estado !== 'entregado' ? <StatusPill tone="warning" label="Contraentrega" /> : null}
+                            <strong>{formatMoney(aCobrar(e))}</strong>
+                          </>
+                        )}
                         {envioSaldado(e) && Number(e.monto_envio) > 0 ? (
-                          <div style={{ fontSize: font.sm, color: color.success }}>
-                            envío {formatMoney(Number(e.monto_envio))} · {e.envio_bonificado ? 'bonificado' : 'ya pago'}
+                          <div style={{ fontSize: font.sm, color: color.mut }}>
+                            Envío {formatMoney(Number(e.monto_envio))} · {e.envio_bonificado ? 'bonificado' : 'pagado'}
                           </div>
                         ) : null}
-                        {/* 🔑 **Por dónde entró la plata, en la única columna donde significa algo.**
-                            Un pedido no se entrega si no está pago, así que «no cobró» no es una deuda
-                            de la clienta sino una transferencia al local — y no va en rojo. */}
-                        {e.estado === 'entregado' ? <QuienCobro envio={e} onGuardado={recargar} /> : null}
-                        {/* El tilde está en la fila y no sólo en la ficha: es la corrección que se hace
-                            con la clienta al teléfono avisando que ya transfirió, y el cadete sin salir. */}
-                        <PagoDelEnvio envio={e} onGuardado={recargar} donde="hoja" />
+                        {e.estado === 'entregado' && !estaTodoPago(e) ? <QuienCobro envio={e} onGuardado={recargar} /> : null}
                       </Td>
                       <Td tall>
                         <EstadoDelEnvio envio={e} onCambiar={tildar} />
@@ -1596,28 +1601,38 @@ function PagoDelEnvio({
 function QuienCobro({ envio, onGuardado }: { envio: Envio; onGuardado: () => Promise<void> }) {
   const toast = useToast()
   const [guardando, setGuardando] = useState(false)
-  const { tone, label, accion, siguiente } = quienCobro(envio)
+  const [corrigiendo, setCorrigiendo] = useState(false)
+  const { tone, label, confirmado } = quienCobro(envio)
 
-  async function corregir() {
+  async function elegir(siguiente: boolean) {
     setGuardando(true)
     try {
       await marcarCobrado(envio.id, siguiente)
       await onGuardado()
+      setCorrigiendo(false)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo corregir quién cobró en la puerta.')
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar quién cobró.')
     } finally {
       setGuardando(false)
     }
   }
 
+  // «Corregir» ⛔ escribe: vuelve a mostrar las dos opciones (escribir `null` borraría lo que tildó el cadete).
+  const opciones = !confirmado || corrigiendo
   return (
-    <div style={{ display: 'grid', gap: 2, marginTop: 2 }}>
+    <div style={{ display: 'grid', gap: 4, marginTop: 2, justifyItems: 'start' }}>
       <StatusPill tone={tone} label={label} />
-      <div>
-        <Button size="sm" variant="ghost" disabled={guardando} onClick={() => void corregir()}>
-          {guardando ? 'Guardando…' : accion}
-        </Button>
-      </div>
+      {opciones ? (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {OPCIONES_DE_COBRO.map((o) => (
+            <Button key={o.texto} size="sm" variant="outline" disabled={guardando || envio.cobrado === o.siguiente} onClick={() => void elegir(o.siguiente)}>
+              {o.texto}
+            </Button>
+          ))}
+        </div>
+      ) : (
+        <Button size="sm" variant="ghost" disabled={guardando} onClick={() => setCorrigiendo(true)}>Corregir</Button>
+      )}
     </div>
   )
 }
@@ -2026,6 +2041,10 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
             sub="entregado y cobrado, pero no por la mano del cadete"
           />
         ) : null}
+        {/* 27-nov (Bruno): la contraentrega sin confirmar ⛔ es del cadete hasta que alguien lo diga. Sólo si hay. */}
+        {cuenta.sinConfirmar ? (
+          <KpiCard label="Contraentrega sin confirmar" value={formatMoney(cuenta.sinConfirmar)} sub="no suma hasta confirmar quién cobró" />
+        ) : null}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -2084,6 +2103,9 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
                     falta, es plata que entró al local en vez de a la mano del cadete. */}
                 {d.sinCobrar ? (
                   <div style={{ fontSize: 12, opacity: 0.7 }}>{formatMoney(d.sinCobrar)} por transferencia</div>
+                ) : null}
+                {d.sinConfirmar ? (
+                  <div style={{ fontSize: 12, color: 'var(--mo-warning-ink)' }}>{formatMoney(d.sinConfirmar)} sin confirmar</div>
                 ) : null}
               </Td>
               <Td>{formatMoney(d.tarifas)}</Td>

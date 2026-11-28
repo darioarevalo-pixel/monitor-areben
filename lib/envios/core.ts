@@ -13,7 +13,7 @@ import { rotuloFecha } from '../fechas/semana'
 import { CUENTAS } from '../cuentas'
 import { LOCALIDAD_DEL_CP } from './direccion.core.js'
 import { OFFSET_AR_MS } from './portal.core.js'
-import { aCobrar, cuentaDelCadete as cuentaDelCadeteJs, ESTADOS_CERRADOS, ESTADOS_EN_CASA, netoDelEnvio, num, pagoAlLocal, revisableEnTN, tarifaCadete, turnosDe } from './reglas.core.js'
+import { aCobrar, cuentaDelCadete as cuentaDelCadeteJs, ESTADOS_CERRADOS, ESTADOS_EN_CASA, netoDelEnvio, num, pagoAlLocal, revisableEnTN, sinConfirmar, tarifaCadete, turnosDe } from './reglas.core.js'
 import type { Marca } from '../nav'
 import type { AccionDePago, CuentaCadete, Envio, MovimientoCuenta, OrdenTN, TotalesDia, Traida, Turno } from './tipos'
 
@@ -231,6 +231,7 @@ export function totalesDelDia(envios: Envio[]): TotalesDia {
   let enviosBonificados = 0
   let cobrado = 0
   let sinCobrar = 0
+  let porConfirmar = 0
   let tarifas = 0
   let pendienteDeSalir = 0
   let noEntregados = 0
@@ -244,7 +245,9 @@ export function totalesDelDia(envios: Envio[]): TotalesDia {
     if (e.estado === 'entregado') {
       // La misma partición que en `cuentaDelCadete`, y por el mismo motivo: lo que se pagó al local
       // no es plata que él tenga que traer. La tarifa se le paga igual, llevó el paquete.
+      // 27-nov (Bruno): lo sin confirmar ⛔ es del cadete hasta que alguien elija quién cobró.
       if (pagoAlLocal(e)) sinCobrar += aCobrar(e)
+      else if (sinConfirmar(e)) porConfirmar += aCobrar(e)
       else cobrado += aCobrar(e)
       tarifas += tarifaCadete(e)
     }
@@ -259,6 +262,7 @@ export function totalesDelDia(envios: Envio[]): TotalesDia {
     enviosBonificados,
     cobrado,
     sinCobrar,
+    sinConfirmar: porConfirmar,
     tarifas,
     debeTraer,
     pendienteDeSalir,
@@ -445,20 +449,23 @@ export function puedeIrAUnDia(e: Envio): { ok: boolean; motivo: string | null } 
  * que el botón no puede decir una cosa y escribir otra. Y como `cobrado` tiene tres valores, el
  * `siguiente` viaja explícito en vez de deducirse con un `!`.
  *
- * 🔑 **`null` se rotula por lo que la cuenta HACE con él, no por lo que la base guarda.** Es "nadie
- * dijo nada", y la cuenta lo trata como cobrado por el cadete —o sea, plata que él tiene que traer—:
- * mostrarlo como un guión dejaría el número más importante de la pantalla sin explicación en todas
- * las filas viejas, que son el 100% de las anteriores al portal.
- *
- * 🔑 **Y por eso el `null` no ofrece "volver a sin dato"**: no hay nada que ganar volviendo a un
- * estado que se lee igual, y sí hay algo que perder — el tilde del cadete es un hecho reportado y
- * pisarlo con "nadie dijo nada" borra su testimonio. Se corrige a un lado o al otro.
+ * 🔑 27-nov (Bruno, columna «Cobro»): `null` es «sin confirmar» y ⛔ suma a lo que trae el cadete (`sinConfirmar`). Antes
+ * se rotulaba «Sin dato: cuenta como cobrada por él» y sumaba; medido: 0 envíos con plata en ese estado en toda la historia.
+ * Las dos opciones escriben cada una su lado; «Corregir» sólo vuelve a mostrarlas (⛔ escribe `null`: borraría el tilde
+ * del cadete, que es un hecho reportado).
  */
-export function quienCobro(e: Envio): { tone: 'success' | 'brand' | 'warning'; label: string; accion: string; siguiente: boolean } {
-  if (e.cobrado === false) return { tone: 'brand', label: 'Se pagó al local', accion: 'En realidad la cobró el cadete', siguiente: true }
-  if (e.cobrado === true) return { tone: 'success', label: 'La cobró el cadete', accion: 'En realidad se pagó al local', siguiente: false }
-  return { tone: 'warning', label: 'Sin dato: cuenta como cobrada por él', accion: 'Se pagó al local', siguiente: false }
+export function quienCobro(e: Envio): { tone: 'success' | 'brand' | 'warning'; label: string; confirmado: boolean } {
+  // 27-nov (Bruno, con `VOCABULARIO.md`): una palabra por estado, y «Sin confirmar» ⛔ dice que cobró nadie.
+  if (e.cobrado === false) return { tone: 'brand', label: 'Cobró el local', confirmado: true }
+  if (e.cobrado === true) return { tone: 'success', label: 'Cobró el cadete', confirmado: true }
+  return { tone: 'warning', label: 'Contraentrega · sin confirmar', confirmado: false }
 }
+
+/** Los dos botones de quién cobró: cada uno escribe su lado (`marcarCobrado(id, siguiente)`). */
+export const OPCIONES_DE_COBRO = [
+  { texto: 'Cobró el cadete', siguiente: true },
+  { texto: 'Cobró el local', siguiente: false },
+] as const
 
 /**
  * El pago del envío, en **tres** estados: Pendiente · Pago · Bonificado.
@@ -747,6 +754,7 @@ export {
   num,
   ORIGENES,
   pagoAlLocal,
+  sinConfirmar,
   parcheAlSacarDelDia,
   rotuloDeSaldo,
   selloDeEntrega,
