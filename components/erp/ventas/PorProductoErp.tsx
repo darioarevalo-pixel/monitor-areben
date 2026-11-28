@@ -5,7 +5,7 @@
  * de cada producto. **Agrupado por producto** por defecto (unidades, ventas, vendido, precio promedio y, para quien ve
  * costos, el margen) y **Cada renglón** (como GN). Período, línea, origen, buscador, columnas por usuario y Exportar.
  * El clic abre la FICHA DEL PRODUCTO (`FichaProducto`) al costado. Núcleo: `lib/erp/ventas-producto.core.js`;
- * servidor: `api/_erp-por-producto.js` (el espejo de GN: GN es el que vende hoy).
+ * servidor: `api/_erp-por-producto.js` (las ventas del ERP, las mismas de «Por venta»; el envío, aparte).
  */
 
 import { usePantallaAngosta } from '@/lib/movil'
@@ -60,7 +60,7 @@ export function PorProductoErp() {
   const { marca: delShell, perfil } = useSesion()
   const marca: MarcaErp = delShell === 'bdi' ? 'bdi' : 'zattia'
   const usuario = perfil?.name ?? null
-  const [datos, setDatos] = useState<{ renglones: RenglonProducto[]; costos: boolean; gnHasta: string | null; clave: string } | null>(null)
+  const [datos, setDatos] = useState<{ renglones: RenglonProducto[]; costos: boolean; clave: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [periodo, setPeriodo] = useState('mes')
   // 🎯 Bruno 10-nov: «no veo como ir para atras en los meses» ⇒ los meses de antes, en el mismo selector (`meses.core.js`).
@@ -77,8 +77,6 @@ export function PorProductoErp() {
   const rolVisto = useRolVisto()
   const esAdmin = !!perfil?.admin && !rolVisto
   const [hoy] = useState(() => diaArgentino(Date.now()))
-  // El espejo llega al día siguiente: atrasado es cuando ⛔ llegó ni el de ayer.
-  const [ayer] = useState(() => diaArgentino(Date.now() - 86_400_000))
   const costos = !!datos?.costos
   // Las columnas de cada vista se guardan aparte (las del agrupado ⛔ son las del renglón).
   const lista = `erp-por-producto-${vista}-${marca}`
@@ -191,6 +189,8 @@ export function PorProductoErp() {
             { valor: res.unidades.toLocaleString('es-AR'), despues: res.unidades === 1 ? 'unidad' : 'unidades' },
             { valor: res.ventas.toLocaleString('es-AR'), despues: res.ventas === 1 ? 'venta' : 'ventas' },
             { valor: res.productos.toLocaleString('es-AR'), despues: res.productos === 1 ? 'producto' : 'productos' },
+            // 27-nov: el envío ⛔ es de un producto ⇒ va aparte; lo vendido + esto = el total de «Por venta».
+            ...(res.envios > 0 ? [{ valor: plata(res.envios), despues: 'de envíos, aparte' }] : []),
           ]}
           lateral={costos ? {
             titulo: 'Margen', valor: res.margen, tono: 'neutro',
@@ -226,7 +226,6 @@ export function PorProductoErp() {
         )}
         <div style={{ padding: '8px 16px', fontSize: font.sm, color: color.mut, borderTop: `1px solid ${color.bg2}` }}>
           {cargando && !datos ? 'Leyendo…' : `${Math.min(mostrar, filas.length).toLocaleString('es-AR')} de ${filas.length.toLocaleString('es-AR')}`}
-          {datos?.gnHasta && diaArgentino(Date.parse(datos.gnHasta)) < ayer && <> · Ventas cargadas hasta el {diaCorto(datos.gnHasta)}</>}
         </div>
       </div>
 

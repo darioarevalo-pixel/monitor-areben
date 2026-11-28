@@ -188,6 +188,13 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
   const descProductos = (ficha?.lineas ?? []).filter((l) => !l.devuelta).reduce((a, l) => a + l.descuento + l.rebaja, 0)
   const descPagos = (ficha?.pagos ?? []).filter((p) => p.base != null && p.base > p.monto).map((p) => ({ texto: `Descuento ${p.cuenta ?? p.medio ?? 'del pago'}${p.porcentaje ? ` ${p.porcentaje}%` : ''}`, monto: p.base! - p.monto }))
   const descuentos = descProductos + descPagos.reduce((a, d) => a + d.monto, 0)
+  // 27-nov (Bruno, #7588: «la reparte entre los productos el envio»): el envío y el descuento de TN/GN viven en la venta, ⛔ en un
+  // renglón ni en el pago ⇒ sin mostrarlos, los productos ⛔ llegaban al total. `resto` = lo que falta para cerrar: positivo es
+  // un descuento (cupón, transferencia de TN), negativo un ajuste del mayorista. Sólo en una venta: un cambio cierra distinto.
+  const envio = ficha?.envio ?? 0
+  const sumaProductos = (ficha?.lineas ?? []).filter((l) => !l.devuelta).reduce((a, l) => a + l.importe, 0)
+  const resto = v && v.tipo === 'venta' ? Math.round((sumaProductos - descPagos.reduce((a, d) => a + d.monto, 0) + envio - v.total) * 100) / 100 : 0
+  const otroDesc = Math.abs(resto) >= 1 ? resto : 0
 
   return (
     <FichaCostado abierta ventana onCerrar={onCerrar} titulo={titulo} etiqueta={`Ficha de la venta ${fila.ref}`} pie={pie}>
@@ -267,10 +274,13 @@ export function FichaVenta({ marca, fila, accionInicial, puede, onCerrar, onCamb
               </div>
             ))}
             {/* Darío 19-nov: el pago ⛔ se resta acá (va en «Forma de pago»); lo que se detalla es el DESCUENTO, si hubo. */}
-            {descuentos > 0 && <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', color: color.mut }}><span>Subtotal</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{plata(v!.total + descuentos)}</span></div>
+            {(descuentos > 0 || envio > 0 || otroDesc !== 0) && <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', color: color.mut }}><span>Subtotal</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{plata(v!.total + descuentos + otroDesc - envio)}</span></div>
               {descProductos > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', color: 'var(--mo-success-ink)' }}><span>Descuento en productos</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>− {plata(descProductos)}</span></div>}
               {descPagos.map((d, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', color: 'var(--mo-success-ink)' }}><span>{d.texto}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>− {plata(d.monto)}</span></div>)}
+              {otroDesc > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', color: 'var(--mo-success-ink)' }}><span>Descuento</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>− {plata(otroDesc)}</span></div>}
+              {otroDesc < 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', color: color.mut }}><span>Ajuste</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>+ {plata(-otroDesc)}</span></div>}
+              {envio > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', color: color.mut }}><span>Envío</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>+ {plata(envio)}</span></div>}
             </>}
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', fontWeight: weight.bold }}><span>Total</span><span>{plata(v!.total)}</span></div>
             {debe && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', fontWeight: weight.bold, color: 'var(--mo-warning-ink)' }}><span>Saldo</span><span>{plata(fila.saldo)}</span></div>}

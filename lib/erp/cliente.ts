@@ -248,6 +248,8 @@ export type FichaDeVenta = {
   conjuntos?: ConjuntoDeVenta[]
   /** La compra a cuenta la cargó GN a un cliente sin crédito (`detalle.cuenta_autoriza.motivo = 'gn'`). */
   sinCreditoGN?: boolean
+  /** El envío que pagó el cliente (TN, GN, mayorista): va aparte de los productos. 0 = sin envío. */
+  envio?: number
   venta: VentaPropia & { totalOriginal?: number | null; subtotal: number; usuario: string; registradaEn: string; origenRef: string; gnSaleId: string | null; ventaOriginalId: string | null }
   cliente: { nombre: string | null; doc: string | null; email: string | null; whatsapp: string | null } | null
   lineas: Array<{
@@ -986,13 +988,17 @@ export const leerResultadoDelMes = (marca: MarcaErp, linea: string, mes?: string
 
 export type RenglonProducto = {
   id: string; ventaId: string; numero: string | null; cuando: string; canal: string; cliente: string | null
+  /** El número del pedido de TN, si vino de ahí (se busca por él). */
+  tn: string | null
   producto: string; nombre: string; talle: string; sku: string | null; cantidad: number; precio: number; total: number; linea: string
+  /** El envío de SU venta (aparte de lo vendido; el resumen lo suma una vez por venta). */
+  envio: number
   /** Costo vigente × cantidad; null = sin costo, o el perfil ⛔ ve costos. */
   costo: number | null
 }
 
 export const leerVentasPorProducto = (marca: MarcaErp, desde: string, hasta: string) =>
-  pedir<{ renglones: RenglonProducto[]; desde: string; hasta: string; costos: boolean; gnHasta: string | null }>(null, `&vista=ventas-producto&marca=${marca}&desde=${desde}&hasta=${hasta}&nc=${Date.now()}`, 'No se pudieron leer las ventas por producto.')
+  pedir<{ renglones: RenglonProducto[]; desde: string; hasta: string; costos: boolean }>(null, `&vista=ventas-producto&marca=${marca}&desde=${desde}&hasta=${hasta}&nc=${Date.now()}`, 'No se pudieron leer las ventas por producto.')
 
 // ── ERP › Ventas › Cargar venta (`api/_erp-cargar.js`, `origen: 'manual'` del motor, contrato §19) ──
 export type CuentaParaCargar = { id: string; nombre: string; medio: string; marca: string }

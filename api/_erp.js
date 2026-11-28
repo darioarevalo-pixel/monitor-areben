@@ -800,7 +800,9 @@ export async function fichaDeVenta({ marca, id, deCaja = false }) {
   const { conjuntosDe } = await import('../motor/venta/conjuntos.mjs')
   const conjuntos = conjuntosDe(f).map((c) => ({ variant_id: c.variant_id ?? null, nombre: c.nombre ?? null, cantidad: Number(c.cantidad) || 1, piezas: (c.piezas || []).map((pz) => ({ product_id: Number(pz.product_id), size_id: Number(pz.size_id), cantidad: Number(pz.cantidad) || 1 })) }))
   const ficha = armarFicha(f, { nombres, cambios: cambios.data || [], original: original.data, cambiadas: cambiadasDe(devueltas.data), montos, devolucion })
-  return { ...ficha, lineas: conImporteDelCambio(ficha.lineas, await renglonesDeLaCaja(sb, f)), sinCreditoGN, conjuntos }
+  // 27-nov (#7588): el envío de TN, de GN y del mayorista vive en `detalle`; la ficha lo muestra aparte de los productos.
+  const { envioDe } = await import('../lib/erp/ventas-producto.core.js')
+  return { ...ficha, lineas: conImporteDelCambio(ficha.lineas, await renglonesDeLaCaja(sb, f)), sinCreditoGN, conjuntos, envio: envioDe(f.detalle) }
 }
 
 /**
