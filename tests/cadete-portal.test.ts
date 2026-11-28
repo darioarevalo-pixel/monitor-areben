@@ -50,7 +50,7 @@ const fila = {
   envio_bonificado: false,
   monto_pedido_a_cobrar: 0,
   estado: 'preparado',
-  cobrado: null,
+  cobrado: true, // 27-nov: lo de siempre (el cadete tildó); `null` = sin confirmar, ⛔ suma
   // Lo sensible, que tiene que quedar afuera:
   vendedor: 'Karen',
   autor: 'Bruno',
@@ -511,7 +511,7 @@ describe('🔴 la cuenta del cadete, armada para su teléfono', () => {
    */
   const enviosCuenta = [
     { ...fila, id: 'a', fecha: '2026-06-01', estado: 'entregado', monto_envio: 3000, envio_pagado: true, monto_pedido_a_cobrar: 0, cobrado: null },
-    { ...fila, id: 'b', fecha: '2026-08-17', estado: 'entregado', monto_envio: 4000, monto_pedido_a_cobrar: 10000, cobrado: null },
+    { ...fila, id: 'b', fecha: '2026-08-17', estado: 'entregado', monto_envio: 4000, monto_pedido_a_cobrar: 10000, cobrado: true },
   ]
   const movs = [
     { id: 'm1', fecha: '2026-08-17', monto: -10000, nota: 'rindió el jueves', autor: 'Bruno', anulado_en: null, anulado_por: null },

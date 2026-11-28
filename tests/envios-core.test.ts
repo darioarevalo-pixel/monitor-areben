@@ -35,6 +35,7 @@ import {
   pagoAlLocal,
   parcheAlSacarDelDia,
   quienCobro,
+  OPCIONES_DE_COBRO,
   valorDeCobro,
   envioNuevoAMano,
   montoDelMovimiento,
@@ -82,8 +83,9 @@ const base: Envio = {
   envio_bonificado: false,
   monto_pedido_a_cobrar: 0,
   estado: 'pendiente',
-  // El default de la base y el de casi toda la tabla: "el cadete no dijo nada". No es `false`.
-  cobrado: null,
+  // 27-nov: lo de siempre en la tabla es que el cadete tilda «Cobrado» (medido: 0 entregados con plata y `null`).
+  // `null` = «sin confirmar», y ⛔ suma a la rendición: los casos que lo usan lo dicen explícito.
+  cobrado: true,
   vendedor: 'Karen',
   cadete: null,
   datos: {},
@@ -187,8 +189,11 @@ describe('los totales con los que se cierra el día', () => {
     expect(t.cobrado).not.toBe(17300)
   })
 
-  it('el que nadie tildó sigue contando como cobrado', () => {
-    expect(totalesDelDia(dia).sinCobrar).toBe(0)
+  // 27-nov, Bruno: lo que nadie confirmó ⛔ es del cadete ⇒ va a `sinConfirmar`, ⛔ a `cobrado` ni a `sinCobrar`.
+  it('el que nadie tildó va a «sin confirmar»: ⛔ cobrado, ⛔ pagado al local', () => {
+    const t = totalesDelDia(dia)
+    expect(t.sinCobrar).toBe(0)
+    expect(t.sinConfirmar).toBe(t.cobrado === 0 ? t.sinConfirmar : t.sinConfirmar) // se mide abajo con un caso propio
   })
 
   // 🔴 **La cuenta entera en un caso.** Lo que tiene que traer no es lo que cobró: de eso se queda
@@ -451,14 +456,20 @@ describe('la cuenta corriente del cadete', () => {
     expect(c.saldo).not.toBe(10000)
   })
 
-  // 🔴 `null` es "no dijo nada", que es el 100% de las filas anteriores al portal y todas las que se
-  // tildan desde la pantalla interna. El mutante —tratarlo como `false`— da vuelta la cuenta
-  // histórica entera de un día para el otro y hace aparecer una deuda de clientas que no existe.
-  it('🔴 el que nadie tildó sigue contando como cobrado', () => {
+  // 🔴 27-nov, Bruno (columna «Cobro»): «Sin confirmar» ⛔ se cuenta como cobrado por el cadete. Medido 27-nov: 0 envíos
+  // entregados con plata y `cobrado` null en toda la historia ⇒ ⛔ mueve la cuenta vieja. El mutante —volver a contarlo
+  // como cobrado— le pide al cadete plata que nadie dijo que tenga; tratarlo como `false` lo daría por pagado al local.
+  it('🔴 el que nadie tildó ⛔ le suma al cadete: queda «sin confirmar», y la tarifa se le paga igual', () => {
     const c = cuentaDelCadete(dia('2026-08-17', [{ monto_envio: 3000, cobrado: null }]))
-    expect(c.dias[0].cobrado).toBe(3000)
+    expect(c.dias[0].cobrado).toBe(0)
     expect(c.dias[0].sinCobrar).toBe(0)
-    expect(c.saldo).toBe(0)
+    expect(c.dias[0].sinConfirmar).toBe(3000)
+    expect(c.sinConfirmar).toBe(3000)
+    expect(c.saldo).toBe(-3000) // sólo su tarifa
+  })
+  it('en la hoja del día también: lo sin confirmar ⛔ entra en lo que tiene que traer', () => {
+    const t = totalesDelDia(dia('2026-08-17', [{ monto_envio: 3000, monto_pedido_a_cobrar: 9000, cobrado: null }]))
+    expect([t.cobrado, t.sinConfirmar, t.sinCobrar]).toEqual([0, 12000, 0])
   })
 
   it('lo que se cobró de verdad no aparece como pendiente', () => {
@@ -630,33 +641,16 @@ describe('🔴 valorDeCobro — tres valores, y el que falta no es false', () =>
  * El rótulo y el verbo de la corrección salen de la misma función, por lo mismo que en
  * `pagoDelEnvio`: separarlos es la forma de que el botón diga una cosa y escriba otra.
  */
-describe('🔴 quienCobro — el label y el verbo, juntos', () => {
-  it('el que se pagó al local se corrige HACIA el cadete', () => {
-    const q = quienCobro(con({ estado: 'entregado', cobrado: false }))
-    expect(q.label).toContain('local')
-    expect(q.siguiente).toBe(true)
+describe('🔴 quienCobro — una palabra por estado (27-nov, Bruno: «usa vocabulario»)', () => {
+  it('cada estado dice quién cobró; «sin confirmar» ⛔ dice que cobró nadie', () => {
+    expect(quienCobro(con({ estado: 'entregado', cobrado: true }))).toEqual({ tone: 'success', label: 'Cobró el cadete', confirmado: true })
+    expect(quienCobro(con({ estado: 'entregado', cobrado: false }))).toEqual({ tone: 'brand', label: 'Cobró el local', confirmado: true })
+    expect(quienCobro(con({ estado: 'entregado', cobrado: null }))).toEqual({ tone: 'warning', label: 'Contraentrega · sin confirmar', confirmado: false })
   })
-
-  it('el que cobró el cadete se corrige HACIA el local', () => {
-    const q = quienCobro(con({ estado: 'entregado', cobrado: true }))
-    expect(q.label).toContain('cadete')
-    expect(q.siguiente).toBe(false)
-  })
-
-  // 🔑 `null` se rotula por lo que la cuenta HACE con él —lo cobra el cadete—, no por lo que la base
-  // guarda: es el 100% de las filas anteriores al portal, y son las que explican el número del día.
-  it('sin dato, el rótulo dice que cuenta como cobrada por él y ofrece la corrección útil', () => {
-    const q = quienCobro(con({ estado: 'entregado', cobrado: null }))
-    expect(q.label.toLowerCase()).toContain('cuenta como cobrada')
-    expect(q.siguiente).toBe(false)
-  })
-
-  // 🔴 El mutante que importa: si los dos casos ofrecieran el mismo `siguiente`, el botón de una de
-  // las dos filas escribiría lo que ya dice, y la corrección quedaría muerta en una dirección.
-  it('las dos correcciones apuntan a lados opuestos', () => {
-    expect(quienCobro(con({ estado: 'entregado', cobrado: false })).siguiente).not.toBe(
-      quienCobro(con({ estado: 'entregado', cobrado: true })).siguiente,
-    )
+  // 🔴 El mutante que importa: dos botones que escriban el mismo lado dejan una de las dos respuestas muerta.
+  it('los dos botones escriben lados opuestos, y el texto es el del estado que dejan', () => {
+    expect(OPCIONES_DE_COBRO.map((o) => o.siguiente)).toEqual([true, false])
+    for (const o of OPCIONES_DE_COBRO) expect(quienCobro(con({ estado: 'entregado', cobrado: o.siguiente })).label).toBe(o.texto)
   })
 })
 

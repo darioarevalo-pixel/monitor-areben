@@ -146,6 +146,8 @@ export type TotalesDia = {
    * mano, y por eso sale de `cobrado` y no entra en `debeTraer`. Ver `pagoAlLocal`.
    */
   sinCobrar: number
+  /** Entregado con contraentrega y nadie confirmó quién cobró (27-nov): ⛔ entra en `debeTraer` hasta que alguien lo diga. */
+  sinConfirmar: number
   /** Lo que le debemos por haber llevado esos paquetes. Los transferidos también: los llevó igual. */
   tarifas: number
   /** `cobrado − tarifas`: la plata que tiene que entregar. Negativo = le debemos nosotros. */
@@ -200,6 +202,8 @@ export type DiaDeCuenta = {
   cobrado: number
   /** Lo que se pagó al local por transferencia. Entró, pero no por su mano. Ver `pagoAlLocal`. */
   sinCobrar: number
+  /** Contraentrega entregada sin confirmar quién cobró: ⛔ entra en `debeTraer`. Ver `sinConfirmar`. */
+  sinConfirmar: number
   /** Lo que le debemos por llevarlos, los cobrados y los que no. */
   tarifas: number
   /** `cobrado − tarifas`. Negativo = ese día le quedamos debiendo. */
@@ -232,6 +236,8 @@ export type CuentaCadete = {
    * y lo que la pantalla mostraba en rojo. Ver `pagoAlLocal`.
    */
   sinCobrar: number
+  /** Toda la contraentrega entregada sin confirmar quién cobró (27-nov). Ver `sinConfirmar`. */
+  sinConfirmar?: number
 }
 
 /**

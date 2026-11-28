@@ -144,3 +144,25 @@ describe('el desarme', () => {
     expect(todo()).toContain('Se desarmó el paquete')
   })
 })
+
+describe('el total de la ficha (27-nov, TN #7588: «la reparte entre los productos el envio»)', () => {
+  it('los productos llegan al total: subtotal, el descuento de TN y el envío, cada uno en su renglón', async () => {
+    const bikini = [
+      { ...LINEAS[0], id: 'a', nombre: 'CORPIÑO SERENA HONEY', cantidad: 1, precio: 22319.16, importe: 22319.16 },
+      { ...LINEAS[1], id: 'b', nombre: 'BOMBACHA SERENA HONEY', cantidad: 1, precio: 27670.84, importe: 27670.84 },
+    ]
+    ficha = fichaDe({ lineas: bikini, envio: 12207.82, venta: { ...fichaDe().venta, total: 57198.82, subtotal: 49990 }, pagos: [{ cuenta: 'Pago Nube', medio: 'otro', monto: 57198.82, base: 57198.82, porcentaje: null }] })
+    await montar(fila({ total: 57198.82 }))
+    const t = todo()
+    expect(t).toMatch(/Subtotal\$ 49\.990/)
+    expect(t).toMatch(/Descuento− \$ 4\.999/)
+    expect(t).toMatch(/Envío\+ \$ 12\.208/)
+    expect(t).toMatch(/Total\$ 57\.199/)
+  })
+  it('una venta de la Caja sin envío ni descuento ⛔ muestra subtotal', async () => {
+    ficha = fichaDe()
+    await montar(fila())
+    expect(todo()).not.toContain('Subtotal')
+    expect(todo()).not.toContain('Envío+')
+  })
+})

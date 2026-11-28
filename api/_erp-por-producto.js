@@ -1,20 +1,29 @@
 /**
- * ERP › Ventas › Por producto: los RENGLONES vendidos del período, del espejo de GN (`ventas` + `venta_detalles`; GN es el
- * que vende hoy, como Inicio). Sólo LEE. Agrupar, filtrar y ordenar lo hace la pantalla con `lib/erp/ventas-producto.core.js`.
+ * ERP › Ventas › Por producto: los RENGLONES vendidos del período, de las ventas del ERP (`venta_ficha`: las mismas que lee
+ * «Por venta», con sus correcciones). Sólo LEE. Agrupar, filtrar y ordenar lo hace la pantalla con `lib/erp/ventas-producto.core.js`.
  *
  *   GET ?recurso=erp&vista=ventas-producto&marca=bdi|zattia&desde=AAAA-MM-DD&hasta=AAAA-MM-DD
  *
- * 🔑 Por pg (supabase-js corta a las 1000 filas; BDI hace ~4.000 renglones al mes). El SKU sale de `inventario` (para la
- *    línea: Stunned es un prefijo de SKU dentro de Zattia). El costo VIGENTE del motor (`costo_vigente`) viaja SÓLO si el
- *    perfil ve costos (`costos`): lo corta el servidor, ⛔ la pantalla.
+ * 🔑 27-nov: antes leía el espejo de GN, que desde el corte se llena del ERP una vez por noche ⇒ lo de hoy ⛔ estaba y el total
+ *    ⛔ daba el de «Por venta». Ahora: confirmadas, sin las de prueba, por `ocurrida_en` en días argentinos (como «Por venta»).
+ * 🔑 Por pg (supabase-js corta a las 1000 filas; BDI hace ~1.100 ventas al mes). El nombre sale de `producto` y el talle de
+ *    `variante` del motor. El costo VIGENTE (`costo_vigente`) viaja SÓLO si el perfil ve costos (`costos`): lo corta el servidor.
  */
 import { lineaDe } from '../lib/lineas.core.js'
-import { armarRenglon } from '../lib/erp/ventas-producto.core.js'
+import { renglonesDeVenta } from '../lib/erp/ventas-producto.core.js'
 
 const MARCAS = ['bdi', 'zattia']
 const DIA = /^\d{4}-\d{2}-\d{2}$/
-/** Más de un año de renglones ⛔ (BDI: ~50.000): se pide un período más corto. */
+/** Más de 3 meses ⛔ (BDI 93 días: 3.370 ventas, ~7 s medido 27-nov): se pide un período más corto. */
 const DIAS_MAXIMO = 93
+
+export const SQL_VENTAS = `select v.id, v.numero, v.tipo, v.origen, v.total, v.ocurrida_en, v.detalle,
+    coalesce(v.cliente->>'nombre', v.detalle->>'cliente_gn') as cliente, v.lineas
+  from venta_ficha v
+  where v.estado = 'confirmada' and not v.prueba
+    and v.ocurrida_en >= ($1::date::timestamp at time zone 'America/Argentina/Buenos_Aires')
+    and v.ocurrida_en < (($2::date + 1)::timestamp at time zone 'America/Argentina/Buenos_Aires')
+  order by v.ocurrida_en desc, v.id`
 
 /**
  * @param {{ marca: string, desde: string, hasta: string, costos: boolean }} p
@@ -25,19 +34,16 @@ export async function ventasPorProducto({ marca, desde, hasta, costos }, deps) {
   if (!DIA.test(String(desde || '')) || !DIA.test(String(hasta || '')) || desde > hasta) return { status: 400, error: 'Período inválido' }
   if ((Date.parse(hasta) - Date.parse(desde)) / 86_400_000 > DIAS_MAXIMO) return { status: 400, error: `Elegí un período de hasta ${DIAS_MAXIMO} días.` }
   return deps.conMotor(marca, 'Las ventas por producto', async (pg) => {
-    const { rows } = await pg.query(`with s as (
-        select distinct on (product_id, size_id) product_id, size_id, sku from inventario where sku is not null and sku <> '' order by product_id, size_id, sku
-      )
-      select d.id, d.sale_id, v.number, v.date_sale, v.channel, v.client_name, d.product_id, d.product_name, d.size, d.quantity, d.unit_price, d.total, s.sku
-      from venta_detalles d join ventas v on v.id = d.sale_id
-      left join s on s.product_id = d.product_id and s.size_id = d.size_id
-      where v.date_sale::date between $1::date and $2::date
-      order by v.date_sale desc, d.id`, [desde, hasta])
-    const mapa = costos ? new Map((await pg.query('select product_id, costo from costo_vigente')).rows.map((c) => [String(c.product_id), Number(c.costo)])) : null
-    const [{ hasta: gnHasta } = {}] = (await pg.query('select max(date_sale) as hasta from ventas')).rows
-    return {
-      renglones: rows.map((r) => armarRenglon(r, { linea: (sku) => lineaDe(marca, sku), costos: mapa })),
-      desde, hasta, costos: !!mapa, gnHasta: gnHasta ? new Date(gnHasta).toISOString() : null,
-    }
+    const { rows } = await pg.query(SQL_VENTAS, [desde, hasta])
+    const ids = [...new Set(rows.flatMap((v) => (v.lineas || []).map((l) => String(l.product_id))))]
+    // Una tras otra: un cliente de pg ⛔ corre dos consultas a la vez.
+    const prods = await pg.query('select id::text as id, nombre from producto where id::text = any($1)', [ids])
+    const vars = await pg.query('select product_id::text as p, size_id::text as s, talle from variante where product_id::text = any($1)', [ids])
+    const cst = costos ? await pg.query('select product_id, costo from costo_vigente') : null
+    const nombres = new Map(prods.rows.map((r) => [r.id, r.nombre]))
+    const talles = new Map(vars.rows.map((r) => [`${r.p}:${r.s}`, r.talle]))
+    const mapa = cst ? new Map(cst.rows.map((c) => [String(c.product_id), Number(c.costo)])) : null
+    const linea = (sku) => lineaDe(marca, sku)
+    return { renglones: rows.flatMap((v) => renglonesDeVenta(v, { linea, costos: mapa, nombres, talles })), desde, hasta, costos: !!mapa }
   })
 }
