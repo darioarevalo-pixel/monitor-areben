@@ -567,7 +567,7 @@ export type ExtraDeVenta = {
   vendedor: string | null; entrega: { tipo: 'retira' | 'envio' | 'cadete'; direccion?: string } | null; facturar: { doc: string; condicion_iva: number } | null
   tn: { numero: number; estado: string | null; envioTipo: string | null; creadaEn: string; actualizadaEn: string | null; link: string | null } | null
   /** Logística cobró al entregar (sql/039): quién, cuándo, con qué medio; la transferencia queda por verificar. */
-  cobroEnEntrega?: { entrego: string | null; fecha: string | null; formaPago: 'efectivo' | 'transferencia' | 'ya_pagado' | null; porVerificar: boolean } | null
+  cobroEnEntrega?: { entrego: string | null; fecha: string | null; formaPago: 'efectivo' | 'transferencia' | 'ya_pagado' | 'partido' | null; porVerificar: boolean } | null
   facturas: Array<{ numero: string; tipo: 'factura' | 'nc'; de: 'erp' | 'gn'; cuando: string | null }>
   cuentas: Array<{ id: string; nombre: string; medio: string }>
   /** ERP › Cuentas para el canal de la venta: adónde va cada medio (la vigente es la de `desde` más nuevo ≤ hoy) y las cuentas reales. */

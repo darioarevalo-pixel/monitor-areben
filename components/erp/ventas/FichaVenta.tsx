@@ -29,7 +29,7 @@ import { usePuedeErp } from '@/lib/erp/usePuedeErp'
 /** Los medios en que entra plata (`MEDIOS_COBRO` del motor, `correccion-medio.mjs`), con el nombre de la pantalla. */
 const MEDIOS_CORREGIR = [['efectivo', 'Efectivo'], ['debito', 'Débito'], ['credito', 'Crédito'], ['transferencia', 'Transferencia'], ['mp', 'Mercado Pago'], ['pagonube', 'Pago Nube']] as const
 
-const COBRO_EN_ENTREGA = { efectivo: 'Efectivo', transferencia: 'Transferencia', ya_pagado: 'Ya estaba pagado' } as const
+const COBRO_EN_ENTREGA = { efectivo: 'Efectivo', transferencia: 'Transferencia', ya_pagado: 'Ya estaba pagado', partido: 'Efectivo + transferencia' } as const
 const ENTREGA: Record<string, string> = { retira: 'Retira', envio: 'Envío', cadete: 'Cadete' }
 const LINEA: Record<string, string> = { bdi: 'BDI', zattia: 'Zattia', stunned: 'Stunned' }
 
